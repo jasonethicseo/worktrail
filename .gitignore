@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.venv/
+*.db
+.env
+deploy/local.env
+.DS_Store
+*.db-wal
+*.db-shm
+.claude/launch.json
+
+# Terraform (deploy/terraform) — state·플러그인은 git 밖 (인스턴스 id 등 환경 사실; 비밀은 SSM 에)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# 프론트 로컬 오버라이드 — 서버 API 로 붙일 때 (web/app/config.local.js)
+web/app/config.local.js

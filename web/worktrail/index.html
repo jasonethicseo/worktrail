@@ -1,0 +1,1995 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worktrail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="../app/config.js"></script><script src="../app/config.local.js"></script>
+<style>
+  /* Worktrail — 화면 한 벌 (2026-09-12 전체 손질). 구조·id·클래스·데이터는 그대로, 값은 전부 :root 변수에서 나온다.
+     회색 10단계 · 글자 6단계 · 여백 5단계 · 선 3 · 둥글기 2 · 움직임 2박자. 종류 색(--k-*)은 종류 말·점·칩 테두리에만. */
+  :root{
+    /* 회색 사다리 — 어두운 데서 밝은 데로. 배경 3장(g0 바닥 · g1 카드 · g2 띠/머리) 위에 글자 4단계(g6 흐림 · g7 보조 · g8 본문 · g9 제목) */
+    --g0:#0b0d11;--g1:#10141a;--g2:#151a21;--g3:#1b2129;--g4:#242c36;--g5:#343e4a;--g6:#5a6572;--g7:#8b96a3;--g8:#b9c2cc;--g9:#e8edf2;--g10:#f7f9fb;
+    --c-bg:var(--g0);--c-card:var(--g1);--c-raise:var(--g2);--c-text:var(--g9);--c-text-1:var(--g8);--c-text-2:var(--g7);--c-text-3:var(--g6);
+    --c-accent:#89b4fa;--c-accent-2:#b4d0ff;--c-amber:#fab387;--c-green:#a6e3a1;
+    --ln:var(--g3);--ln-2:var(--g4);--ln-3:var(--g5);
+    --sel:rgba(232,237,242,.05);--sel-2:rgba(232,237,242,.09);--acc-tint:rgba(137,180,250,.09);--amber-tint:rgba(250,179,135,.12);
+    /* 글자 */
+    --fs-h1:22px;--fs-title:20px;--fs-h2:15px;--fs-body:14px;--fs-small:13px;--fs-meta:12px;--fs-mono:11px;--fs-tiny:10.5px;
+    --lh:1.55;--font:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;
+    /* 여백 · 둥글기 */
+    --sp-0:4px;--sp-1:6px;--sp-2:12px;--sp-3:24px;--sp-4:36px;--r:10px;--r-s:6px;--r-pill:99px;
+    --pad-x:20px;--gutter:28px;
+    /* 그림자 — 카드는 살짝 뜨고, 떠 있는 것(선택 칩)은 확실히 */
+    --sh-card:0 1px 0 rgba(255,255,255,.025) inset,0 1px 2px rgba(0,0,0,.35);--sh-pop:0 10px 30px rgba(0,0,0,.55),0 0 0 1px var(--ln-2);
+    /* 움직임 — 짧은 것(.14) 과 보통(.22). 곡선은 둘 다 같다. */
+    --t-fast:.14s;--t:.22s;--ease:cubic-bezier(.2,.7,.2,1);
+    /* 종류 색 — 결정 호박 · 제약 주황 · 배제 붉음 · 바꿈 파랑 · 확인 초록 · 발견 보라 · 생각 회색 · 커밋 민트 */
+    /* 2026-09-13 사용자 "민트·호박 너무 구림" → 파스텔 한 벌(복숭아·장미·연갈·하늘·풀·연보라·회·노랑). 결정은 복숭아, 커밋은 연노랑. */
+    --k-decision:#fab387;--k-constraint:#f38ba8;--k-ruled_out:#eba0ac;--k-change:#89b4fa;--k-verified:#a6e3a1;--k-finding:#cba6f7;--k-thought:#9399b2;
+    --k-commit:#f9e2af;--k-asked:#fab387;--k-closed:#5b636d;--k-opened:#c8d0d8;
+  }
+  html,body{margin:0;padding:0;background:var(--c-bg);color:var(--c-text);font-family:var(--font);font-size:var(--fs-body);line-height:var(--lh);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+  *{box-sizing:border-box;}
+  a{color:var(--c-accent);text-decoration:none;transition:color var(--t-fast);} a:hover{color:var(--c-accent-2);text-decoration:underline;text-underline-offset:2px;}
+  ::selection{background:rgba(137,180,250,.28);}
+  ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-thumb{background:var(--g4);border-radius:5px;border:2px solid var(--g0);} ::-webkit-scrollbar-thumb:hover{background:var(--g5);}
+  button,select,input{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--c-accent);outline-offset:2px;border-radius:4px;}
+  [hidden]{display:none !important;}
+  .mono{font-family:var(--mono);}
+  code{font-family:var(--mono);font-size:.9em;color:var(--c-text);background:var(--sel-2);border-radius:4px;padding:1px 5px;overflow-wrap:anywhere;}
+  .hd b,.full b,.why b,.t b,.m b{font-weight:600;color:var(--c-text);}
+  .rrow .hd b{font-weight:500;}
+  pre{font-family:var(--mono);font-size:var(--fs-meta);line-height:1.6;color:var(--c-text-1);background:var(--g0);border:1px solid var(--ln);border-radius:var(--r-s);padding:12px 14px;margin:10px 0 4px;overflow:auto;}
+
+  /* ── 위 띠 ─────────────────────────────────────────────── */
+  .top{position:sticky;top:0;z-index:20;height:56px;display:flex;align-items:center;gap:14px;padding:0 var(--pad-x);
+    border-bottom:1px solid var(--ln);background:rgba(16,20,26,.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);}
+  .logo{display:flex;align-items:center;gap:10px;cursor:pointer;flex:none;}
+  .logo .box{width:24px;height:24px;border:1.5px solid var(--c-green);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--c-green);letter-spacing:0;
+    box-shadow:0 0 0 3px rgba(166,227,161,.08);transition:box-shadow var(--t),transform var(--t) var(--ease);} .logo:hover .box{box-shadow:0 0 0 4px rgba(166,227,161,.16);transform:rotate(-4deg);}
+  .logo .name{font-size:12px;letter-spacing:.16em;font-weight:600;color:var(--g10);} .logo .name span{color:var(--c-text-3);font-weight:400;}
+  .crumb{display:flex;align-items:center;gap:8px;min-width:0;flex:0 1 auto;color:var(--c-text-2);font-size:var(--fs-meta);} .crumb .sep{color:var(--ln-3);}
+  .crumb .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .spacer{flex:1;}
+  .btn{background:none;border:1px solid var(--ln-2);border-radius:var(--r-s);color:var(--c-text-2);padding:6px 12px;font-size:var(--fs-meta);cursor:pointer;white-space:nowrap;flex:none;line-height:1.3;
+    transition:border-color var(--t-fast),color var(--t-fast),background-color var(--t-fast);}
+  .btn:hover{border-color:var(--ln-3);color:var(--c-text);background:var(--sel);text-decoration:none;}
+  .top .btn.on{color:var(--c-text);background:var(--sel-2);border-color:var(--ln-3);}
+  #who{color:var(--c-text-3);}
+  .muted{color:var(--c-text-2);} .dim{color:var(--c-text-3);}
+
+  /* ── 칩 ───────────────────────────────────────────────── */
+  .chip{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.06em;display:inline-flex;align-items:center;height:20px;line-height:1;padding:0 8px;margin:0;border-radius:var(--r-pill);border:1px solid var(--ln-2);color:var(--c-text-2);white-space:nowrap;flex:none;}
+  .chip.open{border-color:var(--c-accent);color:var(--c-accent);} .chip.closed{border-color:var(--ln-2);color:var(--c-text-3);}
+  .chip.user{border-color:rgba(250,179,135,.5);color:var(--c-amber);} .chip.agent{border-color:var(--ln-2);color:var(--c-text-2);}
+  .chip.repo{border-color:rgba(137,180,250,.35);color:var(--c-accent);background:var(--acc-tint);}
+  .chip.thread{border-color:var(--ln-2);color:var(--c-text-2);}
+  .chip.topic{border-color:rgba(250,179,135,.4);color:#c9a35a;}
+
+  /* ── 뿌리 · 제목 · 카드 ─────────────────────────────────── */
+  .wrap{max-width:960px;margin:0 auto;padding:var(--sp-4) var(--pad-x) 80px;}
+  h1{margin:0;font-size:var(--fs-h1);font-weight:600;line-height:1.3;letter-spacing:-.012em;color:var(--g10);text-wrap:pretty;} h2{margin:0;font-size:var(--fs-h2);font-weight:600;}
+  .label{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.1em;color:var(--c-text-2);text-transform:uppercase;}
+  .card{background:var(--c-card);border:1px solid var(--ln);border-radius:var(--r);padding:18px var(--pad-x);box-shadow:var(--sh-card);}
+  .empty{font-size:var(--fs-small);color:var(--c-text-3);font-style:italic;}
+  .notice{font-size:var(--fs-meta);color:var(--c-text-2);margin-top:var(--sp-2);max-width:720px;line-height:1.55;}
+  .conflict{margin-top:10px;font-size:var(--fs-meta);color:var(--c-amber);}
+  .login{max-width:360px;margin:120px auto;background:var(--c-card);border:1px solid var(--ln-2);border-radius:var(--r);padding:28px;text-align:center;box-shadow:var(--sh-card);}
+
+  /* ── 스레드 화면 ─────────────────────────────────────────── */
+  .wrap.thread{max-width:932px;}
+  .thead .t{display:flex;align-items:baseline;gap:var(--sp-2);flex-wrap:wrap;} .thead .t h1{min-width:0;overflow-wrap:anywhere;flex:1 1 320px;} .thead .flip{margin-left:auto;}
+  .thead .num{font-family:var(--mono);font-size:var(--fs-meta);color:var(--c-text-3);letter-spacing:.02em;}
+  .thead .ph{margin-top:var(--sp-1);} .thead .closedline{margin-top:var(--sp-1);font-size:var(--fs-body);color:var(--c-text);display:flex;align-items:center;gap:var(--sp-1);} .thead .closedline .w{color:var(--c-text-2);}
+  .tlayout{display:grid;grid-template-columns:minmax(0,640px) 220px;gap:var(--sp-3);margin-top:var(--sp-3);align-items:start;}
+  .tbody{min-width:0;display:flex;flex-direction:column;gap:var(--sp-2);}
+  .tbody .sec{margin-top:0;}
+  .tmeta{display:flex;flex-direction:column;}
+  .tmeta .mi{display:flex;flex-direction:column;gap:var(--sp-1);padding:var(--sp-2) 0;border-top:1px solid var(--ln);} .tmeta .mi:first-child{border-top:none;padding-top:0;}
+  .tmeta .mi .v{font-size:var(--fs-body);color:var(--c-text);min-width:0;overflow-wrap:anywhere;} .tmeta .mi .v.me{color:var(--c-amber);} .tmeta .mi .v.dim{color:var(--c-text-2);}
+  .tmeta .mi .v2{font-size:var(--fs-meta);color:var(--c-text-2);font-family:var(--mono);}
+  .tmeta .btn{margin-top:var(--sp-2);align-self:flex-start;}
+  .rr{border-top:1px solid var(--ln);} .rr:first-of-type{border-top:none;}
+  .rr summary{list-style:none;cursor:pointer;border-radius:var(--r-s);transition:background-color var(--t-fast);} .rr summary:hover{background:var(--sel);} .rr summary::-webkit-details-marker{display:none;} .rr.flat summary{cursor:default;} .rr.flat summary:hover{background:none;}
+  .rr .full{margin-left:64px;}
+  .rrow{display:grid;grid-template-columns:52px minmax(0,1fr) 84px;gap:var(--sp-2);align-items:baseline;padding:8px 4px;}
+  .rrow .kw{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-2);white-space:nowrap;} .rrow .kw.hash{font-size:var(--fs-meta);color:var(--k-commit);opacity:.85;}
+  .rrow .hd{color:var(--c-text-1);} .rrow.prim .hd{color:var(--c-text);font-weight:500;}
+  .by{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);margin-left:8px;font-weight:400;}
+  span.sup{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-amber);margin-left:8px;font-weight:400;opacity:.85;white-space:nowrap;}
+  .supd{display:block;margin-top:8px;font-size:12.5px;color:var(--c-amber);text-decoration:none;border-left:2px solid rgba(250,179,135,.35);padding-left:10px;overflow-wrap:anywhere;}
+  .supd:hover{text-decoration:underline;}
+  .rr.replaced .rrow.prim .hd, .rr.replaced .rrow .hd,
+  .ev.replaced.prim .hd, .ev.replaced .hd, .it.replaced .hd{color:var(--c-text-3);font-weight:400;}
+  .rrow .at{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);text-align:right;white-space:nowrap;} .rrow .at .u{color:var(--c-text);}
+  .sec{margin-top:var(--sp-3);background:var(--c-card);border:1px solid var(--ln);border-radius:var(--r);padding:14px 18px 12px;box-shadow:var(--sh-card);}
+  .sec .label{margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .sec .label .n{color:var(--c-text-3);letter-spacing:0;}
+  .sec .label .scopehint{color:var(--c-text-3);letter-spacing:0;text-transform:none;margin-left:auto;font-size:var(--fs-tiny);}
+  /* 카드 세 줄 — SO FAR · NEXT · WHY. 라벨은 왼쪽 좁은 열, 줄 사이는 얇은 선 */
+  .st{display:grid;grid-template-columns:56px minmax(0,1fr);gap:10px 14px;align-items:baseline;padding:10px 0;border-top:1px solid var(--ln);}
+  .st:first-of-type{border-top:none;padding-top:2px;} .st:last-of-type{padding-bottom:2px;}
+  .st .k{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.1em;color:var(--c-text-3);text-transform:uppercase;padding-top:3px;}
+  .it{border-top:1px solid var(--ln);padding:7px 0;}
+  .it:first-of-type,.st .it{border-top:none;padding:0;}
+  .it summary{list-style:none;cursor:pointer;display:flex;gap:10px;align-items:baseline;min-width:0;border-radius:var(--r-s);margin:0 -6px;padding:2px 6px;transition:background-color var(--t-fast);}
+  .it:not(.flat) summary:hover{background:var(--sel);}
+  .it summary::-webkit-details-marker{display:none;}
+  .it summary::before{content:"›";color:var(--c-text-3);font-size:15px;line-height:1;flex:none;width:9px;transform:translateY(1px);transition:transform var(--t-fast) var(--ease),color var(--t-fast);}
+  .it summary:hover::before{color:var(--c-text-2);}
+  .it[open] summary::before{transform:rotate(90deg) translateX(1px);}
+  .it.flat summary{cursor:default;} .it.flat summary::before{content:"·";}
+  .hd{font-size:var(--fs-body);min-width:0;flex:1;overflow-wrap:anywhere;text-wrap:pretty;}
+  .hd.big{font-weight:600;color:var(--c-text);font-size:15px;}
+  .meta{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);white-space:nowrap;flex:none;}
+  .meta .u{color:var(--c-text);} .meta .rp{color:var(--c-text);} .meta .fail{color:var(--c-text);font-weight:500;} .meta .re{color:var(--c-text);}
+  .meta .nk{color:var(--c-text);}
+  .full:not(.now){margin:8px 0 6px 19px;font-size:var(--fs-small);color:var(--c-text-1);white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;}
+  .full .why{margin-top:8px;color:var(--c-text-2);font-size:12.5px;border-left:2px solid var(--ln-2);padding-left:10px;}
+  .full .ids{margin-top:8px;font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-3);}
+  .stale{color:var(--c-amber);}
+  .metaline{margin-top:12px;font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-2);display:flex;gap:8px;flex-wrap:wrap;align-items:center;} .metaline .ml{color:var(--c-text-3);letter-spacing:.08em;text-transform:uppercase;font-size:10px;} .metaline .sep{color:var(--ln-3);} .metaline a{color:var(--c-text-2);} .metaline a:hover{color:var(--c-text);}
+  .metaline select.move{display:inline-block;margin:0 0 0 auto;max-width:none;padding:0;border:none;background:none;color:var(--c-text-2);font-family:var(--mono);font-size:var(--fs-mono);cursor:pointer;-webkit-appearance:none;appearance:none;} .metaline select.move:hover{color:var(--c-text);}
+  .terms{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-2);} .terms .ml{color:var(--c-text-3);letter-spacing:.08em;text-transform:uppercase;font-size:10px;margin-right:2px;}
+  .terms .term{border:1px solid var(--ln-2);border-radius:var(--r-pill);padding:1px 8px;color:var(--c-text-2);cursor:pointer;transition:border-color var(--t-fast),color var(--t-fast);} .terms .term.repo{border-style:dashed;} .terms .term:hover{border-color:var(--c-accent);color:var(--c-text);}
+  abbr.term{text-decoration:underline dotted var(--c-text-3);text-underline-offset:3px;cursor:pointer;transition:color var(--t-fast);} abbr.term:hover{text-decoration-color:var(--c-accent);color:var(--c-text);}
+  abbr.term.guess{text-decoration-color:var(--ln-3);}
+  @keyframes cbFlash{0%{box-shadow:inset 0 0 0 999px rgba(137,180,250,.18);}100%{box-shadow:none;}} .flash{animation:cbFlash 2.4s ease-out;border-radius:var(--r-s);}
+  .tbody code{cursor:pointer;} .tbody code:hover{color:var(--c-accent-2);}
+  .find .hit .def{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:#7dcbe6;border:1px solid rgba(137,180,250,.5);border-radius:var(--r-pill);padding:1px 7px;text-transform:uppercase;}
+  .selchip{position:fixed;z-index:30;background:var(--c-raise);border:1px solid var(--ln-2);border-radius:var(--r-pill);padding:6px 12px;font-size:var(--fs-meta);color:var(--c-text);cursor:pointer;box-shadow:var(--sh-pop);white-space:nowrap;animation:wtRise var(--t) var(--ease);} .selchip:hover{border-color:var(--c-accent);}
+  .find .hit .first{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--c-green);border:1px solid rgba(166,227,161,.5);border-radius:var(--r-pill);padding:1px 7px;text-transform:uppercase;}
+  .repoblock{margin-top:10px;border-top:1px dashed var(--ln-2);padding-top:6px;}
+  .repoblock summary{list-style:none;cursor:pointer;font-family:var(--mono);font-size:var(--fs-tiny);letter-spacing:.08em;color:var(--c-text-3);text-transform:uppercase;padding:5px 0;transition:color var(--t-fast);}
+  .repoblock summary::-webkit-details-marker{display:none;} .repoblock summary::before{content:"› ";color:var(--ln-3);}
+  .repoblock[open] summary::before{content:"⌄ ";} .repoblock summary:hover{color:var(--c-text-2);}
+  .repoblock summary .n{color:var(--ln-3);letter-spacing:0;text-transform:none;margin-left:6px;}
+  .st .many{display:flex;flex-direction:column;min-width:0;} .st .many .it{padding:4px 0;} .st .many .it + .it{border-top:1px solid var(--ln);}
+  .st .anc{font-family:var(--mono);font-size:var(--fs-meta);color:var(--c-text-2);line-height:1.6;overflow-wrap:anywhere;padding-top:2px;min-width:0;}
+  .sec .anc{font-family:var(--mono);font-size:var(--fs-meta);color:var(--c-text-2);line-height:1.7;overflow-wrap:anywhere;}
+  .log .label .r{margin-left:auto;display:flex;gap:6px;letter-spacing:0;text-transform:none;} .log .kchip{cursor:pointer;margin:0;} .log .kchip:hover{color:var(--c-text);border-color:var(--ln-3);}
+  .kchip.on{border-color:var(--c-accent);color:var(--c-accent);background:var(--acc-tint);}
+  /* 결정 로그 — 번호 · 날짜 · 제목 · 유효 · 누가 · › */
+  .lrow{display:grid;grid-template-columns:56px 40px minmax(0,1fr) 44px 44px 12px;gap:0 12px;align-items:baseline;padding:8px 6px;margin:0 -6px;border-top:1px solid var(--ln);cursor:pointer;border-radius:var(--r-s);transition:background-color var(--t-fast);} .lrow:first-of-type{border-top:none;}
+  /* 확장 79호 — 영어는 같은 뜻에 글자를 더 쓴다. 실측(11px mono): 유효 24.2 · 대체됨 36.3 대
+     in force 46.8 · superseded 74.1. 44px 고정 칸을 superseded 가 30px 침범했다. 행마다 독립
+     그리드라 auto 로 바꾸면 세로 정렬이 깨지므로, 언어를 아는 지금 그 칸만 넓힌다 —
+     한국어 화면은 한 픽셀도 바뀌지 않는다. */
+  html[lang="en"] .lrow{grid-template-columns:56px 40px minmax(0,1fr) 78px 44px 12px;}
+  .lrow:hover{background:var(--sel);}
+  .lrow .id,.lrow .dt,.lrow .who,.lrow .stt{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);white-space:nowrap;} .lrow .who.u{color:var(--c-text);} .lrow .tt{font-size:var(--fs-body);color:var(--c-text);min-width:0;overflow-wrap:anywhere;}
+  .lrow .id{color:var(--k-decision);opacity:.8;}
+  .lrow .stt.ok{color:var(--c-green);} .lrow .stt.sup{color:var(--c-text-3);} .lrow.sup .tt{color:var(--c-text-3);text-decoration:line-through;text-decoration-color:var(--ln-3);} .lrow .c{color:var(--c-text-3);font-size:15px;line-height:1;transition:transform var(--t-fast) var(--ease);} .lrow.open .c{transform:rotate(90deg);}
+  .lrow.open{background:var(--sel);} .lrow .why{display:none;grid-column:3 / 6;font-size:var(--fs-small);color:var(--c-text-1);line-height:1.6;padding:6px 0 6px;white-space:pre-wrap;overflow-wrap:anywhere;cursor:auto;} .lrow.open .why{display:block;}
+  .lrow .why .rs{margin-top:8px;color:var(--c-text-2);font-size:12.5px;border-left:2px solid var(--ln-2);padding-left:10px;} .lrow .why .ids{margin-top:8px;font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-3);}
+  .lrow.hide{display:none;}
+  /* 칩 한 줄 → 서랍 하나 */
+  .chips{margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;}
+  .chips .chip{height:28px;padding:0 12px;gap:7px;cursor:pointer;user-select:none;font-size:11.5px;color:var(--c-text-2);border-color:var(--ln-2);background:var(--c-card);} .chips .chip .n{color:var(--c-text-3);letter-spacing:0;}
+  .chips .chip:hover{border-color:var(--ln-3);color:var(--c-text);background:var(--c-raise);} .chips .chip.on{border-color:var(--c-accent);color:var(--c-accent);background:var(--acc-tint);} .chips .chip.on .n{color:var(--c-accent);opacity:.7;}
+  .drawer{margin-top:2px;}
+  .drawer:not(.all) .extra{display:none;}
+  .drawer .more,.nsec .more{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-accent);padding:10px 2px 2px;border-top:1px solid var(--ln);cursor:pointer;transition:color var(--t-fast);} .drawer .more:hover,.nsec .more:hover{color:var(--c-accent-2);}
+  .drawer.all .more.open{display:none;} .drawer:not(.all) .more.fold{display:none;}
+  /* 노트 서랍 — 갈래별 섹션 */
+  .nsec{margin-top:6px;} .nsec + .nsec{margin-top:16px;}
+  .nsh{display:flex;gap:8px;align-items:baseline;padding:4px 0 4px;border-bottom:1px solid var(--ln-2);}
+  .nsh .kw{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.08em;color:var(--c-text);white-space:nowrap;text-transform:uppercase;} .nsh .kw.old{color:var(--c-text-3);} .nsh .n{font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-3);}
+  .ntrow{padding:2px 0;border-top:1px solid var(--ln);} .ntrow:first-of-type{border-top:none;} .ntrow .it{border-top:none;padding:5px 0;}
+  .nsec:not(.all) .xtra{display:none;} .nsec.all .more.open{display:none;} .nsec:not(.all) .more.fold{display:none;}
+  .focusp{margin-top:16px;max-width:760px;font-size:var(--fs-body);color:var(--c-text-1);line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty;padding-left:14px;border-left:2px solid var(--ln-2);} .focusp .meta{display:block;margin-top:6px;}
+  /* 움직임 — 서랍이 떠오르고, 더 보기로 나온 줄이 차례로 오고, 칩 색이 미끄러진다 */
+  @keyframes wtRise{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}
+  .drawer:not([hidden]){animation:wtRise var(--t) var(--ease) both;}
+  .drawer:not([hidden]) .nsec,.drawer:not([hidden]) .lrow:not(.extra),.drawer:not([hidden]) > .it,.drawer:not([hidden]) > .rr{animation:wtRise .28s var(--ease) both;}
+  .drawer:not([hidden]) .nsec:nth-child(3),.drawer:not([hidden]) .lrow:nth-child(3),.drawer:not([hidden]) > .rr:nth-child(3){animation-delay:.05s;}
+  .drawer:not([hidden]) .nsec:nth-child(4),.drawer:not([hidden]) .lrow:nth-child(4),.drawer:not([hidden]) > .rr:nth-child(4){animation-delay:.1s;}
+  .drawer:not([hidden]) .nsec:nth-child(n+5),.drawer:not([hidden]) .lrow:nth-child(n+5),.drawer:not([hidden]) > .rr:nth-child(n+5){animation-delay:.14s;}
+  .drawer.all .extra,.nsec.all .xtra{animation:wtRise .2s var(--ease) both;}
+  .drawer.all .extra:nth-of-type(n+5){animation-delay:.03s;} .drawer.all .extra:nth-of-type(n+6){animation-delay:.06s;} .drawer.all .extra:nth-of-type(n+7){animation-delay:.09s;} .drawer.all .extra:nth-of-type(n+8){animation-delay:.12s;} .drawer.all .extra:nth-of-type(n+10){animation-delay:.15s;}
+  .chips .chip{transition:border-color var(--t-fast),color var(--t-fast),background-color var(--t-fast);} .lrow .why{animation:wtRise .16s var(--ease);} .it[open] > .full,.rr[open] > .full,details.sec[open] > pre{animation:wtRise .16s var(--ease);}
+
+  /* ── 회고 ─────────────────────────────────────────────── */
+  .wrap.review{max-width:1160px;padding:var(--sp-4) var(--gutter) 96px;}
+  .review h1{font-size:var(--fs-h1);}
+  .review .muted2{color:var(--c-text-2);}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px;}
+  .lang{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:.04em;flex:none;cursor:pointer;}
+  .snapshot #flipStatus,.snapshot #moveTo,.snapshot .tidy,.snapshot .topic-tools,.snapshot #navPrior,.snapshot #navJoin{display:none;}
+  #navJoin .n{margin-left:6px;padding:1px 6px;border-radius:9px;background:#3b4250;font-size:11px;}
+  .joinrow{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #2a2f38;border-radius:10px;margin-bottom:8px;}
+  .joinrow .who{flex:1;min-width:0;} .joinrow .em{font-weight:600;} .joinrow .nm{color:#8b93a0;margin-left:8px;font-size:12.5px;}
+  /* ── 데모 안내 띠 (확장 72호) — 스냅샷 모드에서만 뜬다. 링크를 눌러 어느 화면으로 들어오든
+        "이게 무엇인가"와 "지어낸 기록"이 함께 읽히게 상단바 바로 아래 둔다. */
+  .demo-note{display:none;}
+  .snapshot .demo-note{display:block;border-bottom:1px solid var(--ln);background:var(--c-raise);padding:11px var(--pad-x);}
+  .demo-note .in{max-width:1160px;margin:0 auto;display:flex;gap:8px 16px;flex-wrap:wrap;align-items:baseline;}
+  .demo-note .what{font-size:var(--fs-small);color:var(--c-text-1);line-height:var(--lh);}
+  .demo-note .what b{color:var(--c-text);font-weight:600;}
+  .demo-note .fake{flex:none;font-size:var(--fs-meta);color:var(--c-amber);background:var(--amber-tint);border-radius:var(--r-pill);padding:3px 11px;}
+  .tab{border:1px solid var(--ln-2);border-radius:var(--r-pill);padding:6px 14px;font-size:var(--fs-small);color:var(--c-text-2);cursor:pointer;background:none;transition:border-color var(--t-fast),color var(--t-fast);}
+  .tab:hover{border-color:var(--ln-3);color:var(--c-text);} .tab.on{border-color:var(--c-accent);color:var(--c-accent);background:var(--acc-tint);}
+  .tab .n{font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-2);margin-left:7px;}
+  .tab .ok{color:var(--c-green);margin-left:6px;}
+  .summary{margin-top:16px;font-size:14.5px;color:var(--c-text-1);line-height:1.65;max-width:720px;text-wrap:pretty;}
+  .threads{display:flex;gap:var(--sp-1);flex-wrap:wrap;margin-top:var(--sp-1);}
+  .threads.closedstrip:not(.all){max-height:54px;overflow:hidden;}
+  .threads-h{margin-top:var(--sp-2);font-size:var(--fs-meta);color:var(--c-text-2);display:flex;gap:6px;align-items:baseline;} .threads-h .n{color:var(--c-text-3);font-family:var(--mono);font-size:var(--fs-mono);}
+  .threads-h .more{margin-left:auto;background:none;border:1px solid var(--ln-2);border-radius:var(--r-pill);color:var(--c-text-2);padding:2px 9px;font-size:var(--fs-meta);cursor:pointer;} .threads-h .more:hover{border-color:var(--c-accent);color:var(--c-text);}
+  .threads a{font-family:var(--mono);font-size:var(--fs-mono);height:24px;display:inline-flex;align-items:center;padding:0 9px;border-radius:var(--r-pill);border:1px solid var(--ln-2);color:var(--c-text);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:border-color var(--t-fast),color var(--t-fast);}
+  .threads a.closed{color:var(--c-text-2);border-color:var(--ln);} .threads a:hover{border-color:var(--c-accent);color:var(--c-text);text-decoration:none;}
+  .tcard{margin-top:16px;background:var(--c-card);border:1px solid var(--ln);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh-card);}
+  .tcard .cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));} .tcard .cols.one{grid-template-columns:minmax(0,1fr);} .tcard .cols.one .lcol{border-right:none;}
+  .tcard .lcol{padding:18px var(--pad-x);border-right:1px solid var(--ln);display:flex;flex-direction:column;gap:10px;min-width:0;}
+  .tcard .lcol .summary{margin-top:0;font-size:var(--fs-body);max-width:none;} .review .tcard .concl{margin-top:0;}
+  .tcard .tmetaline{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);} .tcard .tmetaline .on{color:var(--c-text);}
+  .tcard .rcol{display:flex;flex-direction:column;min-width:0;}
+  .tcard .closedbox{margin-top:auto;padding-top:10px;border-top:1px solid var(--ln);display:flex;flex-direction:column;gap:6px;} .tcard .closedbox .threads-h{margin-top:0;} .tcard .closedbox .threads{margin-top:0;}
+  .tcard .tidy{margin-top:0;padding:10px var(--pad-x);border-top:1px solid var(--ln);background:var(--c-raise);font-size:var(--fs-meta);}
+  .now .nlabel,.tcard .nlabel{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.1em;color:var(--c-text-2);text-transform:uppercase;display:flex;align-items:baseline;gap:8px;padding:10px var(--pad-x);border-bottom:1px solid var(--ln);background:var(--c-raise);}
+  .now .nlabel .n,.tcard .nlabel .n{letter-spacing:0;text-transform:none;color:var(--c-text-3);}
+  .side a.sf{text-decoration:none;}
+  .now .li{cursor:pointer;}
+  .nrow{display:grid;grid-template-columns:52px minmax(0,1fr);gap:0 12px;align-items:baseline;padding:9px 0;border-top:1px solid var(--ln);}
+  .review.dense .nrow{padding:7px 0;} .nrow:first-of-type{border-top:none;}
+  .nrow .id{font-family:var(--mono);font-size:var(--fs-meta);color:var(--c-accent);padding-top:2px;}
+  .nrow .t{font-size:var(--fs-body);font-weight:500;color:var(--c-text);overflow-wrap:anywhere;}
+  .nrow .nx{display:flex;gap:10px;align-items:baseline;margin-top:3px;font-size:var(--fs-small);color:var(--c-text-2);}
+  .nrow .nx.none{color:var(--c-text-3);font-style:italic;} .nrow .nx.more{cursor:pointer;}
+  .nrow .nx .k{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-2);flex:none;padding-top:2px;}
+  .nrow .nx .h{min-width:0;flex:1;overflow-wrap:anywhere;}
+  .chev{color:var(--c-text-3);font-size:15px;line-height:1;display:inline-block;transition:transform var(--t-fast) var(--ease),color var(--t-fast);flex:none;}
+  .chev.none{color:transparent;} .open .chev{transform:rotate(90deg);}
+  .nrow .nfull{display:none;margin:6px 0 4px 40px;font-size:var(--fs-small);color:var(--c-text-1);white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;}
+  .nrow.open .nfull{display:block;}
+  .kchip{font-family:var(--mono);font-size:var(--fs-tiny);letter-spacing:.04em;line-height:18px;height:20px;min-width:40px;text-align:center;padding:0 7px;border-radius:var(--r-pill);border:1px solid var(--ln-2);color:var(--c-text-2);white-space:nowrap;display:inline-block;align-self:start;margin-top:1px;transition:border-color var(--t-fast),color var(--t-fast),background-color var(--t-fast);}
+  .kchip.k-decision{background:var(--amber-tint);color:#e2b458;border-color:rgba(250,179,135,.45);}
+  .kchip.k-constraint{border-color:rgba(224,134,79,.45);color:var(--k-constraint);}
+  .kchip.k-ruled_out{border-color:rgba(224,108,117,.5);color:var(--k-ruled_out);}
+  .kchip.k-opened{border-color:var(--ln-3);color:var(--c-text);}
+  .kchip.k-closed{border-color:var(--ln-2);color:var(--c-text-2);}
+  .kchip.k-asked{border-color:rgba(137,180,250,.55);color:#7dcbe6;}
+  .filters{display:flex;gap:6px;flex-wrap:wrap;margin-top:28px;align-items:center;}
+  html[lang="en"] .filters{gap:5px;} html[lang="en"] .filters .f{padding:0 7px;}
+  .filters .lbl{font-family:var(--mono);color:var(--c-text-3);font-size:var(--fs-tiny);letter-spacing:.1em;margin-right:4px;}
+  .filters .f{cursor:pointer;background:none;align-self:center;margin-top:0;height:24px;line-height:22px;padding:0 10px;} .filters .f:hover{border-color:var(--c-accent);}
+  .filters .f.off{background:none !important;border-color:var(--ln) !important;color:var(--c-text-3) !important;}
+  .filters .f.plain{border-color:var(--ln-3);color:var(--c-text-1);}
+  .fbtn{font-family:var(--mono);font-size:var(--fs-mono);padding:0;border:none;color:var(--c-text-2);cursor:pointer;background:none;white-space:nowrap;} .fbtn b{color:var(--c-text);font-weight:500;} .fbtn .sl{margin:0 4px;color:var(--ln-3);} .fbtn:hover{color:var(--c-text);}
+  .stats{font-family:var(--mono);color:var(--c-text-3);font-size:var(--fs-mono);margin-top:12px;}
+  .day{margin-top:0;animation:wtRise .34s var(--ease) both;} .day:nth-of-type(2){animation-delay:.06s;} .day:nth-of-type(3){animation-delay:.12s;} .day:nth-of-type(n+4){animation-delay:.16s;}
+  .dh{display:flex;align-items:baseline;gap:10px;position:sticky;top:56px;background:var(--c-bg);padding:var(--sp-3) 0 var(--sp-1);border-bottom:1px solid var(--ln-3);z-index:1;}
+  .dh b{font-size:17px;font-weight:600;color:var(--g10);letter-spacing:-.01em;} .review.dense .dh b{font-size:15px;}
+  .dh .wd{font-size:var(--fs-small);color:var(--c-text-2);} .dh .cnt{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);margin-left:auto;white-space:nowrap;}
+  .ev{display:grid;grid-template-columns:46px 52px 40px minmax(0,1fr) auto 12px;gap:0 var(--sp-2);align-items:start;padding:7px 0;border-radius:var(--r-s);transition:background-color var(--t-fast);}
+  .ev.more:hover{background:var(--sel);}
+  .ev .kw{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-2);padding-top:3px;white-space:nowrap;}
+  .review.dense .ev{padding:5px 0;}
+  .ev .tm,.ev .th{font-family:var(--mono);font-size:11.5px;color:var(--c-text-3);padding-top:2px;white-space:nowrap;}
+  .review.dense .ev .tm,.review.dense .ev .th{font-size:var(--fs-mono);}
+  .ev.prim .tm,.ev.prim .th{color:var(--c-text-2);} .ev .th a{color:inherit;} .ev .th a:hover{color:var(--c-accent);}
+  .ev .hd{min-width:0;overflow-wrap:anywhere;text-wrap:pretty;font-size:var(--fs-body);line-height:1.5;color:var(--c-text-2);}
+  .ev.more .hd,.ev.more .chev{cursor:pointer;}
+  .ev.prim .hd{font-weight:500;color:var(--c-text);} .ev.k-opened .hd{font-weight:600;}
+  .ev .meta{font-family:var(--mono);font-size:var(--fs-mono);white-space:nowrap;color:var(--c-text-3);padding-top:3px;}
+  .ev .meta .u{color:var(--c-text);} .ev .meta .rp{color:var(--c-text);} .ev .meta .fail{color:var(--c-text);font-weight:500;} .ev .meta .re{color:var(--c-text);}
+  .ev .chev{padding-top:3px;text-align:center;}
+  .ev .efull{display:none;grid-column:4 / -1;margin:4px 0 6px;font-size:var(--fs-small);color:var(--c-text-1);white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;}
+  .ev.open .efull{display:block;animation:wtRise .16s var(--ease);}
+  .efull .why{margin-top:8px;color:var(--c-text-2);font-size:var(--fs-small);border-left:2px solid var(--ln-2);padding-left:12px;}
+  .efull .ids{margin-top:8px;font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);}
+  .noprim{font-size:var(--fs-small);color:var(--c-text-3);font-style:italic;padding:8px 0 0 122px;}
+  .tgroup{margin-top:var(--sp-2);} .review.dense .tgroup{margin-top:var(--sp-1);}
+  .tg{display:flex;gap:8px;align-items:baseline;padding:4px 0 4px;border-bottom:1px solid var(--ln);}
+  .tg .id{font-family:var(--mono);font-size:11.5px;color:var(--c-text-3);text-decoration:none;} .tg a.id:hover{color:var(--c-accent);}
+  .tg .tt{font-size:var(--fs-body);color:var(--c-text);font-weight:500;min-width:0;overflow-wrap:anywhere;}
+  .tg .mk{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-2);white-space:nowrap;}
+  .tg .n{margin-left:auto;font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);white-space:nowrap;}
+  .tgroup .ev{grid-template-columns:46px 52px minmax(0,1fr) auto 12px;} .tgroup .ev .th{display:none;} .tgroup .ev .efull{grid-column:3 / -1;}
+  .fold{display:flex;gap:8px;align-items:baseline;cursor:pointer;font-family:var(--mono);font-size:var(--fs-meta);color:var(--c-text-2);padding:10px 0 2px 122px;transition:color var(--t-fast);}
+  .fold:hover{color:var(--c-text);} .fold .act{color:var(--c-text-3);}
+  .review .concl{margin-top:10px;font-size:var(--fs-small);color:var(--c-text-1);} .review .concl b{color:var(--c-text-3);font-weight:400;margin-right:8px;}
+  .review .concl .chead{color:var(--c-text);} .review .concl .cbody{margin-top:6px;color:var(--c-text-2);white-space:pre-wrap;}
+  .tidy{margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--c-text-1);}
+  .tidy .lbl{color:var(--c-text-3);margin-right:2px;} .tidy .dim{font-size:11.5px;}
+  .tidy select,.tmeta select.move{background:var(--c-raise);border:1px solid var(--ln-2);color:var(--c-text-2);border-radius:var(--r-s);padding:5px 8px;font-size:var(--fs-meta);max-width:320px;}
+  .tmeta select.move{display:block;margin-top:6px;max-width:100%;}
+  .anchor{font-family:var(--mono);font-size:var(--fs-meta);color:var(--c-text-2);}
+  .anchor b{color:var(--c-text);font-weight:500;}
+  .commit{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--ln);font-size:12.5px;}
+  .commit .h{font-family:var(--mono);color:var(--k-commit);font-size:11.5px;} .commit .m{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .commit .t{font-family:var(--mono);color:var(--c-text-3);font-size:var(--fs-tiny);margin-left:auto;white-space:nowrap;}
+  @keyframes cbIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  .in{animation:cbIn var(--t) var(--ease) both;} .pane .in{animation:none;}
+  .pane.detail .thead{animation:wtRise .3s var(--ease) both;} .pane.detail .metaline,.pane.detail .terms{animation:wtRise .3s var(--ease) .04s both;} .pane.detail .focusp{animation:wtRise .3s var(--ease) .08s both;}
+  .pane.detail .tbody > .sec.card{animation:wtRise .34s var(--ease) .12s both;} .pane.detail .chips{animation:wtRise .3s var(--ease) .18s both;} .pane.detail .backbar{animation:wtRise .24s var(--ease) both;}
+  .pane.detail .st{animation:wtRise .3s var(--ease) both;} .pane.detail .st:nth-of-type(2){animation-delay:.2s;} .pane.detail .st:nth-of-type(3){animation-delay:.26s;}
+  .chips .chip{animation:wtRise .26s var(--ease) both;} .chips .chip:nth-child(2){animation-delay:.03s;} .chips .chip:nth-child(3){animation-delay:.06s;} .chips .chip:nth-child(4){animation-delay:.09s;} .chips .chip:nth-child(5){animation-delay:.12s;} .chips .chip:nth-child(n+6){animation-delay:.15s;}
+  .chips .chip:active{transform:scale(.97);} .chips .chip{transition:border-color var(--t-fast),color var(--t-fast),background-color var(--t-fast),transform .1s;}   /* 두 칸 껍데기 안은 sticky 칸이라 애니메이션이 멎을 수 있다 — 그리지 않는다 */
+
+  /* ── 현황 · 두 칸 ─────────────────────────────────────── */
+  .wrap.status{max-width:1160px;}
+  .layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:var(--gutter);}
+  .wrap.two{max-width:2000px;margin:0 auto;padding:20px var(--pad-x) 80px;}
+  .split{display:grid;grid-template-columns:minmax(48%,1fr) minmax(0,960px);gap:var(--gutter);align-items:start;}
+  .pane.list{position:sticky;top:68px;max-height:calc(100vh - 80px);overflow:auto;min-width:0;padding-right:18px;scrollbar-width:thin;scrollbar-gutter:stable;}   /* 스크롤바와 글 사이 숨통(사용자 2026-09-12) */
+  .pane.detail{min-width:0;align-self:start;display:block;}
+  .pane.list .layout{grid-template-columns:168px minmax(0,1fr);gap:18px;}
+  .li.sel{background:var(--sel-2);}
+  .li.sel .t{color:var(--g10);}
+  .railbtn{font-family:var(--mono);font-size:var(--fs-meta);color:var(--c-text-2);background:none;border:1px solid var(--ln-2);border-radius:var(--r-s);width:26px;height:26px;cursor:pointer;line-height:1;padding:0;flex:none;align-self:center;position:relative;top:1px;transition:color var(--t-fast),border-color var(--t-fast);}
+  .railbtn:hover{color:var(--c-text);border-color:var(--ln-3);}
+  .railoff .pane.list .side,.railoff .status .side{display:none;} .railoff .pane.list .layout,.railoff .layout{grid-template-columns:minmax(0,1fr);}
+  .wrap.two.railoff .split{grid-template-columns:minmax(44%,1fr) minmax(0,960px);}
+  .pane.list .li .t{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;}
+  .tcard .li .t{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;}
+  .pane.list .li .m{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45;}
+  .listtab{display:none;}
+  .wrap.two.has.listoff .split{grid-template-columns:44px minmax(0,1fr);gap:var(--sp-4);}
+  .wrap.two.has.listoff .pane.list{position:sticky;top:68px;max-height:none;overflow:visible;padding:0;}
+  .wrap.two.has.listoff .pane.detail{max-width:960px;width:100%;justify-self:center;padding:var(--sp-2) 0 0;}
+  .wrap.two.has.listoff .pane.list > .layout{display:none;}
+  .wrap.two.has.listoff .listtab{display:flex;flex-direction:column;align-items:center;gap:12px;width:44px;min-height:0;padding:14px 0;border:1px solid var(--ln);border-radius:var(--r);background:var(--c-card);color:var(--c-text-2);cursor:pointer;font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;box-shadow:var(--sh-card);transition:color var(--t-fast),border-color var(--t-fast),background-color var(--t-fast);}
+  .listtab > span:first-child{font-size:14px;color:var(--c-text-3);} .listtab .n{font-weight:600;}
+  .listtab .vt{writing-mode:vertical-rl;text-orientation:mixed;letter-spacing:.2em;} .listtab .n{color:var(--c-accent);} .listtab:hover{color:var(--c-text);border-color:var(--ln-3);background:var(--c-raise);} .listtab:hover > span:first-child{color:var(--c-text);}
+  .listbtn{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--c-text-2);background:none;border:1px solid var(--ln-2);border-radius:var(--r-s);height:24px;padding:0 9px;cursor:pointer;align-self:center;white-space:nowrap;transition:color var(--t-fast),border-color var(--t-fast);}
+  .listbtn:hover{color:var(--c-text);border-color:var(--ln-3);} .wrap:not(.two.has) .listbtn{display:none;}
+  .backbar{display:none;margin-bottom:16px;align-items:center;gap:12px;} .backbar .btn{padding:6px 12px;} .backbar .muted{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* NOW 띠 */
+  .now{position:sticky;top:68px;align-self:start;max-height:calc(100vh - 80px);display:flex;flex-direction:column;min-width:0;}
+  .now .nowl{flex:0 1 auto;} .ev2{align-content:start;}
+  .now.strip{position:static;max-height:none;margin-bottom:20px;} .now.strip .nowh{cursor:pointer;user-select:none;} .now.strip .nowh .more{font-size:var(--fs-mono);font-family:var(--mono);color:var(--c-text-3);margin-left:4px;letter-spacing:0;font-weight:400;}
+  .now.strip .nowl{display:none;}
+  .now.full{position:sticky;top:68px;max-height:calc(100vh - 88px);} .now.full .nowl{max-height:calc(100vh - 120px);}
+  .now .nowh{display:flex;align-items:baseline;gap:8px;padding:0 2px 8px;} .now .nowh b{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.16em;color:var(--c-text-2);font-weight:600;}
+  .now .nowh .live{width:6px;height:6px;border-radius:50%;background:var(--c-green);box-shadow:0 0 0 0 rgba(166,227,161,.5);animation:pulse 2.4s ease-out infinite;align-self:center;} .now .nowh .at{margin-left:auto;font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-3);}
+  .now .nowl{overflow:auto;border:1px solid var(--ln);border-radius:var(--r);background:var(--c-card);min-height:0;box-shadow:var(--sh-card);scrollbar-width:thin;}
+  /* 확장 68호 — 타임라인(#512, 사용자 2026-09-12 스크린샷): 가로선 = 시간, 오른쪽 끝 = 지금. 위 = 방향이 바뀐 것(결정·제약·배제·닫힘·선언),
+     아래 = 일한 흔적(노트·커밋). 눈금은 종류 색, 같은 시각은 세로로 쌓인다. 올리면 풍선, 누르면 그 기록. 보고 있는 스레드의 눈금만 밝다. */
+  .tl{position:relative;flex:none;height:116px;border:1px solid var(--ln);border-radius:14px;overflow:visible;margin-bottom:6px;   /* flex:none — 전체 띠(.now.full)는 세로 flex 라 글 줄이 길면 띠가 50px 로 짜부라져 캡슐이 삐져나왔다 */
+      background:radial-gradient(120% 140% at 100% 50%,rgba(166,227,161,.10),transparent 55%),linear-gradient(180deg,var(--c-card),#0d1015);box-shadow:var(--sh-card);}
+  .now.full .tl{height:156px;margin-bottom:12px;}
+  .tl .axis{position:absolute;left:24px;right:22px;top:50%;height:2px;margin-top:-1px;border-radius:2px;
+      background:linear-gradient(90deg,rgba(52,62,74,.4),var(--ln-3) 60%,var(--c-green) 92%,#b8ffd9);box-shadow:0 0 10px rgba(166,227,161,.22);}   /* 은은히 빛나기만 — 흐르거나 숨 쉬지 않는다(사용자 2026-09-12 "정신없어") */
+  .tl .axis::after{content:"";position:absolute;right:-6px;top:-5px;width:12px;height:12px;border-radius:50%;background:radial-gradient(circle,#d6ffe9,var(--c-green) 55%,transparent 70%);box-shadow:0 0 16px rgba(166,227,161,.55);}
+  .tl .lab{position:absolute;bottom:6px;font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-3);white-space:nowrap;} .tl .lab.r{right:12px;color:var(--c-green);text-shadow:0 0 8px rgba(166,227,161,.5);}
+  /* 눈금 = 빛나는 캡슐(D안). 위로 자란 것 = 방향, 아래로 드리운 것 = 흔적. 무게(결정·닫힘 > 커밋 > 노트)가 길이다. 이 스레드만 밝고 나머지는 잔광. */
+  .tl .tk{position:absolute;width:6px;margin-left:-3px;height:20px;border-radius:99px;cursor:pointer;opacity:.42;--c:var(--kc,var(--ln-3));
+      background:var(--c);box-shadow:0 0 6px color-mix(in srgb,var(--c) 20%,transparent);transition:opacity var(--t-fast),transform var(--t-fast),box-shadow var(--t-fast);}
+  .tl .tk.up{background:linear-gradient(180deg,var(--c),color-mix(in srgb,var(--c) 33%,transparent));transform-origin:center bottom;}
+  .tl .tk.dn{background:linear-gradient(0deg,var(--c),color-mix(in srgb,var(--c) 33%,transparent));transform-origin:center top;}
+  .tl .tk.w2{height:26px;} .tl .tk.w3{height:34px;width:7px;margin-left:-3.5px;}
+  .tl .tk.here{opacity:1;box-shadow:0 0 10px color-mix(in srgb,var(--c) 60%,transparent),0 0 22px color-mix(in srgb,var(--c) 27%,transparent);}
+  .tl .tk:hover{opacity:1;transform:scaleY(1.15);z-index:3;box-shadow:0 0 12px color-mix(in srgb,var(--c) 70%,transparent);}
+  .tl .tk.last{filter:brightness(1.25);} .tl .tk.new{animation:tlRise .55s var(--ease);}   /* 새 것만 한 번 솟고 멈춘다 */
+  @keyframes tlRise{from{transform:scaleY(0);opacity:0;}to{transform:scaleY(1);opacity:1;}}
+  .tl .bub{position:fixed;z-index:50;width:300px;max-width:calc(100vw - 16px);padding:8px 11px 9px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(21,26,33,.92);backdrop-filter:blur(10px);
+      box-shadow:0 12px 34px rgba(0,0,0,.6),0 0 0 1px color-mix(in srgb,var(--c,var(--ln-2)) 20%,transparent);font-size:var(--fs-meta);color:var(--c-text);pointer-events:none;display:none;line-height:1.4;}
+  .tl .bub .k{margin-right:7px;text-shadow:0 0 8px color-mix(in srgb,var(--kc,transparent) 55%,transparent);} .tl .bub .m{color:var(--c-text-2);font-size:var(--fs-tiny);margin-top:3px;}
+  .tl .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--c-text-3);font-size:var(--fs-meta);}
+  .tl .side{position:absolute;left:14px;font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-3);letter-spacing:.1em;} .tl .side.u{top:7px;} .tl .side.d{bottom:6px;}
+  @media (prefers-reduced-motion:reduce){ .tl .tk.new{animation:none;} }
+  .ev2{display:grid;grid-template-columns:10px minmax(0,1fr);gap:0 10px;padding:9px 14px;border-bottom:1px solid var(--ln);cursor:pointer;transition:background-color var(--t-fast);animation:evIn .38s var(--ease) both;}
+  .ev2:nth-child(2){animation-delay:.05s;} .ev2:nth-child(3){animation-delay:.1s;} .ev2:nth-child(4){animation-delay:.15s;} .ev2:nth-child(5){animation-delay:.2s;} .ev2:nth-child(6){animation-delay:.25s;} .ev2:nth-child(n+7){animation-delay:.3s;}
+  .ev2:first-child .d{animation:kcGlow 2.6s ease-in-out infinite;}
+  @keyframes kcGlow{0%,100%{box-shadow:0 0 0 3px color-mix(in srgb,var(--kc,transparent) 14%,transparent);}50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--kc,transparent) 28%,transparent);}}
+  .ev2:hover .d{transform:scale(1.15);} .ev2 .d{transition:transform var(--t-fast) var(--ease);} .ev2:last-child{border-bottom:none;} .ev2:hover{background:var(--sel);}
+  .ev2 .d{width:8px;height:8px;border-radius:50%;margin-top:6px;border:2px solid var(--ln-3);box-sizing:border-box;}
+  .ev2 .tx{font-size:12.5px;line-height:1.45;color:var(--c-text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;} .ev2 .tx .k{color:var(--c-text-2);margin-right:6px;font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.04em;}
+  .ev2 .m{margin-top:3px;font-size:var(--fs-mono);color:var(--c-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;} .ev2 .m .id{font-family:var(--mono);color:var(--c-text-2);}
+  .ev2.kc .d{background:var(--kc,transparent);border-color:var(--kc,var(--ln-3));box-shadow:0 0 0 3px color-mix(in srgb,var(--kc,transparent) 14%,transparent);} .ev2.kc-closed .d{background:var(--ln-3);border-color:var(--ln-3);box-shadow:none;} .ev2.kc-opened .d{background:transparent;border-color:var(--c-text);box-shadow:none;} .ev2.kc-asked .d{background:transparent;}
+  .ev2.kc .tx .k{color:var(--kc,var(--c-text-2));} .ev2.kc-closed .tx .k,.ev2.kc-opened .tx .k,.ev2.kc-n-thought .tx .k{color:var(--c-text-2);}
+  .ev2.new{animation:evIn .5s var(--ease), evGlow 3s ease-out;}
+  @keyframes evIn{from{opacity:0;transform:translateY(-12px);}to{opacity:1;transform:none;}}
+  @keyframes evGlow{from{background:rgba(137,180,250,.18);}to{background:transparent;}}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(166,227,161,.5);}70%{box-shadow:0 0 0 6px rgba(166,227,161,0);}100%{box-shadow:0 0 0 0 rgba(166,227,161,0);}}
+  /* 왼쪽 필터 레일 */
+  .side{display:flex;flex-direction:column;gap:var(--sp-3);}
+  .side .grp{display:flex;flex-direction:column;gap:2px;}
+  .side .sf{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:var(--sp-1) 10px;border-radius:var(--r-s);color:var(--c-text-2);font-size:var(--fs-body);cursor:pointer;min-width:0;transition:background-color var(--t-fast),color var(--t-fast);}
+  .side .sf span:first-child{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .side .sf .n{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);flex:none;min-width:18px;text-align:right;}
+  .side .sf:hover{background:var(--sel);color:var(--c-text);transform:translateX(2px);} .side .sf{transition:background-color var(--t-fast),color var(--t-fast),transform var(--t) var(--ease);} .side .sf.on{background:var(--sel-2);color:var(--g10);font-weight:500;} .side .sf.on .n{color:var(--c-text-1);}
+  .side .grp{animation:wtRise .3s var(--ease) both;} .side .grp:nth-child(2){animation-delay:.06s;} .side .grp:nth-child(3){animation-delay:.12s;} .side .grp:nth-child(4){animation-delay:.18s;}
+  .side .sf.me .n{color:var(--c-amber);} .side .sf.me.on{color:var(--c-amber);} .side .sf.dim,.side .sf.dim .n{color:var(--c-text-3);}
+  .side .grp .label{padding:0 10px 6px;}
+  /* 목록 */
+  .listbox{background:var(--c-card);border:1px solid var(--ln);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh-card);}
+  .listbar{display:flex;align-items:center;gap:18px;padding:11px 16px;border-bottom:1px solid var(--ln);background:var(--c-raise);}
+  .listbar .tab2{display:inline-flex;align-items:baseline;gap:var(--sp-1);white-space:nowrap;font-size:var(--fs-body);color:var(--c-text-2);cursor:pointer;background:none;border:none;padding:0;line-height:1.3;transition:color var(--t-fast);} .listbar .tab2:hover{color:var(--c-text);} .listbar .tab2{position:relative;padding-bottom:2px;} .listbar .tab2::after{content:"";position:absolute;left:0;right:0;bottom:-12px;height:2px;background:var(--c-accent);transform:scaleX(0);transform-origin:left;transition:transform var(--t) var(--ease);border-radius:1px;} .listbar .tab2.on::after{transform:scaleX(1);} .listbar .tab2.on{color:var(--g10);font-weight:600;}
+  .listbar .tab2 .n{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);font-weight:400;margin-left:0;} .listbar .tab2.on .n{color:var(--c-text-2);}
+  .listbar .sort{margin-left:auto;font-size:var(--fs-mono);font-family:var(--mono);color:var(--c-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  .prow{display:grid;grid-template-columns:104px minmax(0,1fr);gap:var(--sp-2);align-items:start;padding:var(--sp-2) 16px;border-bottom:1px solid var(--ln);}
+  .prow .at{font-family:var(--mono);font-size:var(--fs-meta);color:var(--c-text-2);white-space:nowrap;}
+  .prow .tx{white-space:pre-wrap;word-break:break-word;line-height:1.55;}
+  .li{display:grid;grid-template-columns:16px minmax(0,1fr) 84px;gap:var(--sp-2);align-items:start;padding:12px 16px;border-bottom:1px solid var(--ln);cursor:pointer;position:relative;transition:background-color var(--t-fast),box-shadow var(--t);}
+  .listbox .li{animation:wtRise .32s var(--ease) both;} .listbox .li:nth-child(2){animation-delay:.03s;} .listbox .li:nth-child(3){animation-delay:.06s;} .listbox .li:nth-child(4){animation-delay:.09s;} .listbox .li:nth-child(5){animation-delay:.12s;} .listbox .li:nth-child(6){animation-delay:.15s;} .listbox .li:nth-child(7){animation-delay:.18s;} .listbox .li:nth-child(n+8){animation-delay:.2s;}
+  .li::after{content:"";position:absolute;left:0;top:50%;height:0;width:3px;background:var(--c-accent);transform:translateY(-50%);transition:height var(--t) var(--ease);border-radius:0 2px 2px 0;}
+  .li.sel::after{height:100%;}
+  .li:last-child{border-bottom:none;} .li:hover{background:var(--sel);}
+  .dotbox{height:21px;display:flex;align-items:center;justify-content:center;}
+  .dot{width:10px;height:10px;border-radius:50%;box-sizing:border-box;border:2px solid var(--ln-3);flex:none;display:inline-block;}
+  .dot.mine{border-color:var(--c-amber);box-shadow:0 0 0 3px rgba(250,179,135,.14);animation:dotBreath 2.8s ease-in-out infinite;}
+  .dot.agent{background:var(--c-accent);border-color:var(--c-accent);position:relative;}
+  .li .dot.agent::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1.5px solid transparent;border-top-color:rgba(137,180,250,.55);animation:dotSpin 3.2s linear infinite;}
+  @keyframes dotBreath{0%,100%{box-shadow:0 0 0 3px rgba(250,179,135,.14);}50%{box-shadow:0 0 0 5px rgba(250,179,135,.22);}}
+  @keyframes dotSpin{to{transform:rotate(360deg);}}
+  .dot.watch{border-color:var(--ln-3);} .dot.unset{border-color:var(--c-text);} .dot.closed{border-color:var(--ln-3);background:var(--ln-3);}
+  .li .t{font-size:var(--fs-body);font-weight:600;color:var(--c-text);line-height:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .li.watch .t,.li.closed .t{font-weight:500;color:var(--c-text-2);}
+  .li .m{font-size:var(--fs-meta);color:var(--c-text-2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .li .m .id{font-family:var(--mono);color:var(--c-text-2);} .li .m .me{color:var(--c-amber);} .li .m .rp{font-family:var(--mono);} .li .m .here{color:var(--c-text-1);}
+  .li .m .auto{color:var(--c-text-3);border:1px solid var(--ln-2);border-radius:var(--r-pill);padding:0 6px;font-size:var(--fs-tiny);}
+  .li .full{font-size:var(--fs-body);color:var(--c-text);margin-top:var(--sp-1);line-height:1.5;white-space:normal;overflow-wrap:anywhere;}
+  .li .at{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);text-align:right;line-height:21px;white-space:nowrap;}
+  .legend{display:flex;align-items:center;gap:6px 14px;margin-top:14px;padding:0 4px;font-size:var(--fs-meta);color:var(--c-text-3);flex-wrap:wrap;line-height:1.4;} .legend .lg{display:inline-flex;align-items:center;gap:var(--sp-1);white-space:nowrap;} .legend .dot{width:9px;height:9px;box-shadow:none;}
+  .ph{display:inline-flex;align-items:center;gap:var(--sp-1);font-size:var(--fs-meta);color:var(--c-text-2);white-space:nowrap;}
+  .result{font-size:var(--fs-body);color:var(--c-text);} .result b{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.08em;color:var(--c-text-2);font-weight:400;margin-right:8px;}
+  .turn{font-size:var(--fs-meta);color:var(--c-text-2);text-align:right;white-space:nowrap;} .turn.me{color:var(--c-amber);} .turn.none{color:var(--ln-3);}
+  .nowrow{display:grid;grid-template-columns:52px 16px minmax(0,1fr) 88px;gap:0 var(--sp-2);align-items:start;padding:10px 0;border-top:1px solid var(--ln);} .nowrow:first-of-type{border-top:none;}
+  .nowrow .id{line-height:21px;} .nowrow .turn{line-height:21px;} .nowrow .t{line-height:21px;} .nowrow .nx{margin-top:2px;}
+
+  /* ── 찾기 ─────────────────────────────────────────────── */
+  .find .q{width:100%;box-sizing:border-box;background:var(--c-card);border:1px solid var(--ln-2);border-radius:var(--r);color:var(--c-text);font:15px/1.5 var(--font);padding:12px 16px;outline:none;box-shadow:var(--sh-card);transition:border-color var(--t-fast),box-shadow var(--t-fast);}
+  .find .q:focus{border-color:var(--c-accent);box-shadow:0 0 0 3px var(--acc-tint);}
+  .find .q::placeholder{color:var(--c-text-3);}
+  .find .hint{margin-top:8px;font-size:var(--fs-meta);color:var(--c-text-3);}
+  .find .hint b{color:var(--c-text-1);font-weight:400;font-family:var(--mono);}
+  .find .cnt{margin:var(--sp-3) 0 var(--sp-2);font-size:var(--fs-meta);color:var(--c-text-2);}
+  .hit{display:grid;grid-template-columns:56px minmax(0,1fr) 96px;gap:var(--sp-2);align-items:baseline;padding:10px 8px;margin:0 -8px;border-top:1px solid var(--ln);cursor:pointer;border-radius:var(--r-s);transition:background-color var(--t-fast);}
+  .hit:first-of-type{border-top:none;}
+  .hit:hover{background:var(--sel);}
+  .hit .kw{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-2);white-space:nowrap;}
+  .hit .tx{min-width:0;font-size:var(--fs-body);color:var(--c-text);line-height:1.5;overflow-wrap:anywhere;}
+  .hit .m{margin-top:3px;font-size:var(--fs-meta);color:var(--c-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hit .m .id{font-family:var(--mono);color:var(--c-text-2);}
+  .hit .at{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);text-align:right;white-space:nowrap;}
+  .hit mark{background:rgba(250,179,135,.22);color:var(--c-amber);border-radius:2px;padding:0 1px;}
+  .hit.replaced .tx{color:var(--c-text-3);}
+
+  /* ── 종류 색 — 종류 말·점·칩 테두리에만 ─────────────────── */
+  .kc-decision{--kc:var(--k-decision);} .kc-constraint{--kc:var(--k-constraint);} .kc-ruled_out{--kc:var(--k-ruled_out);} .kc-commit{--kc:var(--k-commit);}
+  .kc-n-change{--kc:var(--k-change);} .kc-n-verified{--kc:var(--k-verified);} .kc-n-finding{--kc:var(--k-finding);} .kc-n-thought{--kc:var(--k-thought);}
+  .kc-asked{--kc:var(--k-asked);} .kc-closed{--kc:var(--k-closed);} .kc-opened{--kc:var(--k-opened);}
+  .kw.kc{color:var(--kc,var(--c-text-2));} .kc-closed > .kw,.kc-opened > .kw,.kw.kc-closed,.kw.kc-opened{color:var(--c-text-2);}
+  .kdot::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--kc,transparent);margin-right:6px;vertical-align:1px;}
+  .kc-opened.kdot::before{background:transparent;box-shadow:inset 0 0 0 1.5px var(--c-text-2);} .kc-closed.kdot::before{background:var(--ln-3);}
+  .chips .chip.kc::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--kc);flex:none;box-shadow:0 0 0 2px color-mix(in srgb,var(--kc) 18%,transparent);}
+  .chips .chip.kc.on{border-color:var(--kc);color:var(--kc);background:color-mix(in srgb,var(--kc) 9%,transparent);} .chips .chip.kc.on .n{color:var(--kc);}
+  .chips .chip .n .kc{color:var(--kc,inherit);opacity:.85;}
+
+  /* ── 반응형 ─────────────────────────────────────────────
+     2000 · 1440  두 칸(목록 | 상세 960). 1000  한 칸씩(목록 → 상세). 768  레일이 가로 칩 띠로. 390  격자가 좁게 접힌다. */
+  @media (min-width:1440px){ :root{--pad-x:28px;--gutter:32px;} }
+  @media (min-width:1800px){ :root{--pad-x:40px;--gutter:40px;} .wrap.two{padding-top:28px;} }
+  @media (max-width:1180px){
+    .listbtn{display:none;} .wrap.two.has.listoff .split{grid-template-columns:minmax(0,1fr);} .wrap.two.has.listoff .listtab{display:none;}
+    .wrap.two .split,.wrap.two.railoff .split,.wrap.two.has.listoff .split{grid-template-columns:minmax(0,1fr);} .wrap.two.has .pane.list{display:none;} .wrap.two:not(.has) .pane.detail{display:none;} .wrap.two.rv:not(.has) .pane.detail.rvcard{display:block;order:-1;}
+    .pane.list{position:static;max-height:none;overflow:visible;} .backbar{display:flex;}
+    .wrap.two{max-width:1160px;margin:0 auto;} .wrap.two.has .pane.detail{max-width:932px;}
+    .pane.list .layout{grid-template-columns:200px minmax(0,1fr);gap:var(--gutter);}
+  }
+  @media (max-width:900px){
+    .tcard .cols{grid-template-columns:minmax(0,1fr);} .tcard .lcol{border-right:none;border-bottom:1px solid var(--ln);} .tlayout{grid-template-columns:minmax(0,1fr);}
+    .tmeta{flex-direction:row;flex-wrap:wrap;gap:var(--sp-2);font-size:var(--fs-meta);} .tmeta .mi{border:none;padding:0;flex-direction:row;gap:var(--sp-1);} .tmeta .mi .l{display:none;} .tmeta .mi.hide{display:none;} .tmeta .btn{margin:0 0 0 auto;}
+  }
+  @media (max-width:820px){
+    :root{--pad-x:16px;--gutter:20px;--sp-4:24px;}
+    /* 레일 → 가로 띠. 그룹은 한 줄씩 옆으로 흐르고, 넘치면 가로 스크롤 */
+    .layout,.pane.list .layout{grid-template-columns:minmax(0,1fr);gap:18px;}
+    .side{gap:10px;}
+    .side .grp{flex-direction:row;flex-wrap:nowrap;align-items:center;gap:4px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin:0 calc(-1 * var(--pad-x));padding-left:var(--pad-x);padding-right:var(--pad-x);}
+    .side .grp::-webkit-scrollbar{display:none;}
+    .side .grp .label{padding:0 6px 0 0;flex:none;}
+    .side .sf{flex:none;border:1px solid var(--ln-2);border-radius:var(--r-pill);padding:4px 10px;font-size:var(--fs-small);gap:6px;} .side .sf.on{border-color:var(--ln-3);}
+    .side .sf .n{min-width:0;}
+    .railbtn{display:none;}
+    .wrap.review{padding-left:var(--pad-x);padding-right:var(--pad-x);}
+    .dh{top:56px;}
+    .lrow{grid-template-columns:56px minmax(0,1fr) 44px 12px;} html[lang="en"] .lrow{grid-template-columns:56px minmax(0,1fr) 78px 12px;} .lrow .dt,.lrow .who{display:none;} .lrow .why{grid-column:1 / -1;}
+    .rrow{grid-template-columns:52px minmax(0,1fr);} .rrow .at{display:none;} .rr .full{margin-left:0;}
+    .sec .label .scopehint{margin-left:0;flex-basis:100%;}
+  }
+  @media (max-width:640px){
+    .ev,.tgroup .ev{grid-template-columns:40px 44px minmax(0,1fr) 12px;} .ev .th,.ev .meta{display:none;} .ev .efull,.tgroup .ev .efull{grid-column:1 / -1;} .noprim,.fold{padding-left:0;} .tg .n{display:none;}
+    .li{grid-template-columns:16px minmax(0,1fr);padding:12px 14px;} .li .at{grid-column:2;text-align:left;line-height:1.4;font-size:var(--fs-tiny);margin-top:-2px;}
+    .listbar{gap:14px;padding:10px 14px;} .listbar .sort{display:none;}
+    .st{grid-template-columns:minmax(0,1fr);gap:4px;} .st .k{padding-top:0;}
+    .hit{grid-template-columns:48px minmax(0,1fr);} .hit .at{display:none;}
+    .it summary{flex-wrap:wrap;} .it summary .meta{flex-basis:100%;margin-left:19px;white-space:normal;}
+    .full{margin-left:0;}
+    .chips .chip{height:30px;}
+    .top{height:52px;gap:10px;} .top .btn{padding:6px 10px;} #who{display:none;} .top .crumb{display:none;}
+    .thead .t h1{flex-basis:100%;} .thead .flip{margin-left:0;}
+    .wrap,.wrap.two,.wrap.review{padding-bottom:64px;}
+    .focusp{padding-left:12px;}
+    .now.strip .nowl{max-height:100px;}
+    .ev2{padding:8px 12px;}
+    .tcard .lcol{padding:14px var(--pad-x);}
+    .backbar .muted{display:none;}
+  }
+  @media (max-width:420px){
+    :root{--pad-x:14px;--fs-h1:20px;}
+    .logo .name{display:none;}
+    .legend{gap:8px;}
+    .filters .f{padding:0 8px;}
+    .metaline select.move{margin-left:0;}
+  }
+  /* 줄임 설정 — 움직임 전부 끈다 */
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none !important;transition:none !important;}
+  }
+  /* 회고: 기본은 타임라인에 폭을 주고, 스레드를 고르면 기존 상세가 넓어진다. */
+  .wrap.two.rv{--rv-detail-width:clamp(320px,27vw,420px);}
+  .wrap.two.rv.has{--rv-detail-width:clamp(460px,46vw,880px);}
+  .wrap.two.rv .split{grid-template-columns:minmax(0,1fr) var(--rv-detail-width);}
+  .pane.detail.rvcard > #rvCard > .tcard{margin-top:0;} .pane.detail.rvcard .tcard .cols{grid-template-columns:minmax(0,1fr);} .pane.detail.rvcard .tcard .lcol{border-right:none;border-bottom:1px solid var(--ln);}
+  .pane.detail.rvcard .closedbox{margin:0;padding:14px var(--pad-x);}
+  .tcard .topic-tools{border-top:1px solid var(--ln);}
+  .tcard .topic-tools > summary{padding:10px var(--pad-x);font-size:var(--fs-meta);color:var(--c-text-2);cursor:pointer;}
+  .tcard .topic-tools > summary:hover{color:var(--c-text);background:var(--c-raise);}
+  .tcard .topic-tools .tidy{border-top:none;padding-top:4px;}
+  #rvHold{display:none;}
+  .wrap.two.rv .pane.list .layout{grid-template-columns:200px minmax(0,1fr);}
+  .wrap.two.rv.railoff .pane.list .layout{grid-template-columns:minmax(0,1fr);}
+  .wrap.two.rv.has.listoff .split{grid-template-columns:44px minmax(0,1fr);}
+  .wrap.two.rv.has.listoff .pane.list > .in{display:none;}
+  .wrap.two.rv .backbar{display:flex;}
+  .rv-timeline{min-width:0;container-type:inline-size;}
+  /* 상세에 폭을 넘겨도 본문은 읽히게: 좁은 목록에서는 메타 정보가 아래 줄로 간다. */
+  @container (max-width:520px){
+    .rv-timeline .tgroup .ev{grid-template-columns:46px 52px minmax(0,1fr) 12px;}
+    .rv-timeline .ev .meta{grid-column:3;grid-row:2;white-space:normal;}
+    .rv-timeline .ev .chev{grid-column:4;grid-row:1;}
+    .rv-timeline .tg{flex-wrap:wrap;}
+    .rv-timeline .tg .tt{flex:1;}
+    .rv-timeline .tg .mk,.rv-timeline .tg .n{font-size:var(--fs-tiny);}
+    .rv-timeline .fold{padding-left:0;flex-wrap:wrap;}
+    .rv-timeline .dh .cnt{white-space:normal;text-align:right;}
+  }
+  @media (max-width:1180px){
+    .wrap.two.rv .split,.wrap.two.rv.has.listoff .split{grid-template-columns:minmax(0,1fr);}
+  }
+  @media (max-width:820px){
+    .wrap.two.rv .pane.list .layout{grid-template-columns:minmax(0,1fr);}
+    .wrap.two.rv.railoff .pane.list .side{display:flex;}
+  }
+  .pane.list .ev.sel{background:var(--acc-tint);box-shadow:inset 3px 0 0 var(--c-accent);border-radius:var(--r-s);}
+  /* 확장 69호 — 날짜 밀도 레일: 하루 = 캡슐 하나(타임라인과 같은 어휘), 길이 = 기록 수, 결정·제약이 있으면 호박. 켜진 날은 밝다. */
+  /* H안(얄쌍하게) — 하루 = 현황 NOW 와 같은 굵기의 캡슐(7px). 왼쪽부터 차곡차곡, 날이 갈수록 오른쪽으로 쌓인다. 안에 종류 조각,
+     바닥선 위 날짜, 오늘은 호박 테. 넘치면 좌우로 넘긴다(사용자 2026-09-12 "뚱뚱한 풍선 말고 얄쌍한 타원, 왼쪽에 몰아놓고 쌓이게"). */
+  .drail{margin-top:14px;padding:12px 14px 0;border:1px solid var(--ln);border-radius:12px;background:linear-gradient(180deg,var(--c-card),#0d1015);overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;}
+  .drail-in{position:relative;display:flex;align-items:flex-end;justify-content:flex-start;gap:9px;height:86px;padding:0 4px 32px;box-sizing:border-box;width:max-content;min-width:100%;}
+  .drail-in .base{position:absolute;left:0;right:0;bottom:32px;height:1px;background:var(--ln-2);}
+  .dcap{position:relative;z-index:1;flex:none;width:18px;display:flex;flex-direction:column;align-items:center;padding:0;background:none;border:none;cursor:pointer;color:var(--c-text-2);font-family:var(--mono);font-size:var(--fs-tiny);}
+  .dcap .cap{width:7px;border-radius:99px;overflow:hidden;display:flex;flex-direction:column-reverse;gap:1px;background:var(--c-raise);transition:transform var(--t-fast),box-shadow var(--t-fast);transform-origin:bottom;}
+  /* 조각 색은 제 색 그대로(흐리게 겹치지 않는다 — 사용자 2026-09-12 "민트가 칙칙"). 옛 노트만 중간 회색. */
+  .dcap .sg{display:block;min-height:2px;background:var(--ln-3);} .dcap .sg.dir{background:var(--k-decision);} .dcap .sg.n-change{background:var(--k-change);} .dcap .sg.n-verified{background:var(--k-verified);}
+  .dcap .sg.n-finding{background:var(--k-finding);} .dcap .sg.n-thought{background:var(--k-thought);} .dcap .sg.n-old{background:var(--c-text-3);} .dcap .sg.commit{background:var(--k-commit);}
+  /* 날짜는 바닥선 아래 — 캡슐 밑에 겹치지 않게(사용자 2026-09-12 스크린샷: 날짜가 바 안에 들어가 구분이 안 됐다) */
+  .dcap .dl{position:absolute;top:100%;margin-top:7px;white-space:nowrap;line-height:1;font-size:9.5px;}
+  .dcap .ml{position:absolute;top:100%;margin-top:18px;font-size:9px;color:var(--c-text-3);white-space:nowrap;}
+  .dcap:hover .cap{transform:scaleY(1.06);} .dcap.on{color:var(--c-text);} .dcap.on .cap{box-shadow:0 0 0 1.5px rgba(232,237,242,.35);}
+  .dcap.today .cap{box-shadow:0 0 0 1.5px color-mix(in srgb,var(--k-decision) 70%,transparent),0 0 12px color-mix(in srgb,var(--k-decision) 30%,transparent);} .dcap.today .dl{color:var(--c-text);}
+  .dcap.we .dl{color:var(--c-text-3);}
+  .drail{position:relative;} .drail .bub{position:fixed;z-index:50;display:none;width:auto;max-width:320px;padding:7px 10px 8px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(21,26,33,.94);backdrop-filter:blur(10px);box-shadow:0 12px 34px rgba(0,0,0,.6);font-size:var(--fs-meta);color:var(--c-text);pointer-events:none;line-height:1.4;white-space:nowrap;}
+  .drail .bub .m{color:var(--c-text-2);font-size:var(--fs-tiny);margin-top:2px;}
+  .dcap .dl{line-height:1;} .dcap .ml{position:relative;margin-top:-2px;color:var(--c-text-3);font-size:9.5px;white-space:nowrap;}
+  /* 접힌 하루 — 머리 한 줄만. 스레드 제목 셋이 그날을 말한다. */
+  .day .dh{cursor:pointer;user-select:none;} .day .dh .chev{color:var(--c-text-3);font-size:15px;line-height:1;transition:transform var(--t-fast);display:inline-block;} .day .dh .chev.open{transform:rotate(90deg);}
+  .day.shut .dh{border-bottom:1px solid var(--ln);padding-top:14px;padding-bottom:10px;} .day.shut .dh:hover{background:var(--sel);}
+  .day.shut .tns{display:flex;gap:10px;min-width:0;overflow:hidden;margin-left:6px;} .day.shut .tn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;font-size:var(--fs-meta);color:var(--c-text-2);font-weight:400;} .day.shut .tn .id{font-family:var(--mono);color:var(--c-text-3);} .day.shut .tn.dim{color:var(--c-text-3);}
+  /* 확장 71호 — 읽기 모드: 접힌 항목에도 본문 두 줄(.bd)과 관찰 한 줄(.obs)이 보인다. 펼치면 .full 이 대신하므로 숨긴다. */
+  .it summary{flex-wrap:wrap;}
+  .it summary .bd{flex-basis:100%;margin:3px 0 0 19px;font-size:var(--fs-small);color:var(--c-text-1);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;}
+  .it summary .obs{flex-basis:100%;margin:2px 0 0 19px;font-size:var(--fs-meta);color:var(--c-text-3);line-height:1.45;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;}
+  .it summary .obs .ol{font-family:var(--mono);font-size:var(--fs-tiny);letter-spacing:.06em;margin-right:6px;color:var(--c-text-3);}
+  .it[open] summary .bd,.it[open] summary .obs{display:none;}
+  .sec.card .st .it summary .bd{margin-left:0;} .sec.card .st .it summary .obs{margin-left:0;}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="logo" id="home"><div class="box mono">Wt</div><div class="name mono">WORKTRAIL</div></div>
+  <div class="crumb" id="crumb" hidden><span class="sep">/</span><span class="t" id="crumbText"></span><span class="chip" id="crumbChip"></span></div>
+  <div class="spacer"></div>
+  <a class="btn" href="#/threads" id="navStatus">현황</a>
+  <a class="btn" href="#/review" id="navReview">회고</a>
+  <a class="btn" href="#/prior" id="navPrior">과거 기록</a>
+  <a class="btn" href="#/find" id="navFind">찾기</a>
+  <a class="btn" href="#/join" id="navJoin" hidden>가입 신청<span class="n" id="navJoinN"></span></a>
+  <button class="btn lang" id="langToggle" title="화면 언어 / Screen language"></button>
+  <span class="mono muted" style="font-size:11.5px" id="who"></span>
+</div>
+<div class="demo-note">
+  <div class="in">
+    <span class="what"><b>Worktrail</b> — AI 코딩 에이전트가 일하며 남긴 작업 기록입니다. 무엇을 정했고(결정), 무엇을 보고 정했는지(증거)가 따로 남아, 다음 세션이 코드에서 추측하지 않습니다.</span>
+    <span class="fake">이 데모의 기록은 지어낸 것입니다 · 가상 팀의 커머스 백엔드 4주치</span>
+  </div>
+</div>
+<div class="wrap" id="view"></div>
+
+<script>
+(function () {
+  const CFG = window.CASEBOOK_CONFIG;
+
+  // ── 화면 언어 (확장 79호, D15186) ───────────────────────────────────────
+  // 기록의 언어는 쓴 글에서 읽지만(그쪽은 서버가 판정한다), **화면**의 언어는 보는 사람이 고른다 —
+  // 한 스레드를 한국어로 쓴 사람도 화면은 영어로 볼 수 있고, 그 반대도 된다.
+  // 순서: 이 브라우저에 저장된 선택 → 설치할 때 고른 값(CFG.LANG, 창이 넣어 준다) → 브라우저 언어.
+  // 영어 사전 — 열쇠는 한국어 원문이다. 키 이름을 따로 짓지 않는 이유: 원문이 곧 열쇠이면
+  // 빠뜨린 자리가 한국어로 그대로 나와 화면이 비지 않고, 새 문구를 넣을 때 사전을 먼저
+  // 고칠 필요도 없다. 이미 영어인 것(so far · next · why · NOW · rules · anchor · git)은
+  // D12568 로 정한 스키마 이름이라 여기 없다 — 두 언어에서 같다.
+  const EN = {
+    // 상단바·길잡이
+    "현황": "Status", "회고": "Review", "과거 기록": "Prior record", "찾기": "Find",
+    // 종류 (KIND_KO)
+    "열림": "opened", "닫힘": "closed", "초점": "focus", "미결": "open", "다음": "next",
+    "결정": "decision", "제약": "constraint", "용어": "term", "배제": "ruled out",
+    "노트": "note", "질문": "asked", "증거": "evidence", "커밋": "commit", "기록": "record",
+    "결과": "result",
+    // 차례 (PHASE_KO)
+    "내 차례": "my turn", "에이전트에게": "with the agent", "관찰 중": "watching",
+    "미정": "unset", "종료": "done",
+    // 노트 갈래 (NOTE_KO)
+    "바꿈": "change", "확인": "verified", "발견": "finding", "생각": "thought",
+    // 주제 단계 (TOPIC_KO)
+    "진행": "active", "휴면": "quiet", "완료": "done",
+    // 그 밖
+    "에이전트": "agent", "대체됨": "superseded", "관찰": "observed", "유효": "in force",
+    "저장소": "repository", "주제": "topic", "따로 보기": "set aside", "자동 조사": "auto-investigation",
+    "결론": "conclusion", "방향": "ahead", "흔적": "behind", "방금": "just now",
+    "원 = 다음 손": "circle = whose turn",
+    "저장소 공통": "repository-wide", "다른 스레드에서 정함": "set in another thread",
+    "체크포인트": "checkpoint", "바뀜": "changed", "그대로": "unchanged",
+    "이 스레드를 다른 주제로": "move this thread to another topic",
+    "설치 전 기록": "pre-install record", "세션": "sessions", "지시": "instructions",
+    // 회고·필터·정렬
+    "목록": "list", "목록 접기": "collapse list", "← 회고": "← Review",
+    "최근 40건 · 위 = 방향 · 아래 = 흔적": "last 40 · up = ahead · down = behind", "위": "up", "아래": "down",
+    "위 = 방향 · 아래 = 흔적 · 올리면 읽고 누르면 간다": "up = ahead · down = behind · hover to read, click to go",
+    "기록": "records", "에 합치기": "merge into", "이 주제를": "Merge this topic into",
+    "열었다": "opened it", "닫았다": "closed it", "다시 열었다": "reopened it",
+    "관찰: ": "observed: ", "결정이 없어 focus 에서": "no decision yet — from the focus",
+    "가입 신청": "Requests", "기다리는 사람": "waiting", "승인": "Approve", "거절": "Decline",
+    "마지막 노트보다 낡음": "older than the last note", "종료 당시 계획": "the plan when it closed",
+    "이전": "was",
+    "구글로 로그인해 줄을 선 사람들. 승인하면 설치 한 줄을 받는다.":
+      "People who signed in with Google and asked to join. Approve and they get the install line.",
+    "기다리는 신청이 없다.": "No one is waiting.", "줄 상한": "queue cap",
+    "거절해도 나중에 다시 승인할 수 있다.": "Declining is reversible — you can approve them later.",
+    "불러오는 중": "Loading",
+    "다른 주제로 옮기기 ▾": "Move to another topic ▾", "주제에 넣기 ▾": "Put in a topic ▾",
+    "이 스레드 것과 충돌하면 화면이 고르지 않는다.": "If these clash with this thread's own, the screen does not pick one.",
+    "목록 펼치기": "Show the list",
+    "내 차례 · 미정 · 에이전트 · 관찰 · 최근순": "my turn · unset · agent · watching · most recent",
+    "최근 종료순": "most recently closed", "종류": "kind", "촘촘": "dense", "넉넉": "roomy", "오래된 순": "oldest first", "최신 순": "newest first",
+    "모두 보는 중": "showing all", "모두 보기": "show all", "보일 사건이 없다": "nothing to show",
+    "결정·질문 없음": "no decisions or questions", "사건": "events", "외": "more",
+    "주제별": "by topic", "전체 기록": "all records", "필터": "filters",
+    "주제에 넣지 않은 스레드": "threads not in a topic",
+    "저장소 커밋 — 스레드에 붙지 않은 것": "repository commits not attached to a thread",
+    "어느 스레드에도 붙지 않은 커밋": "commits attached to no thread",
+    "열린 스레드 없음.": "No open threads.",
+    "완료. 새 스레드가 열리면 다시 진행.": "Done. It becomes active again when a thread opens.",
+    "열린 스레드": "open threads", "완료된 주제": "finished topics", "주제 관리": "manage topics",
+    "그날": "that day", "무엇이 달라졌나": "what changed",
+    // 스레드 화면
+    "지금": "now", "이전": "before", "목록": "list", "접기": "collapse", "펼치기": "expand",
+    "목록 접기": "collapse list", "← 회고": "← Review", "목록 펼치기": "expand list", "목록을 옆으로 접는다": "fold the list aside",
+    "결정 로그": "decision log", "대체됨 숨김": "hide superseded", "대체된": "superseded",
+    "마지막 관찰": "last observation", "마지막 노트": "last note", "마지막 결정": "last decision",
+    "아직 기록 없음": "no records yet", "노트 없음": "no notes", "커밋 없음": "no commits",
+    "이유를 남기지 않았다": "no reason was given", "갈래 없는 옛 노트": "older notes with no kind",
+    "갈래 없음": "no kind", "원문 전부 보기": "show the full text", "더 보기": "show more",
+    "이 스레드": "this thread", "이 스레드 것 없음": "none in this thread",
+    "이 스레드에 붙은 것": "attached to this thread", "이 스레드가 붙은 자리": "where this thread is bound",
+    "종료 당시 계획": "the plan when it closed", "남긴 미결": "left open",
+    "결과 한 줄 — 닫은 뒤에 채움": "result line — filled in after closing",
+    "결과 한 줄 — 닫을 때 남김": "result line — written when closing",
+    "닫기": "close", "다시 열기": "reopen", "다른 주제로 옮기기": "move to another topic",
+    "주제에 넣기": "add to a topic", "미분류": "Uncategorized",
+    "미커밋": "uncommitted", "깨끗함": "clean", "변경 없음": "no change", "그 뒤": "since then",
+    "읽음": "read", "뜻": "meaning", "판": "version", "단계": "step",
+    // 찾기·과거 기록
+    "결과 없음": "no results", "없음": "none", "없다": "none", "아직 없다": "not yet",
+    "불러오는 중": "loading", "기록을 불러오는 중": "loading records",
+    "최근 순": "newest first", "최근 순으로": "newest first", "처음 쓴 순으로": "first-written first",
+    "처음 쓴 순 — 맨 위가 처음 나온 곳": "first-written first — the top is where it first appeared",
+    "이유에서 찾음": "found in the reason", "관찰에서 찾음": "found in the observation",
+    "처음 나온 곳": "first appearance", "또는 문장 일부": "or part of a sentence",
+    "작업공간": "workspaces", "읽기 전용 데모": "read-only demo", "갱신": "updated",
+    "스레드": "threads", "말": "words", "턴": "turn", "번호": "number", "건": "items",
+    "오늘 바뀐 것": "changed today", "전체": "all", "공통": "shared", "스냅샷": "snapshot",
+    "아직 기록이 없습니다.": "No records yet.",
+    "저장된 원문과 노트. 펼쳐서 읽습니다.": "Stored source text and notes. Expand to read.",
+    "스레드로 돌아가기": "back to the thread", "증거 · 노트": "evidence · notes", "노트 · 답변": "notes · replies",
+    "답변 실패": "reply failed", "중단": "stopped", "다시 답변": "reply again", "범위": "scope",
+    "이 데모에는 없는 기록이다": "This demo does not include that record",
+    "읽기 전용 데모라 바꿀 수 없다": "This is a read-only demo — nothing can be changed",
+    // 확장 84호 — 현황·찾기·스레드 상세에서 번역을 안 거치고 있던 자리들
+    "다음 손이 누구 것인지. 선언한 그대로.": "Whose turn it is next. Exactly as declared.",
+    "내가 움직여야 하는 것": "What I have to move",
+    "에이전트에게 맡긴 것": "Handed to the agent",
+    "지켜보기만 하는 것": "Only being watched",
+    "다음을 아직 안 정한 것": "No next declared yet",
+    "오늘 기록이 있던 것": "Recorded today",
+    "러너가 밀어 넣은 것 — 사람이 물은 질문이 아니다": "Pushed in by the runner, not asked by a person",
+    "결과 없음 — 에이전트에게 ‘정리해줘’": "no result line — ask the agent to write one",
+    "아직 풀리지 않은 것 — 선언": "still unresolved, declared",
+    // 열쇠는 **원문 전체**여야 한다 — 번역 함수는 한국어에서 열쇠를 그대로 돌려주므로, 열쇠를 줄이면
+    // 그 줄어든 문장이 곧 한국어 화면이 된다. 84호에서 뒷문장을 빼고 열쇠를 만들어 한국어에서만
+    // "세션을 닫아도 남고…" 한 문장이 사라졌다(확장 88호에서 되돌림).
+    "이 폴더에서 마지막으로 한 작업이다. 세션을 닫아도 남고, 다른 스레드로 옮기거나 닫을 때 빠진다":
+      "The last work done in this folder. It survives closing the session, and drops when the thread moves or closes",
+    "마지막으로 작업": "last worked here",
+    "NEXT 없음": "no NEXT",
+    "문장 전체는 스레드에서": "full sentence in the thread",
+    "번호로도, 문장으로도. 누르면 그 스레드로 간다.": "By number or by sentence. Click a hit to go to its thread.",
+    "D10258 · #452 · 또는 문장 일부": "D10258 · #452 · or part of a sentence",
+    "번호는": "Numbers:",
+    "증거 원문은 앞 121자까지만 찾힌다.": "Raw evidence is searched only to its first 121 characters.",
+  };
+  const LANGS = ["ko", "en"];
+  // 데모(스냅샷)는 판마다 제 언어를 갖는다 — /demo/ 는 한국어 기록, /demo/en/ 은 영어 기록이다.
+  // 열쇠를 하나로 두면 같은 출처라 한쪽에서 고른 것이 다른 쪽까지 바꾼다: 한국어 데모를 본 사람이
+  // 영어 데모를 열면 영어 기록 위에 한국어 화면이 뜬다(실측 2026-09-14). 판마다 따로 기억한다.
+  const LANG_KEY = CFG.SNAPSHOT
+    ? "wt_lang@" + location.pathname.replace(/index\.html$/, "")
+    : "wt_lang";
+  function pickLang() {
+    try {
+      const saved = localStorage.getItem(LANG_KEY);
+      if (LANGS.includes(saved)) return saved;
+    } catch (e) {}                                    // 사생활 보호 창에서는 던진다 — 기본값으로 간다
+    if (LANGS.includes(CFG.LANG)) return CFG.LANG;
+    return (navigator.language || "").toLowerCase().startsWith("ko") ? "ko" : "en";
+  }
+  let LANG = pickLang();
+  function setLang(next) {
+    if (!LANGS.includes(next) || next === LANG) return;
+    LANG = next;
+    try { localStorage.setItem(LANG_KEY, next); } catch (e) {}
+    paintChrome();
+    listDirty = true;      // 목록 칸은 캐시된다 — 무르지 않으면 왼쪽이 옛 언어로 남는다(반쪽 화면)
+    render();                                          // 라우터가 지금 화면을 다시 그린다
+  }
+  // 한국어 원문을 열쇠로 쓴다. 사전에 없으면 원문 그대로 — 빠뜨려도 화면이 비지 않는다.
+  // 수분류사는 사전으로 안 된다 — 영어는 어순이 바뀐다("3개 더 보기" → "Show 3 more").
+  const more = (n) => LANG === "en" ? `Show ${n} more` : `${n}개 더 보기`;
+  const fewer = (n) => LANG === "en" ? `Show only the latest ${n}` : `최근 ${n}개만 보기`;
+  const moreN = (n) => LANG === "en" ? `${n} more` : `더보기 ${n}`;   // 닫힘 띠에 접힌 개수
+  const tr = (s) => LANG === "en" ? (EN[s] !== undefined ? EN[s] : s) : s;
+  // 조사가 값에 붙는 자리·월 이름은 사전으로 안 된다 — 열쇠가 값마다 달라지기 때문이다(more·fewer 와 같은 꼴).
+  const withWho = (name) => LANG === "en" ? `with ${name}` : `${name} 에게`;
+  const monthMark = (d) => LANG === "en" ? d.toLocaleDateString("en-US", { month: "short" }) : `${d.getMonth() + 1}월`;
+  const readyN = (n) => LANG === "en" ? `${n} records ready. Type what to look for.` : `기록 ${n}건이 준비됐다. 찾을 것을 적는다.`;
+  const noneOfN = (n) => LANG === "en" ? `Nothing. Looked through ${n} records.` : `없다. 기록 ${n}건을 봤다.`;
+  const hitsN = (n, more) => LANG === "en" ? `${n} hit${n === 1 ? "" : "s"}${more}` : `${n}건${more}`;
+  const evidenceN = (n) => LANG === "en" ? `evidence ${n}` : `증거 ${n}건`;
+  // 한국어는 "D결정" 으로 붙지만 영어는 "Ddecision" 이 되어 붙일 수 없다.
+  const numTag = (ch, key) => LANG === "en" ? `<b>${ch}</b> ${tr(key)}` : `<b>${ch}</b>${key}`;
+
+  // 확장 63호 — 스냅샷 모드(D14800). 서버 대신 tools/demo_snapshot.py 가 긁어 둔 JSON 을 읽는다.
+  // 화면 코드는 그대로이고 로그인·쓰기·과거 기록만 꺼진다. CFG.SNAPSHOT = 데이터 폴더(상대 경로).
+  const SNAP = CFG.SNAPSHOT || "";
+  const snapFile = (path) => { const [p, q] = path.split("?"); const rid = q && (q.match(/repo_id=(\d+)/) || [])[1];
+                               return SNAP + (p === "/prior" && rid ? "/prior/repo_" + rid : p) + ".json"; };
+  if (SNAP) document.documentElement.classList.add("snapshot");
+  const $ = (id) => document.getElementById(id);
+  let view = $("view");            // 66호 — 두 칸에서는 렌더 동안 잠깐 칸(pane)을 가리킨다
+  const root = view;
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  // 확장 48호 — 에이전트는 문장에 마크다운을 섞어 쓴다(피실험자 1호 캡처). 기호가 아니라 서식으로 보이게
+  // 아주 좁은 부분집합만 연다: `코드` 와 **굵게**. 반드시 esc 를 먼저 거치므로 태그는 들어올 수 없다.
+  // 증거 원문과 설치 전 기록에는 쓰지 않는다 — 그건 바이트 그대로여야 한다.
+  const md = (s) => esc(s).replace(/`([^`\n]+)`/g, "<code>$1</code>")
+                          .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+  const token = () => SNAP ? "snapshot" : localStorage.getItem("cb_token");   // Casebook 웹과 같은 로그인
+  const p2 = (n) => String(n).padStart(2, "0");
+  const fmtAbs = (ms) => { if (!ms) return "—"; const d = new Date(ms); return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate())+" "+p2(d.getHours())+":"+p2(d.getMinutes()); };
+  // 날짜 머리 — 영어는 월 이름이 짧고 요일이 길다. 형식이 달라 사전으로 안 된다.
+  const WD_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayLabel = (d) => LANG === "en"
+    ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    : `${d.getMonth() + 1}월 ${d.getDate()}일`;
+  const wdLabel = (d, short) => LANG === "en"
+    ? d.toLocaleDateString("en-US", { weekday: short ? "short" : "long" })
+    : (short ? WD[d.getDay()] : WD_LONG[d.getDay()]);
+  const dayHead = (d) => `${dayLabel(d)} ${wdLabel(d, true)}`;
+  const fmtRel = (ms) => { if (!ms) return "—"; const diff = Date.now() - ms, m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000);
+    if (LANG === "en") {
+      if (m < 1) return "just now"; if (m < 60) return m + "m ago"; if (h < 24) return h + "h ago";
+      if (d < 2) return "yesterday"; if (d < 7) return d + "d ago";
+      const e = new Date(ms); return e.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
+    if (m < 1) return "방금"; if (m < 60) return m + "분 전"; if (h < 24) return h + "시간 전"; if (d < 2) return "어제"; if (d < 7) return d + "일 전";
+    const x = new Date(ms); return (x.getMonth() + 1) + "월 " + x.getDate() + "일"; };
+  // 확장 31호 — 단계·차례는 서버가 도출한 값(core/phase.py)에 말만 붙인다
+  const KIND_KO = { opened: "열림", closed: "닫힘", focus: "초점", open: "미결", next: "다음", decision: "결정", constraint: "제약", term: "용어",
+                    ruled_out: "배제", note: "노트", asked: "질문", evidence: "증거", commit: "커밋", record: "기록" };
+  // 용어는 후보 A(D12568): 선언은 FOCUS · NEXT · OPEN, 단계는 신규 · 진행 · 대기 · 휴면 · 종료, 차례는 내 차례 · <에이전트> 대기 · 관찰 중
+  // 확장 37호 — 단계 = 선언된 차례 그대로. 추정 없음.
+  const PHASE_KO = { mine: "내 차례", agent: "에이전트에게", watch: "관찰 중", unset: "미정", closed: "종료" };
+  // 확장 60호 — 노트의 갈래(D14720): 에이전트가 붙인 것만 그 말로, 옛 노트는 "노트" 그대로
+  const NOTE_KO = { change: "바꿈", verified: "확인", finding: "발견", thought: "생각" };
+  const kindLabel = (e) => tr(e.kind === "closed" && e.later ? "결과" : e.kind === "note" && NOTE_KO[e.note_kind] ? NOTE_KO[e.note_kind] : (KIND_KO[e.kind] || e.kind));   // 확장 48호 — 닫은 뒤 붙인 결과는 "결과" 로
+  const TOPIC_KO = { active: "진행", quiet: "휴면", done: "완료" };
+  const OWNER_KO = { agent: "에이전트", codex: "Codex", claude: "Claude", gpt: "GPT" };
+  // 확장 40호 — 기록을 남긴 클라이언트(MCP clientInfo.name). 실측: claude-code · codex-mcp-client.
+  const CLIENT_KO = { "claude-code": "Claude Code", "codex-mcp-client": "Codex" };
+  const clientName = (c) => c ? (CLIENT_KO[c] || c) : "";   // 이미 두 언어에서 같다(Claude Code · Codex)
+  // 확장 43호 — 행에는 "대체됨" 한 단어만 둔다(줄이 옆으로 길어지지 않게). 무엇으로 바뀌었는지와
+  // 그리로 가는 링크는 그 줄을 펼쳤을 때 나온다.
+  const supTag = (e) => !e || !e.superseded_by ? "" : `<span class="sup">${tr("대체됨")}</span>`;
+  const supDetail = (e) => !e || !e.superseded_by ? "" :
+    `<a class="supd" href="#/find/${e.kind === "constraint" ? "C" : "D"}${e.superseded_by}">대체됨 → ${e.kind === "constraint" ? "C" : "D"}${e.superseded_by}${
+      e.superseded_by_head ? ` · ${esc(e.superseded_by_head)}` : ""}</a>`;
+  const turnLabel = (t) => t.state !== "open" ? "" : t.owner === "user" ? "내 차례" : t.owner === "watch" ? "관찰 중"
+                         : t.owner ? (OWNER_KO[t.owner] || t.owner) + " 에게" : "미정";
+  const phaseChip = (ph) => `<span class="ph"><span class="dot ${ph}"></span>${tr(PHASE_KO[ph] || ph)}</span>`;
+  const dayKey = (ms) => { const d = new Date(ms); return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()); };
+  const hm = (ms) => { const d = new Date(ms); return p2(d.getHours()) + ":" + p2(d.getMinutes()); };
+  const shortRepo = (id) => id.replace(/^local:/, "").replace(/\/\.git$/, "").replace(/^path:/, "").replace(/^\/Users\/[^/]+\//, "~/");
+
+  async function api(path) {
+    if (SNAP) {
+      const r = await fetch(snapFile(path));
+      if (!r.ok) throw new Error(r.status === 404 ? "이 데모에는 없는 기록이다" : "HTTP " + r.status);
+      return r.json();
+    }
+    const res = await fetch(CFG.APP_BASE + path, { headers: { "Authorization": "Bearer " + token() } });
+    if (res.status === 401) { localStorage.removeItem("cb_token"); render(); throw new Error("unauthorized"); }
+    if (!res.ok) { let m = "HTTP " + res.status; try { m = (await res.json()).message || m; } catch (e) {} throw new Error(m); }
+    return res.json();
+  }
+
+  // 확장 47호 — 화면이 쓰는 유일한 쓰기: 주제 합치기·옮기기. 로컬 창은 POST 도 같은 길로 중계한다(ui_server.do_POST).
+  async function post(path, body) {
+    if (SNAP) throw new Error("읽기 전용 데모라 바꿀 수 없다");
+    const res = await fetch(CFG.APP_BASE + path, { method: "POST", headers: { "Authorization": "Bearer " + token(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (res.status === 401) { localStorage.removeItem("cb_token"); render(); throw new Error("unauthorized"); }
+    if (!res.ok) { let m = "HTTP " + res.status; try { m = (await res.json()).message || m; } catch (e) {} throw new Error(m); }
+    return res.json();
+  }
+
+  function route() {
+    const h = location.hash || "";
+    // 데모도 현황으로 연다 (사용자 2026-09-14). 전에는 회고로 열었는데, 제품이 무엇인지 먼저
+    // 보여 주는 것은 지금 무슨 일이 어디까지 왔는지이지 지나간 회고가 아니다. 가상 데모는 열린
+    // 스레드가 있어 첫 화면이 비지 않는다 — 회고로 돌렸던 이유가 이 데이터에는 없다.
+    const qs = Object.fromEntries(new URLSearchParams((h.split("?")[1] || "")).entries());   // 확장 55호 — 어느 기록으로 갈지
+    let m = h.match(/^#\/threads\/(\d+)\/evidence(?:\?.*)?$/); if (m) return { evidence: parseInt(m[1], 10), ev: qs.ev ? parseInt(qs.ev, 10) : null };
+    m = h.match(/^#\/threads\/(\d+)(?:\?.*)?$/); if (m) return { thread: parseInt(m[1], 10), item: qs.item || null };
+    m = h.match(/^#\/review(?:\/([\w-]*))?(?:\?.*)?$/); if (m) return { review: m[1] || null, rthread: qs.thread ? parseInt(qs.thread, 10) : null, item: qs.item || null };
+    m = h.match(/^#\/find(?:\/(.*))?$/); if (m) return { find: m[1] ? decodeURIComponent(m[1]) : "" };
+    if (h === "#/join" && !SNAP) return { join: true };            // 확장 108호 — 운영자만 연다(서버가 막는다)
+    m = h.match(/^#\/prior(?:\/(\d+))?(?:\/s(\d+))?$/); if (m && !SNAP) return { prior: m[1] ? parseInt(m[1], 10) : null, priorSession: m[2] ? parseInt(m[2], 10) : null };
+    return { list: true };
+  }
+
+  function loginView() {
+    $("crumb").hidden = true;
+    view.innerHTML = `<div class="login in"><div class="mono" style="font-size:15px;letter-spacing:.14em;font-weight:600;">WORKTRAIL</div>
+      <div class="muted" style="margin-top:8px;">설치한 로컬 창으로 Worktrail을 열어 주세요.</div>
+      <pre>~/.casebook/client/bin/casebook-ui</pre><div class="muted">연결이 만료됐다면 운영자에게 받은 설치 한 줄을 다시 실행한 뒤 창을 다시 여세요.</div></div>`;
+  }
+
+  // 현황 — 확장 31호. 저장소 대신 주제로 묶고, 행은 "단계 · 무엇 · 남은 것 한 줄 · 누구 차례 · 언제". 마무리된 주제는 아래 접힌 한 줄.
+  let statusFilter = "all", statusTab = "open";   // 화면이 살아 있는 동안만
+  // 스레드 한 행 — 현황과 회고 "지금" 이 같은 함수를 쓴다(모양이 곧 말). o = { topics, repo, expand, meta }
+  function threadRow(t, o) {
+    o = o || {};
+    // 단계(원)와 차례(단어)는 확장 37호 이후 같은 말이다. 원이 못 담는 것 — 어느 에이전트인가 — 만 단어로 남긴다.
+    const who = t.state === "open" && t.owner && t.owner !== "user" && t.owner !== "watch" ? withWho(OWNER_KO[t.owner] || t.owner) : "";
+    const auto = t.origin === "intake" ? `<span class="auto">${tr("자동 조사")}</span>` : "";
+    const parts = [`<span class="id">#${t.case_id}</span>`, auto, o.topics || "", o.repo ? `<span class="rp">${esc(o.repo)}</span>` : "",
+                   t.bound_worktrees && t.bound_worktrees.length ? `<span class="here" title="${tr("이 폴더에서 마지막으로 한 작업이다. 세션을 닫아도 남고, 다른 스레드로 옮기거나 닫을 때 빠진다")}:\n${esc(t.bound_worktrees.join("\n"))}">${tr("마지막으로 작업")}</span>` : "", who,
+                   t.state !== "open" ? (t.result ? `${tr("결과")} — ${md(headline(t.result).head)}` : `${tr("종료")} ${fmtRel(t.closed_at || t.updated_at)} · ${tr("결과 없음")}`)
+                   : (t.next ? (o.expand ? "" : md(headline(t.next).head)) : (o.last || tr("NEXT 없음")))].filter(Boolean);
+    const at = t.state !== "open" ? (t.closed_at || t.updated_at) : t.updated_at;
+    const full = o.expand && t.next ? `<div class="full">${md(t.next)}</div>${o.last ? `<div class="m">${o.last}</div>` : ""}` : "";
+    return `<div class="li ${t.phase || ""}" data-id="${t.case_id}"><span class="dotbox"><span class="dot ${t.phase || "unset"}" title="${tr(PHASE_KO[t.phase] || "")}"></span></span>
+      <div style="min-width:0;"><div class="t">${md(t.title)}</div><div class="m">${parts.join(" · ")}</div>${full}</div>
+      <span class="at" title="${fmtAbs(at)}">${fmtRel(at)}</span></div>`;
+  }
+  const lastLine = (t) => { const le = t.last_event; if (!le) return ""; const txt = le.kind === "opened" && le.text === t.title ? tr("열었다") : le.kind === "closed" && le.text === "resolved" ? tr("닫았다") : headline(le.text).head; return `<span class="kw kc kdot kc-${evCls(le)}">${kindLabel(le)}</span> ${fmtRel(le.at)} — ${md(txt)}`; };
+
+  async function listView() {
+    view.classList.remove("thread", "review", "dense"); view.classList.add("status");
+    $("crumb").hidden = true;
+    view.innerHTML = `<div class="muted">불러오는 중…</div>`;
+    const data = await api("/status");
+    const c = data.counts || {}, topics = data.topics || [];
+    // 평평한 목록 + 주제 이름 (스레드는 여러 주제에 속할 수 있다)
+    const topicOf = {}; for (const tp of topics) for (const t of tp.threads) (topicOf[t.case_id] = topicOf[t.case_id] || []).push(tp);
+    const seen = new Set(); const all = [];
+    for (const tp of topics) for (const t of tp.threads) if (!seen.has(t.case_id)) { seen.add(t.case_id); all.push(t); }
+    for (const t of (data.unassigned || [])) if (!seen.has(t.case_id)) { seen.add(t.case_id); all.push(t); }
+    const todayKey = dayKey(Date.now()), today = new Set((data.latest || []).filter((e) => dayKey(e.at) === todayKey).map((e) => e.case_id));
+    const repos = [...new Set(all.map((t) => t.repo))];
+    const open = all.filter((t) => t.state === "open");
+    // 확장 39호 — casebook 은 두 가지를 담고 있다: 사람이 에이전트와 한 작업(mcp)과 러너가 밀어 넣은 조사(intake).
+    // 현황은 "지금 내가 뭘 해야 하나"에 답하는 화면이므로 조사는 기본에서 뺀다 — 왼쪽 "자동 조사"로 따로 본다.
+    const isLab = (t) => t.origin === "intake";
+    const work = open.filter((t) => !isLab(t));
+    const pred = {
+      all: (t) => !isLab(t), mine: (t) => !isLab(t) && t.phase === "mine", agent: (t) => !isLab(t) && t.phase === "agent",
+      watch: (t) => !isLab(t) && t.phase === "watch", unset: (t) => !isLab(t) && t.phase === "unset",
+      lab: isLab,
+      today: (t) => !isLab(t) && (today.has(t.case_id) || (t.last_event && dayKey(t.last_event.at) === todayKey)),
+    };
+    const fpred = statusFilter === "t:none" ? ((t) => !isLab(t) && !(topicOf[t.case_id] || []).length)
+                : statusFilter.startsWith("t:") ? ((t) => !isLab(t) && (topicOf[t.case_id] || []).some((tp) => String(tp.topic_id) === statusFilter.slice(2)))
+                : statusFilter.startsWith("r:") ? ((t) => !isLab(t) && t.repo === repos[parseInt(statusFilter.slice(2), 10)])
+                : (pred[statusFilter] || pred.all);
+    const inTab = (t) => statusTab === "open" ? t.state === "open" : t.state !== "open";
+    let rows = all.filter(fpred);
+    const nOpen = rows.filter((t) => t.state === "open").length, nClosed = rows.length - nOpen;
+    rows = rows.filter(inTab);
+    const order = { mine: 0, unset: 1, agent: 2, watch: 3, closed: 4 };
+    rows.sort((a, b) => (order[a.phase] ?? 9) - (order[b.phase] ?? 9) || ((b.state === "open" ? b.updated_at : (b.closed_at || b.updated_at)) || 0) - ((a.state === "open" ? a.updated_at : (a.closed_at || a.updated_at)) || 0));
+    const expand = statusFilter === "mine" || statusFilter === "agent" || statusFilter === "unset";   // 필터를 걸면 NEXT 문장이 펼쳐진다
+    const titles = { all: "현황", mine: "내 차례", agent: "에이전트에게", watch: "관찰 중", unset: "미정", today: "오늘 바뀐 것", lab: "자동 조사" };
+    const curTopic = statusFilter.startsWith("t:") ? topics.find((tp) => String(tp.topic_id) === statusFilter.slice(2)) : null;
+    const title = curTopic ? curTopic.name : statusFilter.startsWith("r:") ? shortRepo(repos[parseInt(statusFilter.slice(2), 10)] || "") : statusFilter === "t:none" ? tr("미분류") : titles[statusFilter] || "현황";
+    const sub = { all: "다음 손이 누구 것인지. 선언한 그대로.", mine: "내가 움직여야 하는 것", agent: "에이전트에게 맡긴 것", watch: "지켜보기만 하는 것", unset: "다음을 아직 안 정한 것", today: "오늘 기록이 있던 것", lab: "러너가 밀어 넣은 것 — 사람이 물은 질문이 아니다" }[statusFilter]
+              || (curTopic ? `${tr(TOPIC_KO[curTopic.phase] || "")}${curTopic.conclusion ? " · " + tr("결론") + ": " + esc(curTopic.conclusion) : curTopic.summary ? " · " + esc(curTopic.summary) : ""}` : "");
+    const f = (key, label, n, cls) => `<div class="sf ${statusFilter === key ? "on" : ""} ${cls || ""}" data-f="${key}"><span>${label}</span><span class="n">${n}</span></div>`;
+    const doneTopics = topics.filter((tp) => tp.phase === "done");
+    const side = `<div class="side">
+      <div class="grp">${f("all", tr("전체"), work.length)}${f("mine", tr("내 차례"), work.filter(pred.mine).length, "me")}${f("unset", tr("미정"), work.filter(pred.unset).length)}${f("agent", tr("에이전트에게"), work.filter(pred.agent).length)}${f("watch", tr("관찰 중"), work.filter(pred.watch).length)}${f("today", tr("오늘 바뀐 것"), work.filter(pred.today).length)}</div>
+      ${c.intake ? `<div class="grp"><div class="label">${tr("따로 보기")}</div>${f("lab", tr("자동 조사"), c.intake, "dim")}</div>` : ""}
+      <div class="grp"><div class="label">${tr("주제")}</div>${topics.filter((tp) => tp.phase !== "done").map((tp) => f("t:" + tp.topic_id, esc(tp.name), tp.threads.filter((t) => t.state === "open" && !isLab(t)).length)).join("")}${(data.unassigned || []).length ? f("t:none", tr("미분류"), (data.unassigned || []).filter((t) => t.state === "open").length, "dim") : ""}${doneTopics.length ? f("t:" + doneTopics[0].topic_id, tr("완료된 주제"), doneTopics.length, "dim") : ""}</div>
+      <div class="grp"><div class="label">${tr("저장소")}</div>${repos.map((r, i) => f("r:" + i, esc(shortRepo(r).split("/").pop()), work.filter((t) => t.repo === r).length)).join("")}</div></div>`;
+    const li = (t) => threadRow(t, { topics: (topicOf[t.case_id] || []).map((tp) => esc(tp.name)).join(", ") || `<span class="dim">${tr("미분류")}</span>`,
+                                      repo: repos.length > 1 && statusFilter.indexOf("r:") !== 0 ? shortRepo(t.repo).split("/").pop() : "", expand, last: t.state === "open" ? lastLine(t) : "" });
+    lastStatus = data;
+    view.innerHTML = `<div class="layout in">${side}<div style="min-width:0;">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:14px;">${railBtnHtml(tr("필터"))}<h1>${tr(title)}</h1><span style="font-size:12.5px;color:#67707b;">${tr(sub)}</span><button class="listbtn" id="listBtn" title="${tr("목록을 옆으로 접는다")}">${tr("목록 접기")} «</button></div>
+      <div class="listbox"><div class="listbar"><button class="tab2 ${statusTab === "open" ? "on" : ""}" data-tab="open">${tr("열림")}<span class="n">${nOpen}</span></button><button class="tab2 ${statusTab === "closed" ? "on" : ""}" data-tab="closed">${tr("종료")}<span class="n">${nClosed}</span></button><span class="sort">${tr(statusTab === "open" ? "내 차례 · 미정 · 에이전트 · 관찰 · 최근순" : "최근 종료순")}</span></div>
+      ${rows.length ? rows.map(li).join("") : `<div class="li" style="cursor:default;"><span></span><div class="empty">${tr("없다")}</div></div>`}</div>
+      <div class="legend"><span>${tr("원 = 다음 손")}</span>${["mine", "agent", "watch", "unset", "closed"].map((k) => `<span class="lg"><span class="dot ${k}"></span>${tr(PHASE_KO[k])}</span>`).join("")}<span>· ${tr("문장 전체는 스레드에서")}</span></div>
+      ${priorLine(data.prior)}</div></div>`;
+    view.querySelectorAll(".li[data-id]").forEach((el) => el.addEventListener("click", () => { location.hash = "#/threads/" + el.dataset.id; }));
+    bindRail();
+    view.querySelectorAll(".side .sf").forEach((el) => el.addEventListener("click", () => { statusFilter = el.dataset.f; statusTab = "open"; listDirty = true; render(); }));
+    view.querySelectorAll(".tab2").forEach((el) => el.addEventListener("click", () => { statusTab = el.dataset.tab; listDirty = true; render(); }));
+  }
+
+  // 확장 64호 — "지금" 스트림(#512). status.stream(모든 종류의 최근 사건 40개; 옛 서버는 latest 로 대신)을 오른쪽 띠에.
+  // 화면이 현황에 머무는 동안 5초마다 status 를 다시 받아 못 본 사건만 위로 밀어 넣는다 — 목록·필터는 건드리지 않는다.
+  // 스냅샷 데모(SNAP)는 폴링 없이 띠만. 탭이 숨어 있으면 쉰다.
+  const STREAM_MS = 5000;
+  let streamTimer = null, streamSeen = null, streamFresh = new Set();   // streamFresh: 다시 그릴 때 "새 줄" 표시를 이어 준다
+  const evKey = (e) => `${e.kind}:${e.case_id}:${e.at}`;
+  const evCls = (e) => e.kind === "note" ? "n-" + (e.note_kind || "thought") : e.kind;
+  const evText = (e) => e.kind === "closed" && e.text === "resolved" ? tr("닫았다") : e.kind === "opened" && e.text === e.title ? tr("열었다") : headline(e.text).head;
+  const evRow = (e, fresh) => `<div class="ev2 kc kc-${evCls(e)} ${fresh ? "new" : ""}" data-id="${e.case_id}"><span class="d"></span><div style="min-width:0;">
+      <div class="tx"><span class="k">${kindLabel(e)}</span>${md(evText(e))}</div>
+      <div class="m"><span class="id">#${e.case_id}</span> ${esc(e.title)} · <span title="${fmtAbs(e.at)}">${fmtRel(e.at)}</span>${e.authority === "user" ? " · user" : ""}</div></div></div>`;
+  const streamList = (data) => (data.stream || data.latest || []).slice(0, 40);
+  // 확장 68호 — 타임라인. 위(up) = 방향이 바뀐 것, 아래(dn) = 일한 흔적. 같은 자리(가로 1.4%)에 몰리면 한 칸씩 위/아래로 쌓는다.
+  const TL_UP = new Set(["decision", "constraint", "ruled_out", "closed", "opened", "focus", "open", "next", "asked", "term"]);
+  const tlTarget = (e) => e.kind === "decision" && e.id ? `#/threads/${e.case_id}?item=D${e.id}` : e.kind === "constraint" && e.id ? `#/threads/${e.case_id}?item=C${e.id}` : `#/threads/${e.case_id}`;
+  function tlHtml(list, curId, now) {
+    now = now || Date.now();
+    if (!list.length) return `<div class="tl" id="nowTl"><div class="axis"></div><div class="empty">아직 없다</div></div>`;
+    // 축은 시간이 아니라 개수다(사용자 2026-09-12: "같은 시간대에 기록이 많은 건 넓게, 작업한 개수 기준으로"). 사건마다 같은 폭 —
+    // 바쁜 시간대가 저절로 넓어진다. 시각은 눈금 글자가 말한다(묶음이 바뀌는 첫 사건 자리에).
+    const sorted = [...list].sort((a, b) => a.at - b.at), n = sorted.length;
+    const pos = (i) => n === 1 ? 96 : 3 + i / (n - 1) * 93;   // 3%(가장 오래된 것) ~ 96%(가장 최근 것), 100% 은 "지금"
+    const lanes = { up: [], dn: [] }, out = [];
+    sorted.forEach((e, i) => {
+      const side = TL_UP.has(e.kind) ? "up" : "dn", px = pos(i);
+      let lvl = 0; for (const l of lanes[side]) if (Math.abs(l.px - px) < 1.2 && l.lvl === lvl) { lvl++; }
+      lvl = Math.min(lvl, 3);   // 몰리면 옆으로 살짝 비켜 선다
+      lanes[side].push({ px, lvl });
+      const w = ["decision", "constraint", "ruled_out", "closed", "opened"].includes(e.kind) ? "w3" : e.kind === "commit" ? "w2" : "";   // 무게 = 길이
+      out.push(`<span class="tk ${side} ${w} kc kc-${evCls(e)} ${curId && e.case_id === curId ? "here" : ""} ${streamFresh.has(evKey(e)) ? "new" : i === n - 1 ? "last" : ""}" style="left:calc(24px + (100% - 46px) * ${(px / 100).toFixed(4)} + ${lvl * 3}px);${side === "up" ? "bottom" : "top"}:calc(50% + 4px)" data-to="${tlTarget(e)}" data-k="${esc(kindLabel(e))}" data-t="${esc(evText(e))}" data-m="#${e.case_id} ${esc(e.title)} · ${fmtRel(e.at)}"></span>`);
+    });
+    // 눈금 글자: 시각 묶음(10분 안·시간·일)이 바뀌는 첫 사건 자리에, 앞 글자와 9% 이상 떨어질 때만. 오른쪽 끝은 "지금".
+    const bucket = (at) => { const m = Math.round((now - at) / 60000); return LANG === "en" ? (m < 10 ? "just now" : m < 60 ? `${Math.round(m / 10) * 10}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`) : (m < 10 ? "방금" : m < 60 ? `${Math.round(m / 10) * 10}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.round(m / 1440)}일 전`); };
+    let lastB = null, lastP = -100; const marks = [];
+    sorted.forEach((e, i) => { const b = bucket(e.at), p = pos(i); if (b !== lastB && p - lastP >= 9 && p < 88) { marks.push(`<span class="lab" style="left:calc(24px + (100% - 46px) * ${(p / 100).toFixed(4)});transform:translateX(-50%)">${b}</span>`); lastP = p; } lastB = b; });
+    return `<div class="tl" id="nowTl"><span class="side u">${tr("방향")}</span><span class="side d">${tr("흔적")}</span><div class="axis"></div>${out.join("")}${marks.join("")}<span class="lab r">${tr("지금")}</span><div class="bub" id="tlBub"></div></div>`;
+  }
+  function bindTl(tl) {
+    if (!tl) return;
+    const bub = tl.querySelector(".bub");
+    tl.querySelectorAll(".tk").forEach((k) => {
+      k.addEventListener("click", () => { location.hash = k.dataset.to; });
+      k.addEventListener("mouseenter", () => {
+        const kc = [...k.classList].find((c) => c.startsWith("kc-")) || "";
+        bub.className = "bub " + kc;
+        bub.innerHTML = `<span class="k kw kc ${kc}">${k.dataset.k}</span>${md(k.dataset.t)}<div class="m">${k.dataset.m}</div>`;
+        const r = k.getBoundingClientRect();
+        bub.style.display = "block";
+        const bw = bub.offsetWidth, bh = bub.offsetHeight;
+        bub.style.left = Math.max(8, Math.min(r.left + r.width / 2 - bw / 2, window.innerWidth - bw - 8)) + "px";
+        let top = k.classList.contains("up") ? r.top - bh - 8 : r.bottom + 8;   // 위 눈금은 위로, 아래 눈금은 아래로 — 창 밖이면 반대로
+        if (top < 8) top = r.bottom + 8; if (top + bh > window.innerHeight - 8) top = r.top - bh - 8;
+        bub.style.top = top + "px"; bub.style.bottom = "auto";
+      });
+      k.addEventListener("mouseleave", () => { bub.style.display = "none"; });
+    });
+  }
+  function streamHtml(data, compact) {
+    const list = streamList(data), rt = route(), cur = rt.thread || rt.evidence || rt.rthread || null;
+    return `<div class="now ${compact ? "strip" : "full"}" id="nowBox"><div class="nowh"><span class="live" title="5초마다 새로 받는다"></span><b>NOW</b><span class="more">${tr(compact ? "위 = 방향 · 아래 = 흔적 · 올리면 읽고 누르면 간다" : "최근 40건 · 위 = 방향 · 아래 = 흔적")}</span><span class="at" id="nowAt">${SNAP ? tr("스냅샷") : hm(data.generated_at || Date.now())}</span></div>
+      ${tlHtml(list, cur, data.generated_at)}
+      <div class="nowl" id="nowList">${list.length ? list.map((e) => evRow(e, streamFresh.has(evKey(e)))).join("") : `<div class="empty" style="padding:14px;">아직 없다</div>`}</div></div>`;
+  }
+  function stopStream() { if (streamTimer) { clearInterval(streamTimer); streamTimer = null; } }
+  function startStream(data) {
+    stopStream();
+    streamSeen = new Set(streamList(data).map(evKey));
+    if (SNAP) return;
+    streamTimer = setInterval(async () => {
+      const box = $("nowList");
+      const rt = route(); if (!$("nowBox") || !(rt.list || rt.thread || rt.evidence || rt.review !== undefined)) return stopStream();
+      if (document.hidden) return;
+      let d; try { d = await api("/status"); } catch (e) { return; }
+      const list = streamList(d), freshKeys = new Set(list.map(evKey).filter((k) => !streamSeen.has(k)));
+      $("nowAt").textContent = hm(d.generated_at || Date.now());
+      const tl = $("nowTl");   // 축은 흐른다 — 새것이 없어도 눈금이 왼쪽으로 조금씩 민다
+      if (tl && !freshKeys.size) { const keep = streamFresh; streamFresh = new Set(); tl.outerHTML = tlHtml(list, rt.thread || rt.evidence || rt.rthread || null, d.generated_at); bindTl($("nowTl")); streamFresh = keep; return; }
+      if (!freshKeys.size) return;
+      // 스레드가 열리거나 닫혔으면 목록의 행·수도 바뀐다 — 그때만 화면 전체를 다시 그린다(필터·탭은 모듈 변수라 남는다)
+      if (list.some((e) => freshKeys.has(evKey(e)) && (e.kind === "opened" || e.kind === "closed"))) { lastStatus = d; streamFresh = freshKeys; listDirty = true; return render(); }
+      // 지금 보고 있는 스레드에 새 기록이 들어왔으면 상세도 다시 — 띠만 흐르고 카드는 그대로면 괴리가 난다(사용자 2026-09-12)
+      const cur = rt.thread || rt.evidence || rt.rthread;
+      if (cur && list.some((e) => freshKeys.has(evKey(e)) && e.case_id === cur)) { lastStatus = d; streamFresh = freshKeys; return refreshDetail(); }
+      streamFresh = freshKeys; if (tl) { tl.outerHTML = tlHtml(list, rt.thread || rt.evidence || rt.rthread || null, d.generated_at); bindTl($("nowTl")); } streamFresh = new Set();
+      if (box) { box.innerHTML = list.map((e) => evRow(e, freshKeys.has(evKey(e)))).join(""); box.scrollTop = 0; bindStream(box); }
+      list.forEach((e) => streamSeen.add(evKey(e)));
+    }, STREAM_MS);
+  }
+  // 상세를 조용히 다시 그린다 — 열려 있던 서랍과 스크롤은 그대로, 카드 세 줄은 잠깐 빛난다
+  async function refreshDetail() {
+    const det = $("paneDetail"); if (!det) return render();
+    const open = det.querySelector(".drawer:not([hidden])"), openD = open ? open.dataset.d : null, y = window.scrollY;
+    await render();
+    const d2 = $("paneDetail"); if (!d2) return;
+    if (openD) { const ch = d2.querySelector(`.chips .chip[data-d="${openD}"]`); if (ch && !ch.classList.contains("on")) ch.click(); }
+    window.scrollTo(0, y);
+    d2.querySelectorAll(".sec.card .st").forEach((el) => el.classList.add("flash"));
+  }
+  const bindStream = (box) => box && box.querySelectorAll(".ev2[data-id]").forEach((el) => el.addEventListener("click", () => { goThread(parseInt(el.dataset.id, 10)); }));
+
+  // 확장 42호 — 설치 전 기록은 목록에 섞지 않는다(D13627). 있다는 사실만 한 줄, 회고에는 넣지 않는다.
+  function priorLine(p) {
+    if (!p || !p.sessions) return "";
+    const span = p.first_at ? `${fmtAbs(p.first_at).slice(0, 10)} ~ ${fmtAbs(p.last_at).slice(0, 10)}` : "";
+    return `<div class="legend" style="margin-top:6px;"><span>설치 전 기록 ${p.sessions}세션 · 지시 ${p.instructions}개${p.repos > 1 ? ` · 저장소 ${p.repos}` : ""}${span ? " · " + span : ""}</span><span>목록에는 넣지 않는다 · 검색으로 닿는다</span></div>`;
+  }
+
+  // 헤드라인 = 첫 문장(15자 이상에서 처음 만나는 문장 끝), 110자를 넘으면 100자에서 자른다. 나머지는 펼쳐야 보인다.
+  function headline(text) {
+    const raw = String(text == null ? "" : text).trim();
+    const nl = raw.indexOf("\n");
+    if (nl > 0) {   // 확장 52호 — 첫 줄이 제목이다(D14428). 본문은 펼침 뒤에.
+      let h = raw.slice(0, nl).trim(); if (h.length > 100) h = h.slice(0, 92).replace(/\s+\S*$/, "") + "…";
+      return { head: h, more: true };
+    }
+    const s = raw.replace(/\s+/g, " ");
+    const m = s.match(/^(.{15,}?[.!?。])(?=\s|$)/);
+    let h = m ? m[1] : s;
+    if (h.length > 100) h = h.slice(0, 92).replace(/\s+\S*$/, "") + "…";
+    return { head: h, more: h.length < s.length };
+  }
+  const ageDays = (ms) => Math.floor((Date.now() - ms) / 86400000);
+  const when = (ms) => fmtRel(ms);
+
+  // 한 항목: <details> 헤드라인 + 메타(날짜·권한·범위). 펼치면 문장 전체·근거·번호. 더 볼 게 없으면 펼침 없음(flat).
+  // 확장 123호 (D15872) — 근거 번호는 글이 아니라 링크다: 누르면 그 증거로 간다(55호의 길). 노트·결정·배제가 같은 그림.
+  const evLinks = (cid, ids) => (ids || []).map((n) => cid != null ? `<a class="evl" href="#/threads/${cid}/evidence?ev=${n}">#${n}</a>` : `#${n}`).join(", ");
+  const evTail = (cid, ids, sep) => ids && ids.length ? (sep ? " · " : "") + "cites " + evLinks(cid, ids) : "";
+  function entry(text, opts) {
+    const o = opts || {};
+    const { head, more } = headline(text);
+    const bits = [];
+    if (o.at) bits.push(`<span title="${fmtAbs(o.at)}">${when(o.at)}</span>`);
+    if (o.authority === "user") bits.push(`<span class="u">user</span>`);
+    if (o.scope === "repo") bits.push(`<span class="rp">repo${o.from ? " #" + o.from : ""}</span>`);
+    if (o.tag) bits.push(`<span class="${o.tag.cls}">${o.tag.text}</span>`);
+    const meta = bits.length ? `<span class="meta">${bits.join(" · ")}</span>` : "";
+    const idsHtml = (o.ids ? esc(o.ids) : "") + (o.ev ? evTail(o.ev.case, o.ev.ids, !!o.ids) : "");
+    const hasMore = more || o.reason || idsHtml;
+    const full = hasMore ? `<div class="full">${md(text)}${o.reason ? `<div class="why">${md(o.reason)}</div>` : ""}${idsHtml ? `<div class="ids">${idsHtml}</div>` : ""}</div>` : "";
+    // 확장 71호 — 읽기 모드(#516): o.body 면 제목 아래 본문 두 줄을 접힌 채로도 보인다(펼치면 전부), o.obs 면 관찰 한 줄을 흐리게.
+    //   사용자 2026-09-13: 스레드만 읽고도 "뭐 하고 있었지, 왜 그렇게 됐더라, 다음은 뭐지"가 복원돼야 하는데 제목만 보여 안 읽혔다.
+    const raw = String(text == null ? "" : text).trim(), nl = raw.indexOf("\n");
+    const bodyText = o.body ? (nl > 0 ? raw.slice(nl + 1).trim() : (more ? raw.slice(head.length - (head.endsWith("…") ? 1 : 0)).trim() : "")) : "";
+    const bodyHtml = bodyText ? `<span class="bd">${md(bodyText)}</span>` : "";
+    const obsHtml = o.obs ? `<span class="obs"><span class="ol">${tr("관찰")}</span>${esc(o.obs)}</span>` : "";
+    return `<details class="it ${hasMore ? "" : "flat"} ${o.cls || ""} ${bodyHtml || obsHtml ? "rd" : ""}"${o.key ? ` data-key="${esc(o.key)}"` : ""}><summary><span class="hd ${o.big ? "big" : ""}">${md(head)}</span>${meta}${bodyHtml}${obsHtml}</summary>${full}</details>`;
+  }
+
+  const items = (list, kind, here) => list.length
+    ? list.map((x) => entry(x.statement, { key: `${kind[0].toUpperCase()}${x[kind + "_id"]}`, at: x.recorded_at, authority: x.authority, scope: x.scope, from: x.case_id !== here ? x.case_id : null, reason: x.reason,
+        cls: x.superseded_by ? "replaced" : "", tag: x.superseded_by ? { cls: "sup", text: "대체됨" } : null,
+        ids: `${kind[0].toUpperCase()}${x[kind + "_id"]}${x.supersedes ? " · " + kind[0].toUpperCase() + x.supersedes + " 을 대체함" : ""}${x.superseded_by ? " · " + kind[0].toUpperCase() + x.superseded_by + " 이 대체함" : ""}`, ev: { case: x.case_id, ids: x.evidence_ids } }))
+      .join("")
+    : `<div class="empty">${tr("없다")}</div>`;
+
+  // 확장 37호 — "NEXT 가 마지막 기록보다 오래됐다" 경고는 지웠다(23호). casebook 은 일하면서 계속 기록하는 도구라
+  // "선언 → 일 → 기록" 이 정상 흐름이고, 그러면 NEXT 는 늘 마지막 기록보다 이르다. 실측에서 뜬 둘이 모두 오탐이었다.
+  // 선언이 아직 유효한지는 문장을 읽어야 알고, 얼마나 됐는지는 옆의 시각이 이미 말한다.
+
+  // 확장 58호 — 본문의 #번호를 스레드 링크로 (D14626, #504). 이 저장소의 스레드 번호일 때만 — 증거 #N·선언 #N 은 그대로.
+  //   닫힌 스레드가 "#489 몫이다" 라고 남긴 후속과, 관찰 스레드에서 갈라져 나간 스레드가 이것으로 이어진다. 서버는 모른다.
+  const linkRefs = (html, threadIds) => threadIds.size
+    ? html.replace(/(^|[^\w\/#])#(\d+)(?!\d)/g, (m, pre, n, off, all) => threadIds.has(Number(n)) && !/(증거|evidence|E)\s*$/.test(all.slice(Math.max(0, off - 12), off + pre.length)) ? `${pre}<a href="#/threads/${n}">#${n}</a>` : m)
+    : html;
+
+  // 확장 57호 — 결정 로그 한 줄: 번호 · 날짜 · 제목 · 유효/대체됨 · 누가. 누르면 문장 전체·이유·번호. data-key 로 찾기에서 바로 온다(55호).
+  const mmdd = (ms) => { const d = new Date(ms || 0); return p2(d.getMonth() + 1) + "/" + p2(d.getDate()); };
+  const logRow = (x, here, extra) => {
+    const id = "D" + x.decision_id, sup = !!x.superseded_by, u = x.authority === "user";
+    const t = headline(x.statement).head, tt = t.length > 80 ? t.slice(0, 79) + "…" : t;   // 제목 규칙(60자) 전 기록은 길다 — 한 줄로 자르고 펼치면 전부
+    const ids = `${id}${x.supersedes ? " · D" + x.supersedes + " 을 대체함" : ""}${sup ? " · D" + x.superseded_by + " 이 대체함" : ""}${x.case_id !== here ? " · #" + x.case_id : ""}`;
+    return `<div class="lrow ${sup ? "sup" : ""} ${extra ? "extra" : ""}" data-key="${id}" data-who="${u ? "user" : "agent"}" data-sup="${sup ? 1 : 0}"><span class="id">${id}</span><span class="dt" title="${fmtAbs(x.recorded_at)}">${mmdd(x.recorded_at)}</span><span class="tt">${md(tt)}</span><span class="stt ${sup ? "sup" : "ok"}">${tr(sup ? "대체됨" : "유효")}</span><span class="who ${u ? "u" : ""}">${u ? "user" : "agent"}</span><span class="c">›</span><div class="why">${md(x.statement)}${x.reason ? `<div class="rs">${md(x.reason)}</div>` : ""}<div class="ids">${esc(ids)}${evTail(x.case_id, x.evidence_ids, true)}</div></div></div>`;
+  };
+
+  // 스레드 화면 — GitHub 이슈 페이지의 두 열(본문 + 메타)을 빌린다 (Claude Design 2a·2b·2d, 2026-09-07).
+  const PRIM_KINDS = new Set(["opened", "closed", "decision", "constraint", "asked", "ruled_out"]);
+  // 펼치면 문장 전체·관찰·번호 (34호에서 잃었던 것을 되돌린다 — 헤드라인만 보이고 나머지는 펼쳐야 보인다는 규칙은 23호부터다)
+  const rrow = (kw, text, at, opts) => {
+    const o = opts || {}, { head, more } = headline(text);
+    const idsHtml = (o.ids ? esc(o.ids) : "") + (o.ev ? evTail(o.ev.case, o.ev.ids, !!o.ids) : "");   // 확장 123호 — 근거는 링크
+    const hasMore = more || o.reason || idsHtml;
+    const full = hasMore ? `<div class="full">${md(text)}${o.reason ? `<div class="why">${md(o.reason)}</div>` : ""}${o.supd || ""}${idsHtml ? `<div class="ids">${idsHtml}</div>` : ""}</div>` : "";
+    const by = o.by ? `<span class="by">${esc(o.by)}</span>` : "";
+    const rep = o.sup || "";
+    return `<details class="rr ${hasMore ? "" : "flat"} ${o.replaced ? "replaced" : ""}"><summary class="rrow ${o.prim ? "prim" : ""}"><span class="kw ${o.hash ? "hash" : ""}">${esc(kw)}</span><span class="hd">${md(head)}${by}${rep}</span><span class="at">${o.at || ""}</span></summary>${full}</details>`;
+  };
+  async function threadView(id, item) {
+    view.innerHTML = `<div class="muted">불러오는 중…</div>`;
+    const s = await api("/thread/" + id);
+    const allTopics = await api("/topic").then((r) => r.topics || []).catch(() => []);   // 확장 47호 — 옮길 곳 목록
+    view.classList.remove("review", "dense", "status"); view.classList.add("thread");
+    $("crumb").hidden = false; $("crumbText").textContent = s.title; $("crumbChip").textContent = tr(PHASE_KO[s.phase] || (s.status === "open" ? "열림" : "종료")); $("crumbChip").className = "chip";
+
+    const a = s.anchor || {};
+    const lastAt = s.last_activity ? s.last_activity.at : null;
+    const rs = s.repo_state || { constraints: [], decisions: [] };
+    const byTime = (x, y) => (y.recorded_at || 0) - (x.recorded_at || 0) || (y.decision_id || y.constraint_id || 0) - (x.decision_id || x.constraint_id || 0);   // 최근순
+    const decisions = [...(s.decisions || [])].sort(byTime), repoDecisions = [...(rs.decisions || [])].sort(byTime);
+    const constraints = [...(s.constraints || [])].sort(byTime), repoConstraints = [...(rs.constraints || [])].sort(byTime);
+    const repoBlock = (list, kind) => list.length
+      ? `<details class="repoblock"><summary>${tr("저장소 공통")} ${list.length}<span class="n">${tr("다른 스레드에서 정함")}</span></summary><div class="notice" style="margin:4px 0 6px;">${tr("이 스레드 것과 충돌하면 화면이 고르지 않는다.")}</div>${items(list, kind, s.case_id)}</details>` : "";
+    // 확장 56호 — 대체된 것은 접어서 그 절 아래에: 찾기에서 누른 "대체됨" 기록이 여기로 온다(사용자: "그냥 스레드 화면만 나오네")
+    const sup = s.superseded || { decisions: [], constraints: [] };
+    const supDecisions = [...(sup.decisions || [])].sort(byTime), supConstraints = [...(sup.constraints || [])].sort(byTime);
+    const supBlock = (list, kind) => list.length
+      ? `<details class="repoblock"><summary>대체된 ${kind === "decision" ? "결정" : "제약"} ${list.length}<span class="n">뒤에 온 것이 갈음함</span></summary>${items(list, kind, s.case_id)}</details>` : "";
+    const turn = turnLabel({ state: s.status === "open" ? "open" : "closed", owner: s.owner, phase: s.phase });
+    const phase = s.phase || (s.status === "open" ? "unset" : "closed");
+    const repoName = s.repo || a.repo || "";
+    const wt = a.branch ? `${esc(shortRepo(a.worktree || ""))} · ${esc(a.branch)} @ ${esc(String(a.head).slice(0, 7))} · ${a.dirty ? `${tr("미커밋")} ${a.dirty}` : tr("깨끗함")}` : "";
+    const cp = a.last_checkpoint;
+    const historical = !a.branch && cp ? `${esc(shortRepo(cp.worktree || ""))} · ${esc(cp.branch || "")} @ ${esc(String(cp.head || "").slice(0, 7))}<div class="v2">마지막 관찰 ${esc(fmtAbs(cp.at))} · 현재 상태는 에이전트가 다시 확인합니다.</div>` : "";
+    const cpLine = a.branch && cp ? `체크포인트 ${when(cp.at)}(${esc(cp.why)}) · 그 뒤 ${a.changed_since_checkpoint ? "바뀜" : "변경 없음"} · ${hm(a.read_at)} 읽음` : "";
+    const commits = (a.commits || []).map((c) => rrow(c.head.slice(0, 7), c.message, c.created_at,
+      { hash: true, at: when(c.created_at), ids: `${c.head.slice(0, 12)}${c.stat ? " · " + String(c.stat).trim().split("\n").pop().trim() : ""}` })).join("") || `<div class="empty">${tr("커밋 없음")}</div>`;
+    const moveTargets = allTopics.filter((t) => !(s.topics || []).some((x) => x.topic_id === t.id));
+    const moveSel = moveTargets.length ? `<select class="move" id="moveTo" title="이 스레드를 다른 주제로"><option value="">${(s.topics || []).length ? tr("다른 주제로 옮기기 ▾") : tr("주제에 넣기 ▾")}</option>${moveTargets.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select>` : "";
+    const topicLinks = (s.topics || []).length ? s.topics.map((t) => `<a href="#/review/${t.topic_id}">${esc(t.name)}</a>`).join(", ") : `<span class="dim">${tr("미분류")}</span>`;
+    // 확장 58호 — 카드 세 줄: 어디까지 / 왜 / 다음 (D14624·D14629, #504). 무엇(focus)은 제목과 주제가 말하므로 접힌다.
+    //   라벨은 RULES·ANCHOR 와 같은 도구 어휘로 SO FAR · WHY · NEXT (사용자 2026-09-11 "대응되는 영어로 써야 통일성이 살지").
+    //   어디까지 = 닫힘이면 결과 첫 줄, 열림이면 open 첫 줄, 없으면 마지막 결정 제목.
+    //   왜 = 마지막 결정의 이유 첫 줄(결정이 없으면 focus 본문) — 결정 문장이 아니라 이유다(사용자: "왜 그런 결정을 했는지 보이는게 더 좋을 때가 있지").
+    //   다음 = next + owner. 닫힌 스레드에서는 "종료 당시 계획" — 이미 지난 일을 할 일처럼 읽지 않게(#500 이 배포를 owner=user 로 보이던 것).
+    //   그 아래는 57호 그대로: RULES · ANCHOR, 결정 로그(길어도 되는 물건 — 61 스레드 중 결정 8개 초과는 #446 하나, 증거 #2005).
+    const closed = s.status !== "open";
+    const lastDec = decisions[0] || null;   // 최근순 정렬됨 — 유효한 것 중 마지막
+    const threadIds = new Set(rs.threads || []);
+    const L = (html) => linkRefs(html, threadIds);
+    const focusBody = s.focus ? String(s.focus.statement || "").split("\n").slice(1).join("\n").trim() : "";
+    // 확장 61호 — SO FAR = 마지막 노트(D14738, #510). open(미결)은 앞을 보는 문장이라 NEXT 와 겹쳤다(사용자: "맨 위 셋이 뭔 차인지 구분이 안 된다").
+    const lastNote = (s.notes || [])[0] || null;
+    const sofar = closed
+      ? (s.result ? entry(s.result, { key: "sofar" }) : `<div class="empty">결과 없음 — 에이전트에게 ‘정리해줘’</div>`)
+      : lastNote ? entry(lastNote.text, { key: "sofar", body: true, at: lastNote.at, tag: { cls: "nk", text: tr(NOTE_KO[lastNote.note_kind] || "노트") }, reason: lastNote.observed ? tr("관찰: ") + lastNote.observed : null, ids: `${tr("마지막 노트")} · turn ${lastNote.turn} · evidence #${lastNote.evidence_id}`, ev: { case: lastNote.case_id, ids: lastNote.evidence_ids } })
+      : s.open ? entry(s.open.statement, { key: "sofar", at: s.open.declared_at, authority: s.open.authority, ids: `노트가 없어 미결에서 · open #${s.open.id}` })
+      : lastDec ? entry(lastDec.statement, { key: "sofar", at: lastDec.recorded_at, authority: lastDec.authority, ids: `마지막 결정 D${lastDec.decision_id}` })
+      : `<div class="empty">아직 기록 없음</div>`;
+    const why = lastDec
+      ? entry(lastDec.reason || lastDec.statement, { key: "why", body: true, at: lastDec.recorded_at, authority: lastDec.authority, reason: lastDec.reason ? `결정 D${lastDec.decision_id}: ${headline(lastDec.statement).head}` : null, ids: `D${lastDec.decision_id}${lastDec.reason ? "" : " · 이유를 남기지 않았다"}` })
+      : s.focus ? entry(focusBody || s.focus.statement, { key: "why", at: s.focus.declared_at, authority: s.focus.authority, ids: `${tr("결정이 없어 focus 에서")} · #${s.focus.id}` })
+      : `<div class="empty">없음</div>`;
+    // 확장 110호 (D15573) — 이 next 가 마지막 노트보다 낡았으면 그렇다고 말한다. 새 기록은 도구가
+    // 턴마다 다시 말하게 하므로 낡을 일이 없지만, 이미 쌓인 옛 기록에는 낡은 next 가 그대로 있다.
+    // 낡았는지 모르면 다음 세션이 그것을 읽고 이미 끝난 일을 하러 간다 — 그것이 이 제품이 막으려는 실패다.
+    const nextStale = s.next && lastNote && s.next.declared_at < lastNote.at;
+    const nextLine = s.next
+      ? entry(s.next.statement, { key: "next", body: true, at: s.next.declared_at, authority: s.next.authority, big: !closed,
+          tag: closed ? { cls: "sup", text: tr("종료 당시 계획") } : nextStale ? { cls: "sup", text: tr("마지막 노트보다 낡음") } : null,
+          ids: `#${s.next.id}${s.next.supersedes ? " · " + tr("이전") + " #" + s.next.supersedes : ""}${s.next.owner ? " · owner " + s.next.owner : ""}` })
+      : `<div class="empty">${tr("없음")}</div>`;
+    // 확장 61호 — 초점은 칩이 아니라 카드 위 문단(사용자 2026-09-12 "칩으로 떼어놓으니까 이상하다"): 제목이 초점의 첫 줄이므로 본문만.
+    //   옛 기록(제목 규칙 전)은 문장 전체가 제목이 됐으니 제목과 같으면 아무것도 안 보인다.
+    const focusText = s.focus ? (focusBody || (headline(s.focus.statement).head !== String(s.title || "").trim() ? s.focus.statement : "")) : "";
+    const focusPara = focusText ? `<div class="focusp">${md(focusText)}<span class="meta">${tr("초점")} · <span title="${fmtAbs(s.focus.declared_at)}">${when(s.focus.declared_at)}</span>${s.focus.authority === "user" ? " · <span class=\"u\">user</span>" : ""}${s.focus.supersedes ? " · 이전 #" + s.focus.supersedes : ""}</span></div>` : "";
+    const nDec = decisions.length, nCon = constraints.length, nRo = (s.ruled_out || []).length, nCommit = (a.commits || []).length;
+    // 확장 59호 — 접힘(시안 C, D14671 · #506): 카드 아래 칩 한 줄이 서랍을 하나만 연다(처음엔 결정). 결정 로그는 최근 3개, 나머지는 "더 보기".
+    //   사용자: 시안(cmem 뷰어)이 "어지러워서 안 읽고 넘어옴" — 한 화면에 큰 소리는 하나, 나머지는 눌러야 나온다.
+    const LOG_FIRST = 3;
+    const logRows = [...decisions, ...supDecisions].sort(byTime);
+    // 확장 60호 — 노트 서랍(D14720): 갈래 말 + 결론 첫 줄, 최근 3개, 나머지는 "더 보기". 옛 노트는 "노트". 사용자 2026-09-12 "기록이 어디 된 거임?"
+    const notes = s.notes || [];
+    const kindCount = notes.reduce((m, e) => { const k = NOTE_KO[e.note_kind] || "노트"; m[k] = (m[k] || 0) + 1; return m; }, {});
+    const noteKindCounts = Object.entries(kindCount).filter(([k]) => k !== "노트").map(([k, v]) => `${tr(k)} ${v}`).join(" · ");
+    const NOTE_KIND_OF = Object.fromEntries(Object.entries(NOTE_KO).map(([k, v]) => [v, k]));   // 65호 — 갈래 말 → 갈래 (색 클래스용)
+    const noteKindHtml = Object.entries(kindCount).filter(([k]) => k !== "노트").map(([k, v]) => `<span class="kc kc-n-${NOTE_KIND_OF[k]}">${tr(k)} ${v}</span>`).join(" · ");
+    const noteRow = (e, extra) => `<div class="ntrow ${extra ? "xtra" : ""}">${entry(e.text, { key: `N${e.turn}`, body: !extra, obs: !extra && e.observed ? e.observed : null, at: e.at, reason: e.observed ? tr("관찰: ") + e.observed : null, ids: `turn ${e.turn} · evidence #${e.evidence_id}${e.client ? " · " + e.client : ""}`, ev: { case: e.case_id, ids: e.evidence_ids } })}</div>`;
+    // 확장 61호 — 갈래별 섹션(D14738): 바꿈 · 확인 · 발견 · 생각 · 노트(옛 것) 순, 섹션마다 최근 3개 → 더 보기. 비어 있는 갈래는 안 보인다.
+    const NOTE_ORDER = ["change", "verified", "finding", "thought", null];
+    const notesHtml = notes.length
+      ? NOTE_ORDER.map((k) => {
+          const rows = notes.filter((e) => (NOTE_KO[e.note_kind] ? e.note_kind : null) === k);
+          if (!rows.length) return "";
+          return `<div class="nsec"><div class="nsh"><span class="kw ${k ? "kc kdot kc-n-" + k : "old"}">${tr(k ? NOTE_KO[k] : "노트")}</span><span class="n">${rows.length}${k ? "" : " · " + tr("갈래 없는 옛 노트")}</span></div>${rows.map((e, i) => noteRow(e, i >= LOG_FIRST)).join("")}${rows.length > LOG_FIRST ? `<div class="more open">${more(rows.length - LOG_FIRST)}</div><div class="more fold">${fewer(LOG_FIRST)}</div>` : ""}</div>`;
+        }).join("")
+      : `<div class="empty">노트 없음</div>`;
+    const openHtml = s.open ? entry(s.open.statement, { key: "open", at: s.open.declared_at, authority: s.open.authority, ids: `#${s.open.id}${s.open.supersedes ? " · 이전 #" + s.open.supersedes : ""}` }) : "";
+    const moreByDay = Object.entries(logRows.slice(LOG_FIRST).reduce((m, x) => { const k = mmdd(x.recorded_at); m[k] = (m[k] || 0) + 1; return m; }, {})).map(([k, v]) => `${tr(k)} ${v}`).join(" · ");
+    const anchorShort = a.branch ? `${a.branch} @ ${String(a.head).slice(0, 7)}` : (a.last_checkpoint ? `${a.last_checkpoint.branch || ""} @ ${String(a.last_checkpoint.head || "").slice(0, 7)}` : tr("없음"));
+    const chipList = [
+      { d: "dec", kc: "decision", label: tr("결정"), n: nDec || repoDecisions.length || supDecisions.length ? `${nDec}${supDecisions.length ? ` · ${tr("대체됨")} ${supDecisions.length}` : ""}${repoDecisions.length ? ` · ${tr("공통")} ${repoDecisions.length}` : ""}` : "0" },
+      { d: "rules", kc: "constraint", label: tr("제약"), n: `${nCon}${repoConstraints.length ? ` · ${tr("공통")} ${repoConstraints.length}` : ""}${supConstraints.length ? ` · ${tr("대체됨")} ${supConstraints.length}` : ""}` },
+      ...(nRo ? [{ d: "ro", kc: "ruled_out", label: tr("배제"), n: String(nRo) }] : []),
+      { d: "commits", kc: "commit", label: tr("커밋"), n: String(nCommit) },
+      ...(s.open ? [{ d: "open", label: tr("미결"), n: "" }] : []),
+      { d: "anchor", label: "anchor", n: anchorShort },
+    ];
+    chipList.unshift({ d: "notes", label: tr("노트"), raw: true, n: `${notes.length}${noteKindHtml ? " · " + noteKindHtml : ""} · ${tr("증거")} ${s.evidence_count}` });   // 61호 — 노트가 맨 앞, 처음 열리는 서랍
+    const firstDrawer = notes.length ? "notes" : nDec || repoDecisions.length || supDecisions.length ? "dec" : nCon ? "rules" : null;
+    const nUser = [...decisions, ...supDecisions].filter((x) => x.authority === "user").length;
+    const folderHtml = wt ? `${wt}${cpLine ? ` <span class="dim">(${cpLine})</span>` : ""}` : historical || (a.mismatch ? `<span class="conflict" style="margin:0;">${esc(a.mismatch)}</span>` : `<span class="dim">${tr("없음")}</span>`);
+    // 확장 55호 — 이 스레드의 말: 지은 이름과 뜻(#502). 올리면 뜻, 누르면 처음 나온 자리(54호). 본문의 그 말에는 점선 밑줄.
+    const terms = [...(s.terms || []), ...((s.repo_state || {}).terms || []).map((t) => ({ ...t, repo: true }))];
+    const termsHtml = terms.length ? `<div class="terms"><span class="ml">${tr("말")}</span>${terms.map((t) => `<span class="term ${t.repo ? "repo" : ""}" title="${esc(t.meaning)}${t.repo ? "\n(" + tr("저장소 공통") + ")" : ""}" data-term="${esc(t.term)}">${esc(t.term)}</span>`).join("")}</div>` : "";
+    view.innerHTML = `
+      <div class="in">
+        <div class="thead">
+          <div class="t"><h1>${md(s.title)}</h1><span class="num">#${s.case_id}</span><button class="btn flip" id="flipStatus" data-to="${s.status === "open" ? "resolved" : "open"}" title="${s.status === "open" ? "결과는 묻지 않는다 — 나중에 에이전트에게 ‘정리해줘’라고 하면 채운다" : "다시 열면 에이전트가 switch_thread 로 이어받는다"}">${tr(s.status === "open" ? "닫기" : "다시 열기")}</button></div>
+          ${s.status === "open" ? phaseChip(phase) : `<div class="closedline"><span class="dot closed"></span><span class="w">${tr("종료")}</span>${s.result ? "" : `<span class="w">·</span><span class="w">${tr("결과 없음 — 에이전트에게 ‘정리해줘’")}</span>`}</div>`}
+        </div>
+        <div class="metaline"><span class="ml">${tr("주제")}</span><span>${topicLinks}</span>${moveSel}</div>
+        ${termsHtml}
+        ${focusPara}
+        <div class="tbody" style="margin-top:16px;">
+          <div class="sec card">
+            <div class="st"><div class="k">so far</div>${L(sofar)}</div>
+            <div class="st"><div class="k">next</div>${L(nextLine)}</div>
+            <div class="st"><div class="k">why</div>${L(why)}</div>
+          </div>
+          <div class="chips">${chipList.map((c) => `<span class="chip ${c.kc ? "kc kc-" + c.kc : ""}" data-d="${c.d}">${c.label}${c.n ? `<span class="n">${c.raw ? c.n : esc(c.n)}</span>` : ""}</span>`).join("")}</div>
+          ${nDec || repoDecisions.length || supDecisions.length ? `<div class="drawer sec log" data-d="dec" hidden><div class="label">${tr("결정 로그")} <span class="n">${tr("유효")} ${nDec}${supDecisions.length ? ` · ${tr("대체됨")} ${supDecisions.length}` : ""}</span><span class="r"><span class="kchip on" data-f="all">${tr("전체")}</span><span class="kchip" data-f="user">user ${nUser}</span><span class="kchip" data-f="agent">agent ${nDec + supDecisions.length - nUser}</span>${supDecisions.length ? `<span class="kchip" data-f="nosup">${tr("대체됨 숨김")}</span>` : ""}</span></div>${logRows.map((x, i) => logRow(x, s.case_id, i >= LOG_FIRST)).join("")}${logRows.length > LOG_FIRST ? `<div class="more open">${more(logRows.length - LOG_FIRST)} — ${moreByDay}</div><div class="more fold">${fewer(LOG_FIRST)}</div>` : ""}${repoBlock(repoDecisions, "decision")}</div>` : ""}
+          <div class="drawer sec" data-d="rules" hidden><div class="label">rules <span class="n">${nCon ? `${tr("이 스레드")} ${nCon}` : tr("이 스레드 것 없음")}</span></div><div class="many">${nCon ? items(constraints, "constraint", s.case_id) : ""}${repoBlock(repoConstraints, "constraint")}${supBlock(supConstraints, "constraint")}</div></div>
+          ${nRo ? `<div class="drawer sec" data-d="ro" hidden><div class="label">${tr("배제")} <span class="n">${nRo}</span></div>${(s.ruled_out || []).map((x) => entry(x.hypothesis, { key: `R${x.ruled_out_id}`, at: x.recorded_at, scope: x.scope === "repo" ? "repo" : null, ids: `R${x.ruled_out_id}`, ev: { case: s.case_id, ids: x.evidence_ids } })).join("")}</div>` : ""}
+          <div class="drawer sec" data-d="commits" hidden><div class="label">${tr("커밋")} <span class="n">${nCommit} · ${tr("이 스레드에 붙은 것")}</span></div>${commits}</div>
+          <div class="drawer sec" data-d="notes" hidden><div class="label">${tr("노트")} <span class="n">${notes.length}${noteKindCounts ? ` · ${noteKindCounts}` : ""}${kindCount["노트"] && noteKindCounts ? ` · ${tr("갈래 없음")} ${kindCount["노트"]}` : ""}</span><span class="scopehint">${evidenceN(s.evidence_count)} · <a href="#/threads/${s.case_id}/evidence">${tr("원문 전부 보기")} →</a></span></div>${notesHtml}</div>
+          ${s.open ? `<div class="drawer sec" data-d="open" hidden><div class="label">${tr("미결")} <span class="n">${tr("아직 풀리지 않은 것 — 선언")}</span></div>${openHtml}</div>` : ""}
+          <div class="drawer sec" data-d="anchor" hidden><div class="label">anchor <span class="n">${tr("이 스레드가 붙은 자리")}</span></div><div class="anc">${esc(shortRepo(repoName)) || "—"} · ${folderHtml}</div></div>
+        </div>
+      </div>`;
+    view.querySelectorAll(".terms .term").forEach((el) => el.addEventListener("click", () => { findFirst = true; location.hash = "#/find/" + encodeURIComponent(el.dataset.term); }));
+    // 확장 57호 — 로그 줄: 누르면 펼침, 칩으로 거름(누가 / 대체됨 숨김). 밑줄·코드·링크 클릭은 제 일을 한다.
+    view.querySelectorAll(".lrow").forEach((r) => r.addEventListener("click", (ev) => { if (ev.target.closest("abbr,code,a,.why")) return; r.classList.toggle("open"); }));
+    // 확장 59호 — 칩 하나 = 서랍 하나. 열린 칩을 다시 누르면 닫힌다. 로그의 "더 보기"/"접기"는 .all 토글.
+    const drawers = view.querySelectorAll(".drawer"), chipEls = view.querySelectorAll(".chips .chip");
+    const openDrawer = (k) => { drawers.forEach((d) => { d.hidden = d.dataset.d !== k; }); chipEls.forEach((c) => c.classList.toggle("on", c.dataset.d === k)); };
+    chipEls.forEach((c) => c.addEventListener("click", () => openDrawer(c.classList.contains("on") ? null : c.dataset.d)));
+    openDrawer(firstDrawer);
+    const logEl = view.querySelector(".log");
+    view.querySelectorAll(".drawer .more").forEach((m) => m.addEventListener("click", () => (m.closest(".nsec") || m.closest(".drawer")).classList.toggle("all")));   // 60호 — 노트 서랍도 같은 더 보기
+    const logF = { who: "all", nosup: false };
+    const applyLog = () => view.querySelectorAll(".lrow").forEach((r) => r.classList.toggle("hide", (logF.who !== "all" && r.dataset.who !== logF.who) || (logF.nosup && r.dataset.sup === "1")));
+    view.querySelectorAll(".log .kchip").forEach((c) => c.addEventListener("click", () => {
+      const f = c.dataset.f;
+      if (f === "nosup") { logF.nosup = !logF.nosup; c.classList.toggle("on", logF.nosup); }
+      else { logF.who = f; view.querySelectorAll(".log .kchip:not([data-f=nosup])").forEach((x) => x.classList.toggle("on", x.dataset.f === f)); }
+      if (logEl && (logF.who !== "all" || logF.nosup)) logEl.classList.add("all");   // 거르면 "최근 3개" 상한은 뜻이 없다 — 걸러진 전부를 보인다
+      applyLog();
+    }));
+    revealItem(item);
+    markTerms(view.querySelector(".tbody"), terms);
+    view.querySelectorAll(".tbody code").forEach((c) => c.addEventListener("click", (ev) => { ev.stopPropagation(); findFirst = true; location.hash = "#/find/" + encodeURIComponent(c.textContent.trim()); }));
+    const fb = $("flipStatus"); if (fb) fb.addEventListener("click", async () => {   // 확장 48호 — 사람은 상태만 뒤집는다, 결과는 에이전트가 뒤에
+      const to = fb.dataset.to;
+      if (!confirm(to === "open" ? `#${s.case_id} 을(를) 다시 연다.` : `#${s.case_id} 을(를) 닫는다. 결과 한 줄은 묻지 않는다 — 나중에 에이전트에게 "정리해줘"라고 하면 채운다.`)) return;
+      fb.disabled = true;
+      try { await post(`/case/${s.case_id}/status`, { status: to }); findCache = null; listDirty = true; render(); }
+      catch (e) { fb.disabled = false; alert((to === "open" ? "다시 열지" : "닫지") + " 못했다: " + e.message); }
+    });
+    const mv = $("moveTo"); if (mv) mv.addEventListener("change", async () => {
+      const to = Number(mv.value); if (!to) return;
+      const tgt = moveTargets.find((t) => t.id === to), from = (s.topics || [])[0];
+      const msg = from ? `#${s.case_id} 을(를) "${from.name}" 에서 "${tgt.name}" 으로 옮긴다.` : `#${s.case_id} 을(를) "${tgt.name}" 에 넣는다.`;
+      if (!confirm(msg)) { mv.value = ""; return; }
+      mv.disabled = true;
+      try { await post("/topic", from ? { topic_id: to, case_ids: [s.case_id], from_topic_id: from.topic_id } : { topic_id: to, case_ids: [s.case_id] }); findCache = null; listDirty = true; render(); }
+      catch (e) { mv.disabled = false; mv.value = ""; alert("옮기지 못했다: " + e.message); }
+    });
+  }
+
+  async function evidenceView(id, ev) {
+    view.innerHTML = `<div class="muted">불러오는 중…</div>`;
+    const data = await api("/case/" + id);
+    view.classList.remove("review", "dense", "status"); view.classList.add("thread");
+    $("crumb").hidden = false; $("crumbText").textContent = data.case.title;
+    $("crumbChip").textContent = tr("증거 · 노트");
+    const turns = new Map(data.turns.map((t) => [t.id, t.sequence]));
+    const entries = [
+      ...data.evidence.map((e) => ({ ...e, label: tr("증거") + " #" + e.id, ev: true })),
+      ...data.conversation.filter((m) => m.role === "assistant").map((m) => ({ ...m, label: tr("노트 · 답변") })),
+    ].sort((a, b) => a.created_at - b.created_at || a.id - b.id);
+    view.innerHTML = `<div class="in"><a href="#/threads/${id}">← ${tr("스레드로 돌아가기")}</a>
+      <h1>${esc(data.case.title)}</h1><p class="muted">${tr("저장된 원문과 노트. 펼쳐서 읽습니다.")}</p>
+      ${entries.map((e) => `<details class="sec"${e.ev ? ` data-key="E${e.id}"` : ""}><summary>${esc(e.label)} · ${tr("턴")} ${turns.get(e.turn_id) || "—"} · ${esc(fmtAbs(e.created_at))}</summary>
+        <pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:var(--fs-body);">${esc(e.content)}</pre></details>`).join("") || `<div class="empty">${tr("아직 기록이 없습니다.")}</div>`}</div>`;
+    revealItem(ev ? "E" + ev : null);
+  }
+
+  // 확장 55호 — 찾기에서 누른 그 기록으로: 펼치고, 가운데로 스크롤하고, 잠깐 밝힌다 (사용자: "스레드 화면이 다시 나오면 어쩌라는거지 싶지 않을까")
+  function revealItem(key) {
+    if (!key) return;
+    const el = view.querySelector(`[data-key="${CSS.escape(key)}"]`); if (!el) return;
+    if (el.tagName === "DETAILS") el.open = true;
+    if (el.classList.contains("lrow")) { el.classList.add("open"); el.classList.remove("hide"); }   // 57호 — 결정 로그 줄
+    const dr = el.closest(".drawer"); if (dr && dr.hidden) { const ch = view.querySelector(`.chips .chip[data-d="${dr.dataset.d}"]`); if (ch) ch.click(); }   // 59호 — 닫힌 서랍 안이면 그 서랍을 연다
+    const lg = el.closest(".drawer"); if (lg) lg.classList.add("all"); const ns = el.closest(".nsec"); if (ns) ns.classList.add("all");   // 59호 — "더 보기" 뒤에 숨은 줄이면 전부 편다 (60호: 노트 서랍도)
+    for (let d = el.parentElement && el.parentElement.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) d.open = true;   // 56호 — 접힌 블록 안이면 조상도 연다
+    el.classList.add("flash"); el.scrollIntoView({ block: "center" });
+    setTimeout(() => el.classList.remove("flash"), 2400);
+  }
+
+  // ---------------------------------------------------------------- Review (확장 24호 → v2 시안 이식)
+  const ALL_KINDS = ["opened", "closed", "decision", "constraint", "ruled_out", "note", "asked", "commit", "next", "open", "focus", "record", "evidence", "term"];
+  const DEFAULT_OFF = ["evidence", "record", "focus", "open"];
+  const PRIMARY = new Set(["opened", "closed", "decision", "constraint", "ruled_out", "asked"]);   // 그날 "무엇이 달라졌나" — 항상 펼쳐 보인다
+  const FOLD_AFTER = 6;                                                                            // 노트·커밋이 이보다 많은 날은 접는다
+  const WD = ["일", "월", "화", "수", "목", "금", "토"], WD_LONG = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+  const COLORED = new Set(["decision", "constraint", "ruled_out", "opened", "closed", "asked"]);
+  const rvClosedOpen = new Set();   // 확장 49호 — 닫힘 띠를 펼친 주제(key). 화면이 살아 있는 동안만
+  let rvClosedObserver = null;
+  let reviewPrefs = { off: DEFAULT_OFF.slice(), newestFirst: true, dense: true };
+  const rvDayOpen = new Set(), rvDayShut = new Set();   // 확장 69호 — 사용자가 손댄 날짜만 기억한다(펼침/접음). 기본은 맨 위 날짜만 펼침.   // 확장 69호 — 최신 순이 기본: 열면 오늘이 맨 위(#515)   // 기본은 촘촘히 — 사용자가 첫 판(v1)의 밀도를 골랐다(2026-09-05)
+  try { const p = JSON.parse(localStorage.getItem("cb_review_prefs") || "null"); if (p && Array.isArray(p.off)) reviewPrefs = { ...reviewPrefs, ...p }; } catch (e) {}
+  const savePrefs = () => { try { localStorage.setItem("cb_review_prefs", JSON.stringify(reviewPrefs)); } catch (e) {} };
+  const rvExpanded = new Set(), rvOpenDays = new Set();       // 펼침 상태는 화면이 살아 있는 동안만
+  let rvMore = false;                                         // 필터 칩 "더" 펼침
+
+  // 사건 한 줄의 텍스트·펼침 내용 (데이터 계약은 /app/review 그대로)
+  function rvOpts(e, cases) {
+    const c = e.case_id != null ? cases[e.case_id] : null;
+    let text = e.text, o = { ids: "" };
+    if (e.kind === "decision" || e.kind === "constraint") o = { authority: e.authority, scope: e.scope === "repo" ? "repo" : null, reason: e.reason,
+      ids: `${e.kind[0].toUpperCase()}${e.id}${e.supersedes ? " · " + e.kind[0].toUpperCase() + e.supersedes + " 을 대체함" : ""}${e.superseded_by ? " · " + e.kind[0].toUpperCase() + e.superseded_by + " 이 대체함" : ""}`,   // 제약은 C, 결정은 D
+      replaced: e.superseded_by || null, ev: { case: e.case_id, ids: e.evidence_ids } };
+    else if (e.kind === "note") o = { reason: e.observed ? tr("관찰: ") + e.observed : "", ids: `turn ${e.turn} · evidence #${e.evidence_id}`, ev: { case: e.case_id, ids: e.evidence_ids } };
+    else if (e.kind === "commit") o = { ids: `${String(e.head).slice(0, 12)}${e.stat ? " · " + String(e.stat).trim().split("\n").pop().trim() : ""}${e.via === "git" ? " · git log (스레드에 붙지 않은 커밋)" : ""}` };
+    else if (e.kind === "asked") {
+      // 답변 실패 턴 + recovery 턴은 같은 질문을 가리킨다 — 숨기지 않고 상태를 붙인다(2026-09-06 #450, "기록을 두번한건가")
+      const tag = e.answer_status === "failed" ? { cls: "fail", text: "답변 실패" }
+                : e.status === "abandoned" ? { cls: "fail", text: "중단" }
+                : e.turn_kind === "recovery" ? { cls: "re", text: "다시 답변" } : null;
+      o = { tag, reason: e.answer_status === "failed" && e.error ? "실패: " + e.error : "",
+            ids: `turn ${e.turn}${e.source_turn ? ` · turn ${e.source_turn} 을 다시 돌림` : ""}` };
+    }
+    else if (e.kind === "ruled_out") o = { reason: e.scope ? "범위: " + e.scope : "", ids: `R${e.id}` };
+    else if (e.kind === "closed") { text = e.result ? e.result : (e.text === "resolved" ? "닫았다" : e.text); o = { reason: c && c.next ? "마지막 next: " + c.next : (c && c.open ? "남긴 미결: " + c.open : ""), ids: e.later ? "결과 한 줄 — 닫은 뒤에 채움" : e.result ? "결과 한 줄 — 닫을 때 남김" : "결과 없음" }; }
+    else if (e.kind === "next" || e.kind === "open" || e.kind === "focus") o = { authority: e.authority, ids: `${e.kind} #${e.id}` };
+    else if (e.kind === "opened") { text = e.text === "reopened" ? "다시 열었다" : e.text; o = { authority: e.authority, reason: e.focus && e.focus !== e.text ? "focus: " + e.focus : "", ids: "" }; }
+    else if (e.kind === "evidence" && e.n) { text = `증거 ${e.n}건`; o = { reason: e.heads.join("\n"), ids: "" }; }
+    const { head, more } = headline(text);
+    return { text, head, hasMore: !!(more || o.reason || o.ids), o, thread: c };
+  }
+
+  function rvRow(e, cases, key) {
+    const r = rvOpts(e, cases), P = PRIMARY.has(e.kind), open = rvExpanded.has(key) && r.hasMore;
+    const th = r.thread ? `<span class="th"><a href="#/threads/${r.thread.case_id}" title="${esc(r.thread.title)}">#${r.thread.case_id}</a></span>`
+                        : `<span class="th" title="어느 스레드에도 붙지 않은 커밋">git</span>`;
+    const meta = [r.o.authority === "user" ? `<span class="u">user</span>` : "", r.o.scope === "repo" ? `<span class="rp">repo</span>` : "",
+                  e.client ? `<span class="by">${esc(clientName(e.client))}</span>` : "",
+                  supTag(e),
+                  r.o.tag ? `<span class="${r.o.tag.cls}">${r.o.tag.text}</span>` : ""].filter(Boolean).join(" · ");
+    const full = r.hasMore ? `<div class="efull">${esc(r.text)}${r.o.reason ? `<div class="why">${esc(r.o.reason)}</div>` : ""}${supDetail(e)}${r.o.ids || (r.o.ev && r.o.ev.ids && r.o.ev.ids.length) ? `<div class="ids">${esc(r.o.ids || "")}${r.o.ev ? evTail(r.o.ev.case, r.o.ev.ids, !!r.o.ids) : ""}</div>` : ""}</div>` : "";
+    // 종류는 k- 접두로 — 스레드 화면의 .commit(flex) 과 이름이 겹쳐 커밋 줄만 격자를 벗어났다(2026-09-05 사용자 지적)
+    return `<div class="ev k-${e.kind} ${P ? "prim" : ""} ${r.hasMore ? "more" : ""} ${open ? "open" : ""} ${r.o.replaced ? "replaced" : ""}" data-key="${esc(key)}">
+      <span class="tm">${hm(e.at)}</span><span class="kw kc kdot kc-${evCls(e)}">${kindLabel(e)}</span>${th}
+      <div class="hd">${esc(r.head)}</div><span class="meta">${meta}</span><span class="chev ${r.hasMore ? "" : "none"}">›</span>${full}</div>`;
+  }
+
+  function foldEvidence(list) {
+    const out = [];
+    for (const e of list) {
+      const prev = out[out.length - 1];
+      if (e.kind === "evidence" && prev && prev.kind === "evidence" && prev.case_id === e.case_id) { prev.n += 1; prev.heads.push(e.text); prev.at_end = e.at; continue; }
+      out.push(e.kind === "evidence" ? { ...e, n: 1, heads: [e.text] } : e);
+    }
+    return out;
+  }
+
+  async function reviewView(sel) {
+    if (rvClosedObserver) { rvClosedObserver.disconnect(); rvClosedObserver = null; }
+    view.classList.remove("thread", "status"); view.classList.add("review"); view.classList.toggle("dense", !!reviewPrefs.dense);
+    $("crumb").hidden = false; $("crumbText").textContent = tr("회고"); $("crumbChip").textContent = tr("주제별"); $("crumbChip").className = "chip";
+
+    view.innerHTML = `<div class="muted">불러오는 중…</div>`;
+    const data = await api("/review");
+    const cases = data.cases || {};
+    const topics = (data.topics || []).map((t) => ({ ...t, key: String(t.id) }));
+    if ((data.unassigned || []).length) topics.push({ key: "unassigned", name: "미분류", summary: "주제에 넣지 않은 스레드", case_ids: data.unassigned, git: [] });
+    if (!topics.length) { view.innerHTML = `<div class="card in"><div class="empty">아직 주제가 없다. 에이전트가 assign_topic(name, case_ids) 으로 만들거나 POST /app/topic.</div></div>`; return; }
+    const cur = topics.find((t) => t.key === sel) || topics[0];
+    const mergeTargets = cur.key === "unassigned" ? [] : topics.filter((t) => t.key !== "unassigned" && t.key !== cur.key);   // 확장 47호
+    let events = [];
+    for (const cid of cur.case_ids) for (const e of ((cases[cid] || {}).events || [])) events.push(e);
+    for (const g of (cur.git || [])) events.push(g);
+    const off = new Set(reviewPrefs.off);
+    events = events.filter((e) => !off.has(e.kind));
+    events.sort((a, b) => a.at - b.at || (a.id || 0) - (b.id || 0));
+    events = foldEvidence(events);
+    const days = new Map();
+    for (const e of events) { const k = dayKey(e.at); if (!days.has(k)) days.set(k, []); days.get(k).push(e); }
+    let keys = [...days.keys()].sort(); if (reviewPrefs.newestFirst) keys.reverse();
+    const threads = cur.case_ids.map((id) => cases[id]).filter(Boolean).sort((a, b) => (a.state !== b.state ? (a.state === "open" ? -1 : 1) : a.case_id - b.case_id));
+    const openNow = threads.filter((t) => t.state === "open"), closedNow = threads.filter((t) => t.state !== "open");
+    const chip = (t) => `<a class="${t.state}" href="#/threads/${t.case_id}" title="${esc(t.title)}">#${t.case_id} ${esc(headline(t.title).head.slice(0, 28))}${t.state === "closed" ? " ✓" : ""}</a>`;
+    const first = events.length ? dayKey(events[0].at) : null, last = events.length ? dayKey(events[events.length - 1].at) : null;
+    const counts = { commit: 0, decision: 0, note: 0 };
+    for (const e of events) if (e.kind in counts) counts[e.kind] += 1;
+
+    // 확장 51호 — 회고 머리(Claude Design 시안 D14375): 주제는 왼쪽 레일(현황과 같은 .side), 오른쪽은
+    //   제목 → 카드[설명·결론·스레드 수 | 지금(열린 스레드)·닫힘 띠 | 정리] → 필터 → 타임라인. 제목 옆에 숫자는 없다(통계 줄이 있다).
+    const rl = (t) => `<a class="sf ${t.key === cur.key ? "on" : ""} ${t.phase === "done" ? "dim" : ""}" href="#/review/${t.key}" title="${t.phase ? tr(TOPIC_KO[t.phase]) : ""}"><span>${esc(t.name)}${t.phase === "done" ? " ✓" : ""}</span><span class="n">${t.case_ids.length}</span></a>`;
+    const live = topics.filter((t) => t.phase !== "done"), done = topics.filter((t) => t.phase === "done");
+    // "지금" = 현황 행 그대로(threadRow) — 모양이 같아야 같은 것으로 읽힌다 (Claude Design 2c)
+    const lastOf = (t) => (t.events || []).length ? t.events[t.events.length - 1].at : t.created_at;
+    const nowRows = openNow.length
+      ? openNow.map((t) => threadRow({ ...t, bound_worktrees: [], updated_at: lastOf(t), phase: t.phase || "unset" }, { repo: t.repo ? shortRepo(t.repo).split("/").pop() : "" })).join("")
+      : `<div class="li" style="cursor:default;"><span></span><div class="muted">${tr(cur.key === "unassigned" ? "열린 스레드 없음." : "완료. 새 스레드가 열리면 다시 진행.")}</div></div>`;
+    let html = `<div class="in"><div class="layout">
+      <div class="side">
+        <div class="grp"><div class="label">${tr("주제")}</div>${live.map(rl).join("")}</div>
+        ${done.length ? `<div class="grp"><div class="label">${tr("완료된 주제")}</div>${done.map(rl).join("")}</div>` : ""}
+      </div>
+      <div class="rv-timeline">
+      <div style="display:flex;align-items:baseline;gap:14px;">${railBtnHtml("주제")}<h1>${esc(cur.name)}</h1></div>
+      <div id="rvCard"><div class="tcard">
+        <div class="cols ${openNow.length ? "" : "one"}">
+          <div class="lcol">
+            ${cur.summary ? `<div class="summary">${esc(cur.summary)}</div>` : ""}
+            ${cur.conclusion ? (() => {   // 확장 52호 — 결론도 첫 줄이 제목이다. 붙여 놓으면 한 문단으로 읽힌다
+              const c = String(cur.conclusion).trim(), nl = c.indexOf("\n");
+              const head = nl > 0 ? c.slice(0, nl).trim() : c, body = nl > 0 ? c.slice(nl).trim() : "";
+              return `<div class="concl"><b>${tr("결론")}</b> <span class="chead">${esc(head)}</span>${cur.concluded_at ? ` <span class="mono dim" style="font-size:10.5px;">${fmtRel(cur.concluded_at)}</span>` : ""}${body ? `<div class="cbody">${esc(body)}</div>` : ""}</div>`;
+            })() : ""}
+            <div class="tmetaline">${tr("스레드")} ${threads.length} · <span class="on">${tr("열림")} ${openNow.length}</span> · ${tr("닫힘")} ${closedNow.length}</div>
+          </div>
+          ${openNow.length ? `<div class="rcol"><div class="nlabel">${tr("지금")} <span class="n">· ${tr("열린 스레드")} ${openNow.length}</span></div>${nowRows}</div>` : ""}
+          ${closedNow.length ? `<div class="closedbox"><div class="threads-h">${tr("닫힘")} <span class="n">${closedNow.length}</span><button class="more" id="moreClosed" hidden></button></div><div class="threads closedstrip ${rvClosedOpen.has(cur.key) ? "all" : ""}" id="closedStrip">${closedNow.map(chip).join("")}</div></div>` : ""}
+        </div>
+        ${mergeTargets.length ? `<details class="topic-tools"><summary>${tr("주제 관리")}</summary><div class="tidy">${tr("이 주제를")} <select id="mergeInto">${mergeTargets.map((t) => `<option value="${t.key}">${esc(t.name)} (${t.case_ids.length})</option>`).join("")}</select><button class="btn" id="mergeBtn">${tr("에 합치기")}</button><span class="dim">${LANG === "en" ? `${cur.case_ids.length} threads move over and this topic disappears. The records stay.` : `스레드 ${cur.case_ids.length}개가 옮겨 가고 이 주제는 사라진다. 기록은 그대로다.`}</span></div></details>` : ""}
+      </div></div>`;
+    const MAIN_KINDS = ["decision", "constraint", "opened", "closed", "asked", "note"], restKinds = ALL_KINDS.filter((k) => MAIN_KINDS.indexOf(k) < 0);
+    const shown = rvMore ? ALL_KINDS : MAIN_KINDS;
+    html += `<div class="filters"><span class="lbl">${tr("종류")}</span>
+      ${shown.map((k) => `<button class="kchip f ${off.has(k) ? "off" : "plain"}" data-kind="${k}">${tr(KIND_KO[k])}</button>`).join("")}
+      <button class="kchip f plain" id="moreKinds">${rvMore ? tr("접기") : (LANG === "en" ? "+" + restKinds.length + " more" : "더 " + restKinds.length)}</button>
+      <span class="spacer"></span>
+      <button class="fbtn" id="densityBtn">${reviewPrefs.dense ? `<b>${tr("촘촘")}</b>` : tr("촘촘")}<span class="sl">/</span>${reviewPrefs.dense ? tr("넉넉") : `<b>${tr("넉넉")}</b>`}</button>
+      <button class="fbtn" id="orderBtn">${reviewPrefs.newestFirst ? tr("오래된 순") : `<b>${tr("오래된 순")}</b>`}<span class="sl">/</span>${reviewPrefs.newestFirst ? `<b>${tr("최신 순")}</b>` : tr("최신 순")}</button></div>
+      <div class="stats">${tr("사건")} ${events.length} · ${first || "—"} → ${last || "—"} · ${tr("커밋")} ${counts.commit} · ${tr("결정")} ${counts.decision} · ${tr("노트")} ${counts.note}</div>`;
+    // 확장 69호 — 날짜 밀도 레일(#515): 하루가 캡슐 하나, 길이 = 그날 기록 수, 결정이 있으면 호박. 누르면 그 날로 가서 펼친다.
+    const dayMax = Math.max(1, ...keys.map((k) => days.get(k).length));
+    // 하루 캡슐은 그날의 구성이다 — 종류별 색 조각이 쌓인다(방향 호박 · 바꿈 파랑 · 확인 초록 · 발견 보라 · 생각 회색 · 커밋 민트). 길이 = 기록 수.
+    // 현황의 NOW(사건 하나 = 캡슐 하나)와 다른 어휘: 회고는 하루가 단위다. 올리면 그날 요약, 누르면 그 날로.
+    const SEG = [["dir", (e) => ["decision", "constraint", "ruled_out", "closed", "opened", "asked"].includes(e.kind), "방향"], ["n-change", (e) => e.kind === "note" && e.note_kind === "change", "바꿈"],
+                 ["n-verified", (e) => e.kind === "note" && e.note_kind === "verified", "확인"], ["n-finding", (e) => e.kind === "note" && e.note_kind === "finding", "발견"],
+                 ["n-thought", (e) => e.kind === "note" && e.note_kind === "thought", "생각"], ["n-old", (e) => e.kind === "note" && !e.note_kind, "노트"], ["commit", (e) => e.kind === "commit", "커밋"]];
+    // H안(시안 51a2beef): 기둥이 폭 전체에 고르게 선다. 최근 28일까지만 — 그 너머는 좌우로 넘긴다(기둥이 가늘어지지 않게).
+    const todayK = dayKey(Date.now()), rail = [...keys].sort();   // 레일은 늘 왼쪽이 과거, 오른쪽이 최근
+    html += `<div class="drail" data-n="${rail.length}"><div class="drail-in">${rail.map((k) => { const l = days.get(k), d = new Date(l[0].at), we = d.getDay() === 0 || d.getDay() === 6;
+      const parts = SEG.map(([c, f, ko]) => [c, l.filter(f).length, ko]).filter(([, n]) => n), rest = l.length - parts.reduce((a, [, n]) => a + n, 0);
+      const h = 14 + Math.round(l.length / dayMax * 30), open = rvDayOpen.has(k) || (!rvDayShut.has(k) && k === keys[0]);
+      const tIds = new Set(l.map((e) => e.case_id).filter(Boolean));
+      const segs = parts.map(([c, n]) => `<i class="sg ${c}" style="flex:${n}"></i>`).join("") + (rest > 0 ? `<i class="sg" style="flex:${rest}"></i>` : "");
+      const sum = `${dayHead(d)} · ${tr("기록")} ${l.length} · ${tr("스레드")} ${tIds.size}\n` + parts.map(([, n, ko]) => `${tr(ko)} ${n}`).join(" · ");
+      return `<button class="dcap ${open ? "on" : ""} ${we ? "we" : ""} ${k === todayK ? "today" : ""}" data-day="${k}" data-sum="${esc(sum)}"><span class="cap" style="height:${h}px">${segs}</span><span class="dl">${d.getDate()}</span>${d.getDate() === 1 || k === rail[0] ? `<span class="ml">${monthMark(d)}</span>` : ""}</button>`; }).join("")}<span class="base"></span></div><div class="bub" id="drBub"></div></div>`;
+    for (const k of keys) {
+      const list = days.get(k); const d = new Date(list[0].at);
+      const c = { commit: 0, decision: 0, note: 0, asked: 0 }; for (const e of list) if (e.kind in c) c[e.kind] += 1;
+      const cnt = Object.entries(c).filter(([, v]) => v).map(([kk, v]) => `${tr(KIND_KO[kk])} ${v}`).join(" · ");
+      // 확장 69호 — 접힌 하루: 맨 위 날짜(최신 순이면 오늘)만 펼치고 나머지는 한 줄(날짜 · 수 · 스레드 제목 셋). 머리를 누르면 펼친다.
+      const dayOpen = rvDayOpen.has(k) || (!rvDayShut.has(k) && k === keys[0]);
+      if (!dayOpen) {
+        const tIds = [...new Set(list.map((e) => e.case_id).filter(Boolean))], tNames = tIds.slice(0, 3).map((id) => cases[id] ? `<span class="tn"><span class="id">#${id}</span> ${esc(headline(cases[id].title).head.slice(0, 26))}</span>` : "").filter(Boolean).join("");
+        html += `<div class="day shut" id="day-${k}"><div class="dh" data-day="${k}"><span class="chev">›</span><b>${dayLabel(d)}</b><span class="wd">${wdLabel(d, true)}</span><span class="cnt">${cnt || tr("기록") + " " + list.length}${tIds.length ? " · " + tr("스레드") + " " + tIds.length : ""}</span><span class="tns">${tNames}${tIds.length > 3 ? `<span class="tn dim">${LANG === "en" ? `+${tIds.length - 3}` : `외 ${tIds.length - 3}`}</span>` : ""}</span></div></div>`;
+        continue;
+      }
+      const prim = list.filter((e) => PRIMARY.has(e.kind)), sec = list.filter((e) => !PRIMARY.has(e.kind));
+      const folded = sec.length > FOLD_AFTER, isOpen = rvOpenDays.has(k);
+      const src = folded && !isOpen ? prim : list;
+      // 확장 50호 — 날짜 안에서 스레드로 묶는다: 그날 처음 손댄 순서, 머리에 제목 · 열었다/닫았다 · 그날 한 일 개수.
+      //   사용자 2026-09-10: "결정/제약이 줄글로 좌악 늘어져 있으니 어떤 주제에 대해 작업한 건지 모르겠다"
+      const groups = new Map();
+      src.forEach((e, i) => { const g = e.case_id || "git"; if (!groups.has(g)) groups.set(g, []); groups.get(g).push([e, i]); });
+      let body = [...groups].map(([g, rows]) => {
+        const c = g === "git" ? null : cases[g];
+        const kc = {}; for (const [e] of rows) if (e.kind !== "opened" && e.kind !== "closed") kc[e.kind] = (kc[e.kind] || 0) + (e.n || 1);   // 열림·닫힘은 표시(열었다/닫았다)로 이미 말한다
+        const n = Object.entries(kc).map(([kk, v]) => `${tr(KIND_KO[kk] || kk)} ${v}`).join(" · ");
+        const has = (f) => rows.some(([e]) => f(e));
+        const marks = [has((e) => e.kind === "opened" && e.text !== "reopened") ? "열었다" : "", has((e) => e.kind === "opened" && e.text === "reopened") ? "다시 열었다" : "",
+                       has((e) => e.kind === "closed" && !e.later) ? "닫았다" : ""].filter(Boolean).join(" · ");
+        const head = c ? `<a class="id" href="#/threads/${g}">#${g}</a><span class="tt">${esc(headline(c.title).head)}</span>`
+                       : `<span class="id">git</span><span class="tt">저장소 커밋 — 스레드에 붙지 않은 것</span>`;
+        return `<div class="tgroup"><div class="tg">${head}${marks ? `<span class="mk">· ${marks}</span>` : ""}${n ? `<span class="n">${n}</span>` : ""}</div>${
+          rows.map(([e, i]) => rvRow(e, cases, `${k}-${e.kind}-${e.id || e.evidence_id || e.head || e.at}-${i}`)).join("")}</div>`;
+      }).join("");
+      if (folded) {
+        const sc = {}; for (const e of sec) sc[e.kind] = (sc[e.kind] || 0) + (e.n || 1);
+        // 묶음 문장에 내용 한 조각 — 커밋은 첫·마지막 제목(확장 N호 가 있으면 그것만)을 붙여 펼치지 않아도 그날이 읽히게
+        const tag = (m) => { const x = String(m || "").match(/확장\s*\d+호/); return x ? x[0] : headline(m).head.slice(0, 18) + (String(m || "").length > 18 ? "…" : ""); };
+        const cm = sec.filter((e) => e.kind === "commit");
+        const span = cm.length ? (cm.length === 1 ? ` (${tag(cm[0].text)})` : ` (${tag(cm[0].text)} → ${tag(cm[cm.length - 1].text)})`) : "";
+        const digest = Object.entries(sc).map(([kk, v]) => `${tr(KIND_KO[kk])} ${v}${kk === "commit" ? span : ""}`).join(" · ");
+        if (!isOpen && !prim.length) body += `<div class="noprim">결정·질문 없음</div>`;
+        body += `<div class="fold ${isOpen ? "open" : ""}" data-day="${k}"><span class="chev">›</span><span>${isOpen ? "모두 보는 중" : digest + " 더"}</span><span class="act">— ${isOpen ? "접기" : "모두 보기"}</span></div>`;
+      }
+      html += `<div class="day" id="day-${k}"><div class="dh" data-day="${k}"><span class="chev open">›</span><b>${dayLabel(d)}</b><span class="wd">${wdLabel(d, reviewPrefs.dense)}</span><span class="cnt">${cnt}</span></div>${body}</div>`;
+    }
+    if (!keys.length) html += `<div class="card" style="margin-top:20px;"><div class="empty">보일 사건이 없다</div></div>`;
+    view.innerHTML = html + `</div></div></div>`;   // 본문 · .layout · .in
+    bindRail();
+    view.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => { location.hash = "#/review/" + b.dataset.key; }));
+    const mb = $("mergeBtn"); if (mb) mb.addEventListener("click", async () => {
+      const into = $("mergeInto").value, tgt = mergeTargets.find((t) => t.key === into);
+      if (!tgt || !confirm(`"${cur.name}" 을(를) "${tgt.name}" 에 합친다.\n스레드 ${cur.case_ids.length}개가 옮겨 가고 "${cur.name}" 은(는) 사라진다. 스레드의 기록은 그대로다.`)) return;
+      mb.disabled = true;
+      try { await post("/topic", { topic_id: Number(cur.key), merge_into: Number(into) }); findCache = null; listDirty = true; if (location.hash === "#/review/" + into) render(); else location.hash = "#/review/" + into; }
+      catch (e) { mb.disabled = false; alert("합치지 못했다: " + e.message); }
+    });
+    view.querySelectorAll(".f[data-kind]").forEach((b) => b.addEventListener("click", () => {
+      const kk = b.dataset.kind; const i = reviewPrefs.off.indexOf(kk); if (i >= 0) reviewPrefs.off.splice(i, 1); else reviewPrefs.off.push(kk); savePrefs(); listDirty = true; render();
+    }));
+    $("orderBtn").addEventListener("click", () => { reviewPrefs.newestFirst = !reviewPrefs.newestFirst; savePrefs(); listDirty = true; render(); });
+    // 확장 49호 — 닫힘 띠가 두 줄을 넘치면 "더보기 N"; 누르면 그 주제는 전부 펼친 채로 둔다
+    const cs = $("closedStrip"), mc = $("moreClosed");
+    if (cs && mc) {
+      const fit = () => { if (!cs.isConnected || !cs.getClientRects().length) return;
+        if (cs.classList.contains("all")) { cs.style.maxHeight = ""; mc.hidden = false; mc.textContent = "접기"; return; }
+        cs.style.maxHeight = "54px";
+        const bottom = cs.getBoundingClientRect().bottom;   // offsetTop 은 띠가 아니라 페이지 기준이라 못 쓴다
+        const hidden = [...cs.children].filter((a) => a.getBoundingClientRect().top >= bottom - 1).length;
+        mc.hidden = !hidden; mc.textContent = moreN(hidden); };
+      fit();
+      // 카드를 옆 칸으로 옮기거나 화면 폭이 바뀌면, 실제로 숨겨진 개수를 다시 센다.
+      rvClosedObserver = new ResizeObserver(fit); rvClosedObserver.observe(cs);
+      mc.addEventListener("click", () => { cs.classList.toggle("all"); cs.classList.contains("all") ? rvClosedOpen.add(cur.key) : rvClosedOpen.delete(cur.key); fit(); });
+    }
+    $("moreKinds").addEventListener("click", () => { rvMore = !rvMore; listDirty = true; render(); });
+    $("densityBtn").addEventListener("click", () => { reviewPrefs.dense = !reviewPrefs.dense; savePrefs(); listDirty = true; render(); });
+    view.querySelectorAll(".ev.more").forEach((row) => { const t = () => { const kk = row.dataset.key; if (rvExpanded.has(kk)) rvExpanded.delete(kk); else rvExpanded.add(kk); row.classList.toggle("open"); };
+      row.querySelector(".hd").addEventListener("click", t); row.querySelector(".chev").addEventListener("click", t); });
+    view.querySelectorAll(".now .li[data-id], .tcard .li[data-id]").forEach((el) => el.addEventListener("click", () => { goThread(parseInt(el.dataset.id, 10)); }));
+    view.querySelectorAll(".fold").forEach((f) => f.addEventListener("click", () => { const kk = f.dataset.day; if (rvOpenDays.has(kk)) rvOpenDays.delete(kk); else rvOpenDays.add(kk); listDirty = true; render(); }));
+    const toggleDay = (kk, open) => { if (open) { rvDayOpen.add(kk); rvDayShut.delete(kk); } else { rvDayShut.add(kk); rvDayOpen.delete(kk); } };
+    view.querySelectorAll(".dh[data-day]").forEach((h) => h.addEventListener("click", (ev) => { if (ev.target.closest("a")) return; const kk = h.dataset.day; const open = rvDayOpen.has(kk) || (!rvDayShut.has(kk) && kk === keys[0]); toggleDay(kk, !open); listDirty = true; render(); }));
+    { const dr = view.querySelector(".drail"); if (dr) dr.scrollLeft = dr.scrollWidth; }   // 넘치면 오른쪽 끝(최근)이 보이게
+    const drb = $("drBub"); if (drb) view.querySelectorAll(".drail .dcap").forEach((b) => {
+      b.addEventListener("mouseenter", () => { const [h, t] = b.dataset.sum.split("\n"); drb.innerHTML = `<b>${h}</b>${t ? `<div class="m">${t}</div>` : ""}`; drb.style.display = "block";
+        const r = b.getBoundingClientRect(), bw = drb.offsetWidth; drb.style.left = Math.max(8, Math.min(r.left + r.width / 2 - bw / 2, window.innerWidth - bw - 8)) + "px"; drb.style.top = (r.top - drb.offsetHeight - 8) + "px"; });
+      b.addEventListener("mouseleave", () => { drb.style.display = "none"; });
+    });
+    view.querySelectorAll(".drail .dcap").forEach((b) => b.addEventListener("click", async () => { const kk = b.dataset.day; toggleDay(kk, true); listDirty = true; await render(); const el = document.getElementById("day-" + kk); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }));
+  }
+
+
+  // ── 찾기 (확장 42호) — 회고가 이미 브라우저에 싣는 사건에서 거른다. 서버 변경 없음(C13551).
+  //    결정·제약·노트·선언은 전문이 오므로 문장으로도 번호로도 찾힌다. 증거는 121자 머리까지만이다 — 정직하게 말한다.
+  let findCache = null;                       // 화면이 살아 있는 동안만. 새로고침하면 다시 받는다.
+  let findFirst = false;                      // 확장 54호 — 처음 쓴 순: 낯선 말이 어디서 처음 나왔나
+  const FIND_PREFIX = { D: "decision", C: "constraint", R: "ruled_out", E: "evidence" };
+
+  function findMatcher(q) {
+    const raw = q.trim();
+    if (!raw) return null;
+    const m = raw.match(/^([DCREdcre])?#?(\d+)$/);          // D10258 · C11232 · #452 · 1801
+    const num = m ? parseInt(m[2], 10) : null;
+    const kindOfNum = m && m[1] ? FIND_PREFIX[m[1].toUpperCase()] : null;
+    const needle = raw.toLowerCase();
+    return (e) => {
+      if (num !== null) {
+        if (e.id === num && (!kindOfNum || e.kind === kindOfNum)) return "번호";
+        if (!kindOfNum && (e.case_id === num || e.evidence_id === num)) return "번호";
+      }
+      for (const f of ["text", "reason", "observed", "result", "focus"]) {
+        const v = e[f];
+        if (typeof v === "string" && v.toLowerCase().indexOf(needle) >= 0) return f;
+      }
+      return null;
+    };
+  }
+
+  const mark = (text, q) => {
+    const t = String(text || ""), i = t.toLowerCase().indexOf(q.trim().toLowerCase());
+    if (!q.trim() || i < 0) return esc(headline(t).head);
+    const from = Math.max(0, i - 40), head = (from ? "… " : "") + t.slice(from, i);
+    return esc(head) + `<mark>${esc(t.slice(i, i + q.trim().length))}</mark>` + esc(t.slice(i + q.trim().length, i + q.trim().length + 90)) + (t.length > i + q.trim().length + 90 ? " …" : "");
+  };
+
+  // ── 가입 신청 (확장 108호, D15414) ─────────────────────────────────────────
+  // 사람은 /join 에서 구글로 로그인해 줄을 선다. 운영자는 여기서 고른다 — 전에는 서버에 들어가
+  // `allow EMAIL` 을 손으로 쳐야 했고, 그러면 테스터를 받을 때마다 SSM 을 여는 셈이라 모집이 안 된다.
+  // 화면에 자리를 숨기는 것으로 막지 않는다: 서버가 이 길을 운영자 범위로 닫아 둔다(operator_only).
+  async function joinView() {
+    view.classList.remove("thread", "status", "review", "dense"); view.classList.add("find");
+    $("crumb").hidden = false; $("crumbText").textContent = tr("가입 신청"); $("crumbChip").textContent = tr("기다리는 사람"); $("crumbChip").className = "chip";
+    const box = (body) => `<div class="in">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:14px;"><h1>${tr("가입 신청")}</h1>
+        <span style="font-size:12.5px;color:#67707b;">${tr("구글로 로그인해 줄을 선 사람들. 승인하면 설치 한 줄을 받는다.")}</span></div>
+      ${body}</div>`;
+    view.innerHTML = box(`<div class="cnt">${tr("불러오는 중")}…</div>`);
+    let q;
+    try { q = await api("/join"); }
+    catch (e) { view.innerHTML = box(`<div class="conflict">${esc(e.message)}</div>`); return; }
+
+    const paint = (rows, cap) => {
+      joinBadge(rows.length, true);
+      view.innerHTML = box(!rows.length
+        ? `<div class="cnt">${tr("기다리는 신청이 없다.")}</div>`
+        : rows.map((r) => `<div class="joinrow" data-uid="${r.user_id}">
+             <div class="who"><span class="em">${esc(r.email)}</span>${r.name ? `<span class="nm">${esc(r.name)}</span>` : ""}
+               <div class="muted" style="font-size:12px;">${fmtRel(r.asked_at)}</div></div>
+             <button class="btn" data-act="allow">${tr("승인")}</button>
+             <button class="btn" data-act="block">${tr("거절")}</button>
+           </div>`).join("") + `<div class="legend" style="margin-top:10px;"><span>${tr("줄 상한")} ${cap}</span><span>${tr("거절해도 나중에 다시 승인할 수 있다.")}</span></div>`);
+      view.querySelectorAll(".joinrow button").forEach((b) => b.addEventListener("click", async () => {
+        const row = b.closest(".joinrow");
+        row.querySelectorAll("button").forEach((x) => { x.disabled = true; });
+        try { const out = await post("/join", { user_id: Number(row.dataset.uid), action: b.dataset.act }); paint(out.pending, out.cap); }
+        catch (e) { row.querySelectorAll("button").forEach((x) => { x.disabled = false; }); alert(e.message); }
+      }));
+    };
+    paint(q.pending, q.cap);
+  }
+
+  // 상단바의 자리와 숫자. 운영자가 아니면 길이 403 이라 자리가 뜨지 않는다.
+  // 혼자 쓰는 로컬 창(허용 검사 없음)에는 승인할 사람이라는 것이 없다 — 빈 메뉴를 내지 않는다.
+  // 서버가 검사를 켰거나 줄에 누가 있으면 낸다.
+  function joinBadge(n, enforced) {
+    const a = $("navJoin"); if (!a) return;
+    a.hidden = !(enforced || n);
+    $("navJoinN").textContent = n ? String(n) : "";
+  }
+  async function joinProbe() {
+    if (SNAP || !token()) return;
+    try { const q = await api("/join"); joinBadge(q.pending.length, q.enforced); } catch (e) {}   // 테스터면 403 — 자리를 그대로 숨겨 둔다
+  }
+
+  async function findView(q) {
+    view.classList.remove("thread", "status", "review", "dense"); view.classList.add("find");
+    $("crumb").hidden = false; $("crumbText").textContent = tr("찾기"); $("crumbChip").textContent = tr("전체 기록"); $("crumbChip").className = "chip";
+
+    const box = (body) => `<div class="in">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:14px;"><h1>${tr("찾기")}</h1>
+        <span style="font-size:12.5px;color:#67707b;">${tr("번호로도, 문장으로도. 누르면 그 스레드로 간다.")}</span></div>
+      <input class="q" id="findQ" placeholder="${tr("D10258 · #452 · 또는 문장 일부")}" value="${esc(q || "")}" autocomplete="off" spellcheck="false">
+      <div class="hint">${tr("번호는")} ${numTag("D", "결정")} · ${numTag("C", "제약")} · ${numTag("R", "배제")} · ${numTag("#", "스레드")}. ${tr("증거 원문은 앞 121자까지만 찾힌다.")}</div>
+      ${body}</div>`;
+
+    if (!findCache) {
+      view.innerHTML = box(`<div class="cnt">${tr("기록을 불러오는 중")}…</div>`);
+      wireFind(q);
+      const data = await api("/review");
+      const cases = data.cases || {};
+      const rows = [];
+      for (const cid of Object.keys(cases)) {
+        const c = cases[cid];
+        for (const e of (c.events || [])) rows.push({ ...e, case_id: Number(cid), case_title: c.title, case_state: c.state });
+      }
+      rows.sort((a, b) => b.at - a.at);
+      findCache = rows;
+    }
+
+    const match = findMatcher(q);
+    if (!match) { view.innerHTML = box(`<div class="cnt">${readyN(findCache.length)}</div>`); return wireFind(q); }
+
+    const hits = [];
+    for (const e of findCache) { const why = match(e); if (why) hits.push({ e, why }); if (hits.length >= 200) break; }
+    // 번호로 찾으면 그 번호를 가진 기록이 먼저다 — 그 번호를 언급한 노트가 더 최근이라고 위로 오면 안 된다.
+    hits.sort((a, b) => (b.why === "번호") - (a.why === "번호"));
+    if (findFirst) hits.sort((a, b) => a.e.at - b.e.at);   // 확장 54호 — 처음 쓴 것이 맨 위: 이름의 뜻은 대개 처음 꺼낸 자리에 있다
+    const qn = (q || "").trim().toLowerCase();
+    hits.sort((a, b) => ((b.e.kind === "term" && (b.e.term || "").toLowerCase() === qn) - (a.e.kind === "term" && (a.e.term || "").toLowerCase() === qn)));   // 55호 — 그 말의 뜻이 있으면 맨 위
+    const firstIdx = hits.findIndex(({ e }) => !(e.kind === "term" && (e.term || "").toLowerCase() === qn));
+    const orderBtn = `<button class="fbtn" id="findOrder" style="margin-left:10px;">${tr(findFirst ? "최근 순으로" : "처음 쓴 순으로")}</button>`;
+    const body = hits.length
+      ? `<div class="cnt">${hitsN(hits.length, hits.length >= 200 ? "+" : "")} · ${tr(findFirst ? "처음 쓴 순 — 맨 위가 처음 나온 곳" : "최근 순")}${orderBtn}</div>` + hits.map(({ e, why }, i) => {
+          const idTag = e.kind === "decision" ? "D" + e.id : e.kind === "constraint" ? "C" + e.id
+                      : e.kind === "ruled_out" ? "R" + e.id : e.evidence_id ? tr("증거") + " #" + e.evidence_id : "";
+          const isDef = e.kind === "term" && (e.term || "").toLowerCase() === qn;
+          const meta = [isDef ? `<span class="def">${tr("뜻")}</span>` : "", findFirst && i === firstIdx ? `<span class="first">${tr("처음 나온 곳")}</span>` : "", `<span class="id">#${e.case_id}</span>`, esc(headline(e.case_title || "").head.slice(0, 40)),
+                        idTag, supTag(e),
+                        e.client ? clientName(e.client) : "", why === "reason" ? tr("이유에서 찾음") : why === "observed" ? tr("관찰에서 찾음") : ""].filter(Boolean).join(" · ");
+          const to = e.kind === "decision" ? `#/threads/${e.case_id}?item=D${e.id}` : e.kind === "constraint" ? `#/threads/${e.case_id}?item=C${e.id}`
+                   : e.kind === "ruled_out" ? `#/threads/${e.case_id}?item=R${e.id}` : (e.kind === "focus" || e.kind === "open" || e.kind === "next") ? `#/threads/${e.case_id}?item=${e.kind}`
+                   : e.evidence_id ? `#/threads/${e.case_id}/evidence?ev=${e.evidence_id}` : `#/threads/${e.case_id}`;   // 확장 55호 — 그 기록으로
+          return `<div class="hit ${e.superseded_by ? "replaced" : ""}" data-id="${e.case_id}" data-to="${to}">
+            <span class="kw kc kdot kc-${evCls(e)}">${kindLabel(e)}</span>
+            <div style="min-width:0;"><div class="tx">${mark(e[why] !== undefined && why !== "번호" ? e[why] : e.text, why === "번호" ? "" : q)}</div><div class="m">${meta}</div></div>
+            <span class="at" title="${fmtAbs(e.at)}">${fmtRel(e.at)}</span></div>`;
+        }).join("")
+      : `<div class="cnt">${noneOfN(findCache.length)}</div>`;
+    view.innerHTML = box(body);
+    view.querySelectorAll(".hit[data-id]").forEach((el) => el.addEventListener("click", () => { location.hash = el.dataset.to || ("#/threads/" + el.dataset.id); }));
+    const ob = $("findOrder"); if (ob) ob.addEventListener("click", () => { findFirst = !findFirst; render(); });
+    wireFind(q);
+  }
+
+  // 확장 55호 — 등록된 말에 점선 밑줄(제목·본문의 글 노드만, 긴 것부터). 뜻은 title 로.
+  // 짐작한 말(사용자 2026-09-11 "드래그가 최선인가?"): 뜻이 없어 문제가 되는 이름은 거의 번호 이름(N회차·N층·N단계·확장 N호)과
+  // 코드 이름(camelCase·snake_case)이었다(#502 측정). 그런 말은 등록이 없어도 옅은 점선으로 눌리게 둔다 — 잘못 잡아도 검색 한 번이다.
+  const GUESS = "확장\\s?\\d+호|\\d+(?:-\\d+)?회차|\\d+층(?:\\s?조리법)?|\\d+단계|\\d+판|\\b[a-z]{2,}[A-Z][A-Za-z]{2,}\\b|\\b[a-z]{2,}_[a-z_]{2,}\\b";
+  function markTerms(root, terms) {
+    if (!root) return;
+    const byLen = [...terms].sort((a, b) => b.term.length - a.term.length);
+    const parts = byLen.map((t) => t.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).concat([GUESS]);
+    const rx = new RegExp(parts.join("|"), "g");
+    const meaning = Object.fromEntries(byLen.map((t) => [t.term, t.meaning]));
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => n.parentElement.closest(".hd, .full, .why, .tx") && !n.parentElement.closest("abbr.term") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
+    const nodes = []; let n; while ((n = walker.nextNode())) if (rx.test(n.textContent)) nodes.push(n);
+    for (const tn of nodes) {
+      const frag = document.createDocumentFragment(); let last = 0; const txt = tn.textContent; rx.lastIndex = 0; let m;
+      while ((m = rx.exec(txt))) { frag.appendChild(document.createTextNode(txt.slice(last, m.index))); const ab = document.createElement("abbr"); const known = m[0] in meaning;
+        ab.className = known ? "term" : "term guess"; ab.title = known ? meaning[m[0]] + "\n\n누르면 뜻과 처음 나온 곳으로" : "누르면 이 말이 처음 나온 곳으로"; ab.textContent = m[0];
+        ab.addEventListener("click", (ev) => { ev.preventDefault(); ev.stopPropagation(); findFirst = true; location.hash = "#/find/" + encodeURIComponent(ab.textContent); });   // 사용자 2026-09-11: "밑줄 누르면 링크를 타고 그 설명으로"
+        frag.appendChild(ab); last = m.index + m[0].length; }
+      frag.appendChild(document.createTextNode(txt.slice(last))); tn.parentNode.replaceChild(frag, tn);
+    }
+  }
+
+  // 확장 54호 — 낯선 말을 고르면 처음 나온 자리로 (#502 의 C). 정의를 만들지 않는다: 검색은 회수이지 결론이 아니다.
+  //   기록의 지은 이름 492개 중 72% 는 한 번 쓰고 사라지고, 반복되는 열댓 개는 한 줄기에 몰려 있다(2026-09-11 측정).
+  let selChip = null;
+  const hideChip = () => { if (selChip) { selChip.remove(); selChip = null; } };
+  document.addEventListener("mouseup", (ev) => {
+    if (ev.target.closest && ev.target.closest(".selchip")) return;
+    hideChip();
+    const sel = window.getSelection(); const text = sel ? String(sel).trim().replace(/\s+/g, " ") : "";
+    if (!text || text.length < 2 || text.length > 40 || !sel.anchorNode || !view.contains(sel.anchorNode) || view.classList.contains("find")) return;
+    const r = sel.getRangeAt(0).getBoundingClientRect(); if (!r.width && !r.height) return;
+    selChip = document.createElement("button"); selChip.className = "selchip";
+    selChip.textContent = `「${text.length > 24 ? text.slice(0, 22) + "…" : text}」 처음 나온 곳 →`;
+    selChip.style.left = Math.max(8, Math.min(window.innerWidth - 280, r.left)) + "px"; selChip.style.top = Math.max(8, r.top - 36) + "px";
+    selChip.addEventListener("mousedown", (e) => e.preventDefault());     // 선택을 지우지 않는다
+    selChip.addEventListener("click", () => { findFirst = true; hideChip(); location.hash = "#/find/" + encodeURIComponent(text); });
+    document.body.appendChild(selChip);
+  });
+  document.addEventListener("scroll", hideChip, true); window.addEventListener("hashchange", hideChip);
+
+  function wireFind(q) {
+    const el = $("findQ"); if (!el) return;
+    el.focus(); el.setSelectionRange(el.value.length, el.value.length);
+    let t = null;
+    el.addEventListener("input", () => {
+      clearTimeout(t);
+      t = setTimeout(() => { const v = el.value; history.replaceState(null, "", "#/find/" + encodeURIComponent(v)); render(); }, 180);
+    });
+  }
+
+  // 확장 44호 — 과거 기록. Worktrail 이전에 남긴 것을 훑는 곳이다. 현황·회고와 섞지 않는다(D13627).
+  // 여기 있는 것은 사람이 친 말의 원문뿐이고, 결정도 제약도 아니다 — 그때 버린 이야기일 수 있다(C13615).
+  async function priorView(repoId, sessionId) {
+    $("crumb").hidden = true;
+    view.innerHTML = `<div class="muted">불러오는 중…</div>`;
+    const arc = await api("/prior");
+    const ws = arc.workspaces || [], tt = arc.totals || {};
+    if (!ws.length) {
+      view.innerHTML = `<div class="layout in"><div></div><div><h1>과거 기록</h1>
+        <div class="empty" style="margin-top:18px;">아직 없다. 맥에서 <code>casebook-backfill</code> 을 돌리면
+        Worktrail 을 깔기 전에 남긴 말을 여기로 가져온다 — 어느 작업공간을 가져올지는 고르게 한다.</div></div></div>`;
+      return;
+    }
+    const cur = repoId || ws[0].repo_id;
+    const side = `<div class="side">${ws.map((w) => `<div class="sf ${w.repo_id === cur ? "on" : ""}" data-r="${w.repo_id}">
+      <span>${esc(shortWs(w))}</span><span class="n">${w.instructions}</span></div>`).join("")}</div>`;
+    const list = await api("/prior?repo_id=" + cur);
+    const sessions = list.sessions || [];
+    let body;
+    if (sessionId) {
+      const s = await api("/prior/" + sessionId);
+      const rows = s.items || [];
+      body = `<a class="btn" href="#/prior/${cur}">← ${tr("목록")}</a>
+        <div class="stats" style="margin:12px 0;">${esc(s.source)} · ${fmtAbs(s.started_at)} · 말 ${rows.length}개
+          <span class="muted"> · ${esc(s.external_id)}</span></div>
+        <div class="listbox">${rows.map((i) => `<div class="prow">
+          <span class="at">${i.at ? fmtAbs(i.at).slice(5) : "—"}</span>
+          <div class="tx">${esc(i.text)}</div></div>`).join("")
+          || `<div class="prow"><span class="at">—</span><div class="empty">${tr("없다")}</div></div>`}</div>`;
+    } else {
+      // 현황 행과 같은 격자다 — 원 자리(비움) · 본문 · 오른쪽 시각. 스레드가 아니므로 원은 그리지 않는다.
+      body = `<div class="listbox">${sessions.map((s) => `<div class="li" data-s="${s.id}">
+        <span class="dotbox"></span>
+        <div style="min-width:0;"><div class="t">${esc(headline(s.first_instruction || "(빈 세션)").head)}</div>
+          <div class="m">${esc(s.source)} · 말 ${s.instructions}개${s.branch ? " · " + esc(s.branch) : ""}</div></div>
+        <span class="at" title="${s.started_at ? fmtAbs(s.started_at) : ""}">${s.started_at ? fmtRel(s.started_at) : "—"}</span>
+        </div>`).join("") || `<div class="li" style="cursor:default;"><span class="dotbox"></span><div class="empty">${tr("없다")}</div><span></span></div>`}</div>`;
+    }
+    view.innerHTML = `<div class="layout in">${side}<div style="min-width:0;">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:6px;"><h1>과거 기록</h1>
+        <span style="font-size:12.5px;color:#67707b;">작업공간 ${tt.workspaces} · 세션 ${tt.sessions} · 말 ${tt.instructions}개</span></div>
+      <div class="muted" style="margin-bottom:14px;">Worktrail 을 깔기 전에 남긴 말이다. 원문이고, 결정도 제약도 아니다 — 그때 버린 이야기일 수 있다.</div>
+      ${body}</div></div>`;
+    view.querySelectorAll(".side .sf").forEach((el) => el.addEventListener("click", () => { location.hash = "#/prior/" + el.dataset.r; }));
+    view.querySelectorAll(".li[data-s]").forEach((el) => el.addEventListener("click", () => { location.hash = "#/prior/" + cur + "/s" + el.dataset.s; }));
+  }
+
+  function shortWs(w) {
+    const c = w.cwd || w.repo || "?";
+    return c.split("/").filter(Boolean).slice(-2).join("/") || c;
+  }
+
+  // 확장 69호 — 스레드로 가는 길 하나(#515): 현황·회고 안에서는 오른쪽 칸에 뜨고, 그 밖에서는 스레드 화면으로 간다.
+  const goThread = (id, item) => {
+    const r = route();
+    if (r.review !== undefined) { location.hash = `#/review${r.review ? "/" + r.review : ""}?thread=${id}${item ? "&item=" + encodeURIComponent(item) : ""}`; return; }
+    location.hash = `#/threads/${id}${item ? "?item=" + encodeURIComponent(item) : ""}`;
+  };
+  // 확장 66호 — 두 칸 껍데기(#514). 목록은 더러워졌을 때만 다시 그린다(행을 눌러도 목록의 스크롤·필터가 그대로),
+  // 상세는 매번. 스레드·증거 화면 코드는 그대로 — view 를 잠깐 상세 칸으로 돌려 그 자리에 그리게 한다.
+  let lastStatus = null, listDirty = true, listKey = "";
+  const railOff = () => { try { return localStorage.getItem("wt_rail") === "off"; } catch (e) { return false; } };
+  const railBtnHtml = (what) => `<button class="railbtn" id="railBtn" title="${railOff() ? what + " 펼치기" : what + " 접기"}" data-what="${what}">${railOff() ? "›" : "‹"}</button>`;
+  const bindRail = () => { const b = $("railBtn"); if (!b) return; b.addEventListener("click", () => { const off = !railOff(); try { localStorage.setItem("wt_rail", off ? "off" : "on"); } catch (e) {} root.classList.toggle("railoff", off); b.textContent = off ? "›" : "‹"; b.title = off ? b.dataset.what + " 펼치기" : b.dataset.what + " 접기"; }); };
+  const listOff = () => { try { return localStorage.getItem("wt_list") === "off"; } catch (e) { return false; } };
+  const setListOff = (off) => { try { localStorage.setItem("wt_list", off ? "off" : "on"); } catch (e) {} root.classList.toggle("listoff", off); };
+  let rvReadingPosition = null;
+  function captureReviewPosition() {
+    const pane = $("paneList"), timeline = pane && pane.querySelector(".rv-timeline");
+    if (!timeline || !timeline.getClientRects().length) return null;
+    const desktop = matchMedia("(min-width:1181px)").matches;
+    const top = desktop ? pane.getBoundingClientRect().top : 56;
+    const scrolled = desktop ? pane.scrollTop > 0 : window.scrollY > 0;
+    const anchor = scrolled ? [...timeline.querySelectorAll(".tg, .ev, .day.shut")].find((el) => {
+      const rect = el.getBoundingClientRect(); return rect.bottom > top && rect.top < window.innerHeight;
+    }) : null;
+    return { pane, anchor, offset: anchor ? anchor.getBoundingClientRect().top - top : 0, scrollTop: pane.scrollTop, windowY: window.scrollY };
+  }
+  function restoreReviewPosition(pos) {
+    if (!pos || pos.pane !== $("paneList")) return;
+    const timeline = pos.pane.querySelector(".rv-timeline"); if (!timeline || !timeline.getClientRects().length) return;
+    const desktop = matchMedia("(min-width:1181px)").matches;
+    if (pos.anchor && pos.anchor.isConnected) {
+      const top = desktop ? pos.pane.getBoundingClientRect().top : 56;
+      const delta = pos.anchor.getBoundingClientRect().top - top - pos.offset;
+      if (desktop) pos.pane.scrollTop += delta; else window.scrollBy(0, delta);
+    } else if (desktop) pos.pane.scrollTop = pos.scrollTop;
+    else window.scrollTo(0, pos.windowY);
+  }
+  async function shellView(r) {
+    const rv = r.review !== undefined, id = r.thread || r.evidence || r.rthread || null, key = rv ? "review:" + (r.review || "") : "status";
+    const wasDetail = root.classList.contains("has"), sameReview = rv && root.classList.contains("rv") && key === listKey && !listDirty;
+    if (sameReview) rvReadingPosition = captureReviewPosition() || rvReadingPosition;
+    else rvReadingPosition = null;
+    root.className = "wrap two" + (rv ? " rv" : "") + (id ? " has" : "") + (railOff() ? " railoff" : "") + (listOff() ? " listoff" : "");
+    // 글줄 수가 달라져도, 픽셀 스크롤 대신 읽던 행의 위치를 맞춘다.
+    if (rv && matchMedia("(min-width:1181px)").matches) restoreReviewPosition(rvReadingPosition);
+    if (!$("paneList")) { root.innerHTML = `<div class="split"><div class="pane list" id="paneList"></div><div class="pane detail" id="paneDetail"></div></div>`; listDirty = true; }
+    if (listDirty || key !== listKey) {
+      view = $("paneList"); try { $("paneList").className = "pane list"; if (rv) await reviewView(r.review); else await listView(); } finally { view = root; }
+      listDirty = false; listKey = key;
+    }
+    root.querySelectorAll("#paneList .li[data-id]").forEach((el) => el.classList.toggle("sel", String(id) === el.dataset.id));
+    if (rv) root.querySelectorAll("#paneList .ev").forEach((el) => { const a = el.querySelector(".th a"); el.classList.toggle("sel", !!a && a.textContent.trim() === "#" + id); });
+    if (!$("listTab")) {   // 접힌 목록의 세로 탭 — 열림 수만 보인다, 누르면 펼친다
+      const nOpen = lastStatus ? (lastStatus.counts || {}).open || 0 : 0;
+      $("paneList").insertAdjacentHTML("afterbegin", `<div class="listtab" id="listTab" title="${tr("목록 펼치기")}"><span>»</span><span class="vt">${tr("목록")}</span><span class="n">${nOpen}</span></div>`);
+      $("listTab").addEventListener("click", () => setListOff(false));
+    }
+    const lb = $("listBtn"); if (lb) lb.onclick = () => setListOff(true);
+    const det = $("paneDetail"); view = det;
+    // 회고의 주제 카드(요약·지금·닫힘·정리)는 오른쪽 칸의 기본 얼굴이다(사용자 2026-09-12 "첫 화면이 너무 광활"). 스레드를 고르면
+    // 카드는 왼쪽 칸의 숨은 자리(#rvHold)로 물러났다가, 스레드를 놓으면 돌아온다 — DOM 을 옮기므로 손잡이가 산다.
+    const card = document.getElementById("rvCard");
+    if (rv && card && id) { let hold = $("rvHold"); if (!hold) { hold = document.createElement("div"); hold.id = "rvHold"; hold.hidden = true; $("paneList").appendChild(hold); } hold.appendChild(card); }
+    try {
+      if (r.evidence) await evidenceView(r.evidence, r.ev);
+      else if (id) await threadView(id, r.item);
+      else if (rv && card) { det.className = "pane detail rvcard"; det.innerHTML = ""; det.appendChild(card); }
+      else { det.className = "pane detail"; det.innerHTML = streamHtml(lastStatus || {}, false); }
+    } finally { view = root; }
+    $("crumb").hidden = true;
+    if (id) {
+      const t = lastStatus ? [...lastStatus.topics.flatMap((tp) => tp.threads), ...(lastStatus.unassigned || [])].find((x) => x.case_id === id) : null;
+      const backHref = rv ? "#/review" + (r.review ? "/" + r.review : "") : "#/threads";
+      det.insertAdjacentHTML("afterbegin", `<div class="backbar"><a class="btn" href="${backHref}">${rv ? tr("← 회고") : "← " + tr("목록")}</a>${t ? ` <span class="muted" style="margin-left:10px;">${md(t.title)}</span>` : ""}</div>${streamHtml(lastStatus || {}, true)}`);
+
+    }
+    bindStream($("nowList")); bindTl($("nowTl")); if (lastStatus) startStream(lastStatus);
+    streamFresh = new Set();
+    if (rv && matchMedia("(max-width:1180px)").matches) {
+      if (!id) restoreReviewPosition(rvReadingPosition);
+      else if (!wasDetail && !r.item) window.scrollTo(0, 0);
+    }
+  }
+
+  const markNav = () => { const h = location.hash || "#/threads"; document.querySelectorAll(".top a.btn").forEach((a) => a.classList.toggle("on", h.indexOf(a.getAttribute("href")) === 0)); };
+  async function render() {
+    stopStream(); markNav();
+    try {
+      if (!token()) return loginView();
+      const r = route();
+      if (!("review" in r) && rvClosedObserver) { rvClosedObserver.disconnect(); rvClosedObserver = null; }
+      if (r.list || r.thread || r.evidence || "review" in r) return await shellView(r);
+      root.className = "wrap";                       // 두 칸 껍데기를 벗는다 — 회고·찾기·과거 기록은 한 칸
+      if ("join" in r) await joinView();
+      else if ("find" in r) await findView(r.find);
+      else if ("prior" in r) await priorView(r.prior, r.priorSession);
+      else await listView();
+    } catch (e) {
+      if (String(e.message) !== "unauthorized") view.innerHTML = `<div class="card in"><div class="conflict">${esc(e.message)}</div></div>`;
+    }
+  }
+  // 확장 43호 — 펼침 안의 링크. 행 클릭(스레드로 이동)이 가로채지 않게 캡처 단계에서 멈춘다.
+  view.addEventListener("click", (ev) => { if (ev.target.closest && ev.target.closest("a.supd")) ev.stopPropagation(); }, true);
+  // 주제 카드는 두 칸 사이를 옮기므로, 회고의 스레드 링크는 공통 부모에서 한 번만 연결한다.
+  root.addEventListener("click", (ev) => {
+    if (route().review === undefined || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    const a = ev.target.closest && ev.target.closest('a[href^="#/threads/"]'); if (!a) return;
+    const m = a.getAttribute("href").match(/^#\/threads\/(\d+)(?:\?item=([^&]+))?/); if (!m) return;
+    ev.preventDefault(); ev.stopPropagation(); goThread(parseInt(m[1], 10), m[2] ? decodeURIComponent(m[2]) : null);
+  }, true);
+  $("home").addEventListener("click", () => { location.hash = "#/threads"; });
+
+  // 화면 언어 (확장 79호) — 상단바 라벨은 마크업에 있으므로 여기서 같이 갈아 끼운다.
+  function paintChrome() {
+    document.documentElement.lang = LANG;
+    $("navStatus").textContent = tr("현황");
+    $("navReview").textContent = tr("회고");
+    $("navPrior").textContent = tr("과거 기록");
+    $("navFind").textContent = tr("찾기");
+    $("navJoin").firstChild.textContent = tr("가입 신청");
+    $("langToggle").textContent = LANG === "ko" ? "EN" : "한국어";   // 누르면 가는 곳을 보인다
+    const note = document.querySelector(".demo-note .what");
+    const fake = document.querySelector(".demo-note .fake");
+    if (note) note.innerHTML = LANG === "en"
+      ? '<b>Worktrail</b> — a record of what an AI coding agent did. What was decided, and what it was decided from, are kept apart, so the next session does not have to guess from the code.'
+      : '<b>Worktrail</b> — AI 코딩 에이전트가 일하며 남긴 작업 기록입니다. 무엇을 정했고(결정), 무엇을 보고 정했는지(증거)가 따로 남아, 다음 세션이 코드에서 추측하지 않습니다.';
+    if (fake) fake.textContent = LANG === "en"
+      ? "Every record here is made up · a fictional team's commerce backend, four weeks"
+      : "이 데모의 기록은 지어낸 것입니다 · 가상 팀의 커머스 백엔드 4주치";
+    paintStamp();
+  }
+  // 데모 도장("읽기 전용 데모 · 갱신 …")은 meta.json 을 받은 뒤 한 번만 그려졌다. 언어를 바꿔도
+  // 다시 그리지 않아 상단바에서 이 한 줄만 옛 언어로 남았다(실측 2026-09-14). 받은 값을 들고
+  // 있다가 paintChrome 이 부를 때마다 다시 그린다.
+  let snapAt = null;
+  function paintStamp() {
+    if (!SNAP) return;
+    $("who").textContent = tr("읽기 전용 데모") + (snapAt ? " · " + tr("갱신") + " " + fmtAbs(snapAt) : "");
+  }
+  $("langToggle").addEventListener("click", () => setLang(LANG === "ko" ? "en" : "ko"));
+  window.addEventListener("hashchange", render);
+  window.addEventListener("storage", (e) => { if (e.key === null || e.key === "cb_token") render(); });
+  if (SNAP) fetch(SNAP + "/meta.json").then((r) => r.ok ? r.json() : null).then((m) => { snapAt = (m && m.generated_at) || null; paintStamp(); }).catch(() => { snapAt = null; paintStamp(); });
+  else fetch(CFG.AUTH_BASE + "/auth/me", { headers: { "Authorization": "Bearer " + (token() || "") } }).then((r) => r.ok ? r.json() : null).then((me) => { if (me) $("who").textContent = me.email; }).catch(() => {});
+  paintChrome();
+  render();
+  joinProbe();      // 운영자면 상단바에 자리가 뜬다 (확장 108호)
+})();
+</script>
+</body>
+</html>

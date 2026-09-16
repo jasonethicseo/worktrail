@@ -1,0 +1,125 @@
+{
+  "generated": "2026-08-31",
+  "fix_boundary_kst": "2026-08-25 20:30:10",
+  "how_to_use": "같은 입력에 event_type 종류·순서가 일치하면 통과. 모델 텍스트·id·타임스탬프는 비교하지 않는다.",
+  "paths": [
+    {
+      "path": "input_turn",
+      "events": [
+        "user_message",
+        "canonical_evidence_created",
+        "turn_status_changed",
+        "answer_created",
+        "investigation_brief_updated",
+        "model_call",
+        "turn_status_changed",
+        "model_call"
+      ],
+      "source": "observed",
+      "sample_turn": 888
+    },
+    {
+      "path": "web_lookup",
+      "events": [
+        "web_lookup_requested",
+        "turn_status_changed",
+        "canonical_evidence_created",
+        "web_lookup_completed",
+        "turn_status_changed"
+      ],
+      "source": "observed",
+      "sample_turn": 889
+    },
+    {
+      "path": "record",
+      "events": [
+        "user_message",
+        "canonical_evidence_created",
+        "turn_status_changed",
+        "answer_created",
+        "investigation_brief_updated",
+        "model_call",
+        "turn_status_changed",
+        "model_call",
+        "record_requested",
+        "record_created"
+      ],
+      "source": "observed",
+      "sample_turn": 894
+    },
+    {
+      "path": "record_failed",
+      "events": [
+        "web_lookup_requested",
+        "turn_status_changed",
+        "canonical_evidence_created",
+        "web_lookup_completed",
+        "turn_status_changed",
+        "record_requested",
+        "record_failed"
+      ],
+      "source": "observed",
+      "sample_turn": 20,
+      "note": "brief 추출 블록과 무관한 경로라 2026-08-25 수정 이후에도 유효하다."
+    },
+    {
+      "path": "web_lookup_failed",
+      "events": [
+        "web_lookup_requested",
+        "turn_status_changed",
+        "web_lookup_failed",
+        "turn_status_changed"
+      ],
+      "source": "observed",
+      "sample_turn": 702,
+      "note": "brief 추출 블록과 무관한 경로라 2026-08-25 수정 이후에도 유효하다."
+    },
+    {
+      "path": "case_status_changed",
+      "events": [
+        "case_status_changed"
+      ],
+      "source": "observed"
+    },
+    {
+      "path": "recovery",
+      "events": [
+        "recovery_requested",
+        "turn_status_changed",
+        "answer_created",
+        "investigation_brief_updated",
+        "model_call",
+        "turn_status_changed",
+        "model_call"
+      ],
+      "source": "derived",
+      "derived_from": "가장 최근 recovery(turn 315, 2026-08-22 19:45 KST)에서 brief_rejected 제거",
+      "why_not_observed": "90초 스턱이 있어야 발생한다. 마지막 실발생 2026-08-22."
+    },
+    {
+      "path": "input_turn_brief_rejected",
+      "source": "derived",
+      "events": [
+        "user_message",
+        "canonical_evidence_created",
+        "turn_status_changed",
+        "answer_created",
+        "brief_rejected",
+        "model_call",
+        "turn_status_changed",
+        "model_call"
+      ],
+      "why_not_observed": "기록자 경로의 brief 거부 실사례가 원장 전체에 0건이다. 기존 748건은 전부 reason=brief_absent(제거된 죽은 블록)였다.",
+      "valid_reasons": [
+        "brief_decode_failed",
+        "brief_bad_keys",
+        "brief_bad_focus",
+        "brief_bad_evidence",
+        "brief_bad_considering",
+        "brief_bad_recent_updates",
+        "brief_bad_next_up"
+      ],
+      "verifies": "불변식 5 — 브리프가 죽어도 답변은 산다"
+    }
+  ]
+}

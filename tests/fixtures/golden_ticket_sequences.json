@@ -1,0 +1,64 @@
+{
+  "generated": "2026-08-31 (재시드 후)",
+  "note": "티켓 계층은 케이스 원장과 별개의 append-only 로그(ticket_event)를 쓴다. CAS 는 (ticket_id, base_version) unique. 전이표는 ticket_transition_guard 에만 있다.",
+  "idempotency": "2026-08-31 발행 — snapshot 은 action_key 를 행에 저장하고 (ticket_id, action_key) unique 로 잠근다. 재시도가 같은 행으로 수렴하며 행-이벤트 사이 크래시는 재시도가 보수한다(orphan version 결함 수정).",
+  "transitions": {
+    "investigating -> needs_help": "reporter/assignee · 스냅샷 ≥ 1",
+    "investigating -> resolved": "assignee(없으면 reporter) · 최종 스냅샷 필요",
+    "resolved -> closed": "reporter 만",
+    "resolved -> investigating": "reporter 또는 직전 assignee (reopen)",
+    "그 외": "illegal transition"
+  },
+  "event_types_observed": [
+    "case_linked",
+    "created",
+    "forked",
+    "help_requested",
+    "resolved",
+    "snapshot_published",
+    "taken_over"
+  ],
+  "never_observed": [
+    "commented",
+    "redacted"
+  ],
+  "tickets": [
+    {
+      "ticket_id": 47,
+      "final_status": "resolved",
+      "events": [
+        "created",
+        "case_linked",
+        "case_linked",
+        "snapshot_published",
+        "help_requested",
+        "taken_over",
+        "forked",
+        "snapshot_published",
+        "resolved"
+      ]
+    },
+    {
+      "ticket_id": 48,
+      "final_status": "needs_help",
+      "events": [
+        "created",
+        "case_linked",
+        "case_linked",
+        "snapshot_published",
+        "help_requested"
+      ]
+    },
+    {
+      "ticket_id": 49,
+      "final_status": "needs_help",
+      "events": [
+        "created",
+        "case_linked",
+        "case_linked",
+        "snapshot_published",
+        "help_requested"
+      ]
+    }
+  ]
+}

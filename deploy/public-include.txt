@@ -1,0 +1,39 @@
+# 공개 저장소(worktrail)에 내보내는 것 — tools/release.sh 가 읽는다.
+# 한 줄에 하나. 폴더는 끝에 / 를 붙인다(그 아래 전부). 파일은 경로 그대로.
+# 이 목록에 없는 새 파일은 기본적으로 비공개다. 세부 예외는 public-exclude.txt 가 한 번 더 뺀다.
+
+# 저장소 첫 화면·패키지·로컬 실행
+.dockerignore
+.env.example
+.gitignore
+Dockerfile
+LICENSE
+README.md
+README.ko.md
+casebook/
+compose.yml
+main.py
+pyproject.toml
+
+# 공개 배포 조립과 공개 목록 자체
+deploy/Caddyfile
+deploy/local.env.example
+deploy/public-include.txt
+deploy/public-exclude.txt
+
+# 사용 문서
+docs/ONBOARDING.md
+
+# 공개 트리 검증과 데모·훅·릴리스 도구
+tests/
+tools/demo_seed.py
+tools/demo_seed_data.py
+tools/demo_seed_data_en.py
+tools/demo_snapshot.py
+tools/hooks/
+tools/public_manifest.py
+tools/release.sh
+
+# 화면
+web/join/
+web/worktrail/

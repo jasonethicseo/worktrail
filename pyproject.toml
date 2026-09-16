@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "casebook"
+version = "0.1.0"
+description = "Casebook Copilot — Xano 백엔드의 로컬 재현본. 재설계 없는 1:1 이식."
+requires-python = ">=3.11"
+dependencies = ["fastapi>=0.139,<0.140", "uvicorn>=0.51,<0.52"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "httpx", "mcp>=2,<3"]
+mcp = ["mcp>=2,<3"]
+# 확장 87호 — 인가 서버(AuthKit)가 내준 JWT 를 검증할 때만 쓴다. oauth 를 켜지 않으면 필요 없고,
+# oauth.py 는 jwt 를 함수 안에서 늦게 부르므로 얇은 클라이언트는 이것 없이도 그대로 돈다.
+oauth = ["pyjwt[crypto]>=2.8,<3"]
+
+[tool.setuptools.packages.find]
+include = ["casebook*"]   # tests·tools·web·experiments 는 패키지가 아니다
+
+[project.scripts]
+casebook-mcp = "casebook.adapters.mcp_server:main"
+casebook-login = "casebook.adapters.device_login:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["slow: 전수 리플레이 등 느린 스위트"]

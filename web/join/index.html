@@ -1,0 +1,250 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Worktrail</title>
+<!--
+확장 101호 (D15414) — 신청 페이지. 아무나 여기 와서 구글로 로그인하고 줄을 선다.
+
+설정이 없다: /.well-known/oauth-protected-resource/mcp 에서 인가 서버·client_id·자원을 읽고,
+그 인가 서버의 discovery 에서 authorize·token 주소를 얻는다. 서버 주소 말고는 아무것도 모른다.
+
+공개 앱이라 client secret 이 없다 — PKCE(S256)로 교환한다. code_verifier 는 리다이렉트를
+건너야 하므로 sessionStorage 에 잠깐 두고, 돌아오는 즉시 지운다. access token 은 메모리에만
+둔다: 이 페이지가 하는 일은 /join 둘을 부르는 것뿐이고, 저장하면 그것이 곧 새는 자리다.
+-->
+<style>
+  :root{color-scheme:light dark;--bg:#fbfbfa;--fg:#1b1b1a;--dim:#6b7280;--line:#e5e5e3;
+        --accent:#1b1b1a;--ok:#166534;--wait:#854d0e;--no:#991b1b;--card:#fff}
+  @media (prefers-color-scheme:dark){:root{--bg:#16161a;--fg:#e8e8e6;--dim:#9aa0a6;--line:#2c2c31;
+        --accent:#e8e8e6;--ok:#86efac;--wait:#fcd34d;--no:#fca5a5;--card:#1d1d22}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,BlinkMacSystemFont,
+       "Segoe UI",system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}
+  main{width:100%;max-width:560px}
+  .mark{font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;
+        color:var(--dim);text-transform:uppercase;margin-bottom:10px}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-.01em}
+  p{margin:0 0 14px;color:var(--dim)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px;margin-top:18px}
+  button{font:inherit;font-weight:500;padding:11px 18px;border-radius:9px;border:1px solid var(--accent);
+         background:var(--accent);color:var(--bg);cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  button.ghost{background:transparent;color:var(--fg);border-color:var(--line)}
+  code{font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);
+       border:1px solid var(--line);border-radius:8px;padding:12px;display:block;
+       overflow-x:auto;white-space:pre;margin:0 0 12px}
+  .tag{display:inline-block;font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;
+       border:1px solid currentColor;margin-bottom:12px}
+  .ok{color:var(--ok)} .wait{color:var(--wait)} .no{color:var(--no)}
+  .who{font-size:13px;color:var(--dim);margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .err{color:var(--no);white-space:pre-wrap}
+  /* 확장 115호 — 데이터 안내문. 읽을 것이므로 본문색으로 내고, 길어도 카드가 화면을 넘지 않게 접는다. */
+  .notice{white-space:pre-wrap;color:var(--fg);font-size:14px;line-height:1.7;margin:0 0 16px;
+          max-height:46vh;overflow-y:auto;padding-right:6px}
+  .agree{display:flex;gap:9px;align-items:flex-start;margin:0 0 16px;color:var(--fg);
+         font-size:14px;cursor:pointer}
+  .agree input{margin:4px 0 0;flex:none;width:16px;height:16px;accent-color:var(--accent)}
+  /* 확장 121호 — 로그인 버튼 밑의 한 줄. 누르면 우리 것이 아닌 낯선 주소로 넘어가는데, 그것을
+     미리 말해 두지 않으면 조심스러운 사람이 거기서 닫는다(실측 2026-09-15: 데모를 제일 깊이 읽은
+     한 명이 이 화면까지 와서 가입하지 않았다). 놀라서 닫는 것과 알고 누르는 것은 다르다.
+     인가 서버 주소 자체는 여기 적지 않는다 — 메타데이터에서 읽는 것이 이 페이지의 규칙이다. */
+  .via{font-size:13px;color:var(--dim);margin:12px 0 0}
+</style>
+<main>
+  <div class="mark">Worktrail</div>
+  <h1 id="h">…</h1>
+  <p id="sub"></p>
+  <div class="card" id="card" hidden></div>
+</main>
+<script>
+const KO = (navigator.language || "").toLowerCase().startsWith("ko");
+const T = (ko, en) => KO ? ko : en;
+const $ = (id) => document.getElementById(id);
+const META_PATH = "/.well-known/oauth-protected-resource/mcp";
+const AS_PATH = "/.well-known/oauth-authorization-server";
+const REDIRECT = location.origin + "/join/callback";
+const VERIFIER_KEY = "wt_join_verifier";
+
+let TOKEN = null;            // 메모리에만 둔다 — 저장하지 않는다
+
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
+  .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+async function pkce() {
+  const raw = crypto.getRandomValues(new Uint8Array(32));
+  const verifier = b64url(raw);
+  const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+  return { verifier, challenge };
+}
+
+async function config() {
+  const res = await fetch(META_PATH).then((r) => r.ok ? r.json() : Promise.reject(r.status));
+  const iss = (res.authorization_servers || [])[0];
+  const cid = res.casebook_device_client_id;
+  if (!iss || !cid) throw new Error(T("이 서버는 아직 신청을 받지 않는다.", "This server is not accepting requests yet."));
+  const as = await fetch(iss.replace(/\/$/, "") + AS_PATH).then((r) => r.json());
+  // token_endpoint 는 서버가 제 몫으로 읽는다(확장 111호) — 브라우저는 authorize 로만 간다.
+  return { iss, cid, resource: res.resource || "", authorize: as.authorization_endpoint };
+}
+
+// 확장 111호 — 교환은 우리 서버가 대신한다. 인가 서버(AuthKit)의 토큰 문이
+// Access-Control-Allow-Origin 을 주지 않아 브라우저가 직접 부르면 CORS 로 막힌다
+// (실측 2026-09-15: "Failed to fetch", 콘솔에 blocked by CORS policy). client_id·resource·
+// redirect_uri 는 서버가 정하므로 여기서 보내는 것은 이 흐름을 시작한 본인만 아는 둘뿐이다.
+async function exchange(cfg, code, verifier) {
+  const r = await fetch("/join/exchange", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, code_verifier: verifier }) });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok || body.error) throw new Error(body.error || ("HTTP " + r.status));
+  return body.access_token;
+}
+
+async function signIn() {
+  const cfg = await config();
+  const { verifier, challenge } = await pkce();
+  sessionStorage.setItem(VERIFIER_KEY, verifier);
+  const q = new URLSearchParams({ client_id: cfg.cid, redirect_uri: REDIRECT,
+    response_type: "code", scope: "openid profile email offline_access",
+    code_challenge: challenge, code_challenge_method: "S256" });
+  if (cfg.resource) q.set("resource", cfg.resource);
+  location.href = cfg.authorize + "?" + q.toString();
+}
+
+const api = (path, method = "GET") =>
+  fetch(path, { method, headers: { Authorization: "Bearer " + TOKEN } })
+    .then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+
+// 확장 115호 (D15637) — 서버에 기록을 맡기는 조건. 설치 안내문과 같은 넷을 말한다.
+// 여기서 받는 이유: 설치기에서만 받으면 웹 커넥터로만 쓰는 사람이 영영 동의를 남길 수 없다.
+const NOTICE = T(
+`기록은 운영자의 서버에 저장됩니다. 맡기시는 것이므로 이렇게 다룹니다.
+
+  · 보관 — 계정이 살아 있는 동안 둡니다. 시험 기간이라 기한을 못 박지 않습니다.
+  · 삭제 — 말씀하시면 그 계정의 기록을 전부 지웁니다. 7일 안에 처리합니다.
+  · 열람 — 운영자는 기술적으로 DB 를 열 수 있습니다. 그게 구조입니다.
+  · 종료 — 시험을 끝낼 때 알리고 30일 뒤 전부 지웁니다. 그 전에 받아 가실 수 있습니다.
+
+그리고 작업하다 나온 에러 메시지나 명령 출력을 에이전트가 원문 그대로 기록에 넣습니다.
+거기 API 키 같은 것이 섞여 있으면 그것도 같이 올라갑니다.
+("그건 기록하지 마" 라고 하면 넣지 않습니다.)`,
+`Your records are kept on the operator's server. You are entrusting them, so here is how they are handled.
+
+  · Kept — for as long as the account lives. This is a test period, so no fixed term.
+  · Deleted — say the word and every record on that account goes. Done within 7 days.
+  · Read — the operator can technically open the database. That is how it is built.
+  · Ending — when the test ends you are told, and everything is deleted 30 days later.
+    You can take your records out before that.
+
+Also: your agent stores error messages and command output verbatim. If an API key is
+sitting in that output, it goes up with it.
+(Say "don't record that" and it will not be stored.)`);
+
+async function askConsent(body) {
+  $("h").textContent = T("맡기는 조건", "How your records are handled");
+  $("sub").textContent = T("읽고 동의하시면 다음으로 넘어갑니다.",
+                           "Read it, agree, and you move on.");
+  const card = $("card");
+  card.hidden = false;
+  card.innerHTML = `<div class="notice"></div>
+    <label class="agree"><input type="checkbox" id="ok">
+      <span>${T("읽었고 동의합니다.", "I have read this and I agree.")}</span></label>
+    <button id="agree" disabled>${T("동의하고 계속", "Agree and continue")}</button>
+    <div class="who"></div>`;
+  card.querySelector(".notice").textContent = NOTICE;   // 문구는 텍스트로만 넣는다
+  const who = card.querySelector(".who");
+  if (body.email) who.textContent = body.email;
+  $("ok").onchange = () => { $("agree").disabled = !$("ok").checked; };
+  $("agree").onclick = async () => {
+    $("agree").disabled = true;
+    const r = await api("/join/consent", "POST");
+    if (r.status >= 400) return fail(new Error(r.body.error || ("HTTP " + r.status)));
+    const st = await api("/join/status");
+    paint(st.body);
+  };
+}
+
+function paint(body) {
+  const { state, email, install, error: note } = body;
+  // 확장 115호 — 승인 여부보다 동의가 먼저다. 동의가 없으면 설치 줄도 나오지 않는다(서버가 안 준다).
+  if ((state === "allowed" || state === "pending") && !body.consent) return askConsent(body);
+  const card = $("card");
+  card.hidden = false;
+  if (state === "allowed") {
+    $("h").textContent = T("쓸 수 있습니다", "You're in");
+    $("sub").textContent = T("맥·리눅스·WSL 의 터미널에 이 줄을 붙여넣으세요. 윈도우 네이티브는 아직 아닙니다.",
+                             "Paste this line into a terminal on macOS, Linux or WSL. Native Windows is not supported yet.");
+    card.innerHTML = `<span class="tag ok">${T("승인됨", "approved")}</span>
+      <code id="line"></code>
+      <button id="copy">${T("복사", "Copy")}</button>
+      <div class="who"></div>`;
+    $("line").textContent = install || "";
+    $("copy").onclick = async () => {
+      await navigator.clipboard.writeText(install || "");
+      $("copy").textContent = T("복사됨", "Copied");
+    };
+  } else if (state === "pending") {
+    // 확장 119호 — 자리가 남아 있으면 신청이 그 자리에서 열린다. 그러니 pending 은 곧 "자리가 찼다" 다.
+    $("h").textContent = T("지금은 자리가 찼습니다", "The seats are full right now");
+    $("sub").textContent = T("줄은 서 두었습니다. 자리가 나면 이 페이지에 설치 줄이 뜹니다.",
+                             "You are in line. When a seat opens, the install line appears here.");
+    const n = (body.seats && body.seats.total) || "";
+    card.innerHTML = `<span class="tag wait">${T("기다리는 중", "waiting")}</span>
+      <p>${T(`서버를 혼자 돌리고 있어서 ${n}자리까지만 받습니다. 이 페이지를 다시 열어 확인하면 됩니다.`,
+             `I host this myself, so there is room for ${n} at a time. Just open this page again to check.`)}</p>
+      <div class="who"></div>`;
+  } else if (state === "blocked") {
+    $("h").textContent = T("이번에는 받지 못했습니다", "Not this time");
+    $("sub").textContent = T("자리가 한정돼 있습니다.", "There are only a few places.");
+    card.innerHTML = `<span class="tag no">${T("거절됨", "declined")}</span><div class="who"></div>`;
+  } else {
+    $("h").textContent = T("무언가 어긋났습니다", "Something is off");
+    card.innerHTML = `<div class="err">${note || state}</div><div class="who"></div>`;
+  }
+  const who = card.querySelector(".who");
+  if (who && email) who.textContent = email;
+}
+
+function start() {
+  $("h").textContent = T("Worktrail 사용 신청", "Request access to Worktrail");
+  $("sub").textContent = T("AI 코딩 에이전트가 일하며 남긴 작업 기록입니다. 맥·리눅스·WSL 에서 씁니다. 구글 계정으로 신청합니다.",
+                           "A record of what an AI coding agent did. Sign in with Google to request access. Works on macOS, Linux or WSL.");
+  const card = $("card");
+  card.hidden = false;
+  card.innerHTML = `<button id="go">${T("구글로 로그인하고 신청하기", "Sign in with Google and request")}</button>
+    <p class="via">${T("구글 로그인은 WorkOS 대행을 씁니다.", "Sign-in goes through WorkOS.")}</p>`;
+  $("go").onclick = () => { $("go").disabled = true; signIn().catch(fail); };
+}
+
+function fail(e) {
+  $("h").textContent = T("무언가 어긋났습니다", "Something is off");
+  $("sub").textContent = "";
+  $("card").hidden = false;
+  $("card").innerHTML = `<div class="err">${(e && e.message) || e}</div>
+    <p style="margin-top:14px"><button class="ghost" id="again">${T("다시", "Try again")}</button></p>`;
+  $("again").onclick = () => { location.href = "/join"; };
+}
+
+(async () => {
+  const q = new URLSearchParams(location.search);
+  if (q.get("error")) return fail(new Error(q.get("error_description") || q.get("error")));
+  const code = q.get("code");
+  if (!code) return start();
+  $("h").textContent = T("확인하는 중…", "Checking…");
+  try {
+    const verifier = sessionStorage.getItem(VERIFIER_KEY);
+    sessionStorage.removeItem(VERIFIER_KEY);           // 한 번 쓰고 버린다
+    if (!verifier) throw new Error(T("로그인이 중간에 끊겼습니다. 다시 시도하세요.",
+                                     "The sign-in was interrupted. Please try again."));
+    const cfg = await config();
+    TOKEN = await exchange(cfg, code, verifier);
+    history.replaceState({}, "", "/join");             // 주소에서 code 를 지운다
+    let r = await api("/join/status");
+    if (r.body.state === "none") r = await api("/join/request", "POST");
+    if (r.status === 429) return fail(new Error(r.body.error));
+    if (r.status >= 400) return fail(new Error(r.body.error || ("HTTP " + r.status)));
+    const st = await api("/join/status");
+    paint(st.body);
+  } catch (e) { fail(e); }
+})();
+</script>

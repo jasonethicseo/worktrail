@@ -1,0 +1,40 @@
+# 공개 allowlist에서 다시 빼는 예외 — tools/release.sh 가 읽는다 (D15948, #527).
+# 한 줄에 하나. 폴더는 끝에 / 를 붙인다(그 아래 전부). 파일은 경로 그대로. # 으로 시작하면 설명.
+# allowlist 밖의 것은 적지 않아도 비공개다. 여기에는 넓게 허용한 폴더 안의 예외를 남긴다.
+
+# Xano 시절 화면·실험
+experiments/
+web/app/
+web/tickets/
+
+# 빌드 산물 (private 에서도 추적을 풀어야 한다)
+casebook.egg-info/
+
+# 에이전트용 내부 지시
+CLAUDE.md
+
+# 이 서버에만 맞는 운영 문서·내부 노트 (공개 문서는 docs/ONBOARDING.md 하나)
+docs/DEPLOY_AWS.md
+docs/HANDOFF_EVAL.md
+docs/HARVEST_V2.md
+docs/LAB.md
+docs/LIVE_FIX_20260903_pending_guard.md
+docs/SCALING.md
+docs/TRACKER_READING_EXPERIMENT.md
+
+# 내부 도구 (Xano 이식·비교·프롬프트 추출·사용량·비밀번호)
+tools/import_xano.py
+tools/parity.py
+tools/extract_prompts.py
+tools/usage_report.py
+tools/set_password.py
+tools/mcp_door.sh
+tools/deploy.sh
+
+# 위 것들에만 기대는 시험
+tests/test_import_xano.py
+tests/test_ticket_sequences.py
+tests/test_prompt_envelopes.py
+
+# 옛 README(Xano 이식 개발 노트) — 공개 README 는 소개글이다 (확장 127호)
+docs/DEV_NOTES.md
