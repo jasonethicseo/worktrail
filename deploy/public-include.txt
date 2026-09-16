@@ -2,22 +2,16 @@
 # 한 줄에 하나. 폴더는 끝에 / 를 붙인다(그 아래 전부). 파일은 경로 그대로.
 # 이 목록에 없는 새 파일은 기본적으로 비공개다. 세부 예외는 public-exclude.txt 가 한 번 더 뺀다.
 
-# 저장소 첫 화면·패키지·로컬 실행
-.dockerignore
-.env.example
+# 저장소 첫 화면·패키지·로컬 실행 (main.py 는 로컬 묶음이 싣는다)
 .gitignore
-Dockerfile
 LICENSE
 README.md
 README.ko.md
 casebook/
-compose.yml
 main.py
 pyproject.toml
 
-# 공개 배포 조립과 공개 목록 자체
-deploy/Caddyfile
-deploy/local.env.example
+# 공개 목록 자체 (서버 조립 파일은 내보내지 않는다 — 자체 호스팅은 안내하지 않는다, 2026-09-16)
 deploy/public-include.txt
 deploy/public-exclude.txt
 

@@ -38,3 +38,6 @@ tests/test_prompt_envelopes.py
 
 # 옛 README(Xano 이식 개발 노트) — 공개 README 는 소개글이다 (확장 127호)
 docs/DEV_NOTES.md
+
+# 서버 조립 파일(compose·Dockerfile·Caddyfile)을 읽는 시험 — 그 파일들을 공개하지 않으므로 시험도 뺀다
+tests/test_demo_snapshot.py
