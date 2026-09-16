@@ -69,14 +69,11 @@ def _worktree() -> str:
 
 
 def _app(db_path: str):
-    from casebook.core.app import Casebook
-    from casebook.adapters.no_search import NoSearch
-
-    class _NoLLM:  # 훅은 모델을 부르지 않는다
-        def __getattr__(self, name):
-            raise RuntimeError("hook never calls the model")
+    """훅은 기록만 쓴다 — Worktrail 로 세운다 (확장 130호, D16054). 전에는 모델을 못 부르는 Casebook 을
+    세웠는데, 로컬 설치 묶음과 공개 트리에는 이제 조사 모듈(core/app·no_search)이 없다."""
+    from casebook.core.worktrail import Worktrail
     db, uid, _v = _open(db_path, _config()[1])
-    return Casebook(db=db, llm=_NoLLM(), search=NoSearch()), uid
+    return Worktrail(db), uid
 
 
 def _resolve_mode() -> tuple[str, str | None]:

@@ -222,6 +222,13 @@ def source_root() -> pathlib.Path:
 # 로컬 모드 — 기록이 사용자 맥에만 있을 때. 서버 코어까지 전부 실어야 문과 화면이 거기서 선다.
 LOCAL_GLOBS = ("casebook/*.py", "casebook/core/*.py", "casebook/adapters/*.py",
                "tools/hooks/*", "web/worktrail/index.html", "main.py", "LICENSE")
+# 확장 130호 (D16054) — 조사·티켓은 private 에만: 로컬 묶음에도 싣지 않는다. 로컬 창은 Worktrail 만 띄우고
+# main.py 는 그 모듈 없이 돈다(조사 모드는 환경변수로만 켜고, 없으면 멈춘다).
+LOCAL_EXCLUDE = frozenset({
+    "casebook/core/app.py", "casebook/core/tickets.py", "casebook/core/workers.py", "casebook/core/prompts.py",
+    "casebook/core/prompt_ext.py", "casebook/core/ledger.py", "casebook/adapters/openai_llm.py",
+    "casebook/adapters/no_search.py", "casebook/adapters/http_api_legacy.py",
+})
 
 
 def local_files(root: pathlib.Path | None = None) -> tuple[str, ...]:
@@ -229,7 +236,8 @@ def local_files(root: pathlib.Path | None = None) -> tuple[str, ...]:
     out: list[str] = []
     for g in LOCAL_GLOBS:
         out += sorted(str(p.relative_to(root)) for p in root.glob(g)
-                      if p.is_file() and "__pycache__" not in p.parts)
+                      if p.is_file() and "__pycache__" not in p.parts
+                      and str(p.relative_to(root)) not in LOCAL_EXCLUDE)
     return tuple(dict.fromkeys(out))
 
 

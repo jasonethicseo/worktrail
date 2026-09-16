@@ -1,6 +1,7 @@
 """서버 진입점 — Xano 대체 실행형. 로컬과 서빙(컨테이너)이 같은 파일이다.
 
-    OPENAI_API_KEY=… .venv/bin/python main.py [--db casebook.db] [--port 8787]
+    .venv/bin/python main.py [--db casebook.db] [--port 8787]              # 기록(Worktrail)만 — 키 불필요
+    CASEBOOK_INVESTIGATION=1 OPENAI_API_KEY=… .venv/bin/python main.py    # 옛 조사 도구까지 (private 전용)
 
 환경변수 (인자보다 낮은 우선순위):
     CASEBOOK_DB            sqlite 경로 (기본 casebook.db · 컨테이너는 /data/casebook.db)
@@ -34,11 +35,8 @@ import threading
 import time
 
 from casebook.adapters.http_api import create_app
-from casebook.adapters.openai_llm import OpenAILLM
-from casebook.adapters.no_search import NoSearch
-from casebook.core.app import Casebook
 from casebook.core.db import SqliteDB
-from casebook.core.tickets import Tickets
+from casebook.core.worktrail import Worktrail
 
 log = logging.getLogger("casebook")
 
@@ -55,10 +53,26 @@ def check_api_key(key: str | None) -> str:
     return k
 
 
-def build(db_path: str) -> tuple[Casebook, Tickets]:
-    check_api_key(os.environ.get("OPENAI_API_KEY"))
+def investigation_wanted() -> bool:
+    return os.environ.get("CASEBOOK_INVESTIGATION", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def build(db_path: str):
+    """기본은 Worktrail(기록)만 — 모델도 키도 필요 없다 (확장 130호, D16054). 운영 실측 2026-09-16: 최근
+    7일 동안 조사·티켓 길 호출 0건, 모델 호출 0건. CASEBOOK_INVESTIGATION=1 이면 옛 조사 도구(Casebook)와
+    티켓까지 조립한다 — 그 모듈은 private 저장소에만 있다."""
     db = SqliteDB(db_path)
     invites = frozenset(c.strip() for c in os.environ.get("CASEBOOK_INVITE_CODES", "").split(",") if c.strip())
+    if not investigation_wanted():
+        return Worktrail(db, invite_codes=invites), None
+    try:
+        from casebook.adapters.no_search import NoSearch
+        from casebook.adapters.openai_llm import OpenAILLM
+        from casebook.core.app import Casebook
+        from casebook.core.tickets import Tickets
+    except ImportError as exc:
+        raise SystemExit(f"CASEBOOK_INVESTIGATION=1 인데 조사 도구 모듈이 이 배포본에 없다({exc}) — private 저장소에서만 돈다")
+    check_api_key(os.environ.get("OPENAI_API_KEY"))
     casebook = Casebook(
         db=db, llm=OpenAILLM(), search=NoSearch(),  # 검색 백엔드는 미정 — README
         default_effort=os.environ.get("CASEBOOK_EFFORT", "none"),
@@ -68,7 +82,7 @@ def build(db_path: str) -> tuple[Casebook, Tickets]:
     return casebook, Tickets(db)
 
 
-def start_drainers(casebook: Casebook, count: int) -> list[threading.Thread]:
+def start_drainers(casebook: Worktrail, count: int) -> list[threading.Thread]:
     def _drain(name: str) -> None:
         while True:
             try:
@@ -104,10 +118,11 @@ def main() -> None:
 
     casebook, tickets = build(args.db)
     if not casebook.invite_codes and args.host != "127.0.0.1":
-        log.warning("CASEBOOK_INVITE_CODES 가 비어 있다 — 누구나 가입해 OpenAI 키를 쓸 수 있다(서빙에 부적합)")
+        log.warning("CASEBOOK_INVITE_CODES 가 비어 있다 — 누구나 가입할 수 있다(서빙에 부적합)")
     start_drainers(casebook, max(1, args.workers))
-    log.info("db=%s host=%s port=%s workers=%s cors=%s",
-             args.db, args.host, args.port, args.workers, cors_origins or "*")
+    log.info("db=%s host=%s port=%s workers=%s cors=%s mode=%s",
+             args.db, args.host, args.port, args.workers, cors_origins or "*",
+             "investigation" if tickets is not None else "worktrail")
 
     import uvicorn
 

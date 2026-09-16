@@ -87,9 +87,57 @@ class FakeSearch:
         return {"results": [{"title": "t", "link": "https://example.test/1", "snippet": "s"}]}
 
 
+# ── 확장 130호 (D16054) — 공개 트리에는 조사·티켓 모듈이 없다 ────────────────────────────────
+# private 에서는 시험 전부가 조사 객체(Casebook)로 돈다. 공개 트리(tools/release.sh 가 만드는 것)에는 그 모듈이
+# 없으므로 app 픽스처는 Worktrail 로 서고, 조사 기능을 부르는 시험은 실패가 아니라 "private 전용" 으로 건너뛴다.
+# 좁게 잡는다: 그 모듈들의 ModuleNotFoundError, 그리고 Worktrail 에 없는 속성을 부르는 AttributeError 만.
+# 그 밖의 실패는 그대로 실패다. private 저장소의 전체 실행이 진짜 관문이다.
+INVESTIGATION_MODULES = frozenset({
+    "casebook.core.app", "casebook.core.tickets", "casebook.core.workers", "casebook.core.prompts",
+    "casebook.core.prompt_ext", "casebook.core.ledger", "casebook.adapters.openai_llm",
+    "casebook.adapters.no_search", "casebook.adapters.http_api_legacy",
+})
+
+
+def investigation_available() -> bool:
+    try:
+        import casebook.core.app  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _needs_investigation(exc: BaseException) -> str | None:
+    import re
+    if isinstance(exc, ModuleNotFoundError) and getattr(exc, "name", "") in INVESTIGATION_MODULES:
+        return f"needs {exc.name} (private only)"
+    if isinstance(exc, AttributeError):
+        m = re.search(r"'Worktrail' object has no attribute '(\w+)'", str(exc))
+        if m:
+            return f"needs Casebook.{m.group(1)} (private only)"
+    return None
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    outcome = yield
+    if investigation_available():
+        return
+    try:
+        outcome.get_result()
+    except BaseException as exc:  # noqa: BLE001 — 아래에서 좁게 고른다
+        why = _needs_investigation(exc)
+        if why is None:
+            return
+        outcome.force_exception(pytest.skip.Exception(why))
+
+
 def _build_app(llm, search):
-    from casebook.core.app import Casebook
     from casebook.core.db import SqliteDB
+    try:
+        from casebook.core.app import Casebook
+    except ImportError:                      # 공개 트리에는 조사 모듈이 없다(확장 130호) — 기록만으로 세운다
+        Casebook = None
 
     db = SqliteDB(":memory:")
     # drive.USER/CASE(=1/1) 과 맞춘 시드
@@ -97,6 +145,9 @@ def _build_app(llm, search):
     case = db.add("case", {"user_id": user["id"], "title": "replay case",
                            "status": "open", "schema_version": 1})
     assert user["id"] == 1 and case["id"] == 1
+    if Casebook is None:
+        from casebook.core.worktrail import Worktrail
+        return Worktrail(db)
     return Casebook(db=db, llm=llm, search=search)
 
 

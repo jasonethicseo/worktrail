@@ -41,3 +41,23 @@ docs/DEV_NOTES.md
 
 # 서버 조립 파일(compose·Dockerfile·Caddyfile)을 읽는 시험 — 그 파일들을 공개하지 않으므로 시험도 뺀다
 tests/test_demo_snapshot.py
+
+# 조사·티켓은 private 에만 (확장 130호, D16054) — Worktrail 의 문은 이것들을 하나도 import 하지 않는다
+casebook/core/app.py
+casebook/core/tickets.py
+casebook/core/workers.py
+casebook/core/prompts.py
+casebook/core/prompt_ext.py
+casebook/core/ledger.py
+casebook/adapters/openai_llm.py
+casebook/adapters/no_search.py
+casebook/adapters/http_api_legacy.py
+
+# 조사 객체(Casebook·Tickets)로 세우는 시험 — 공개 트리에는 그 모듈이 없다 (확장 130호). private 에서는 그대로 돈다.
+tests/test_access_http.py
+tests/test_http_surface.py
+tests/test_invite_signup.py
+tests/test_ledger_events.py
+tests/test_measurement.py
+tests/test_prompt_ext.py
+tests/test_web_option.py

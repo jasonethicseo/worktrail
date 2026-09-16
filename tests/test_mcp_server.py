@@ -33,10 +33,13 @@ def test_open_list_add_note_handoff(tools):
     # 확장 39호 — 꼬리는 모델이 만든 brief 가 아니라 선언된 상태다(모델이 만든 ## Brief 는 없다).
     # 확장 110호(D15573) — note_turn 이 턴마다 next 를 세우므로, 노트를 남긴 스레드에는 늘 선언된
     # 상태가 있다. 전에는 이 자리가 "선언이 없으니 꼬리도 없다" 였다.
-    assert doc.startswith(f"# Handoff — case {cid}") and "# fake record" in doc
+    assert doc.startswith(f"# Handoff — case {cid}")
+    from tests.conftest import investigation_available
+    if investigation_available():                    # 레코드는 조사 도구의 것 — 공개 트리에는 없다(확장 130호)
+        assert "# fake record" in doc
     assert "## Brief" not in doc
     assert "## Declared state" in doc and "다음 할 일" in doc
-    assert [r for (r, _, _) in llm.calls] == ["record"]      # 기록자는 안 돌고, 레코드 한 번만
+    assert [r for (r, _, _) in llm.calls] == (["record"] if investigation_available() else [])   # 기록자는 안 돌고, 레코드 한 번만(조사 도구가 있을 때)
 
     # 도구는 브리프를 되돌려주지 않는다 — handoff 만 사람 앞으로 낸다
     assert "focus" not in out

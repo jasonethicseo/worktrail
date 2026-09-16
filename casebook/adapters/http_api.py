@@ -11,7 +11,6 @@ FastAPI 는 create_app() 안에서만 임포트한다 — 코어 테스트는 fa
 """
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 from casebook.core import oauth   # 확장 97호 — 이 문도 인가 서버의 JWT 를 받는다
@@ -34,14 +33,7 @@ ROUTES: dict[str, tuple[str, ...]] = {
     "/app/case": ("GET", "POST"),
     "/app/case/{case_id}": ("GET",),
     "/app/case/{case_id}/status": ("POST",),
-    "/app/case/{case_id}/turn": ("POST",),
-    "/app/case/{case_id}/turn/{turn_id}": ("GET",),
-    "/app/case/{case_id}/recovery": ("POST",),
-    "/app/case/{case_id}/draft-query": ("POST",),
-    "/app/case/{case_id}/web-lookup": ("POST",),
-    "/app/case/{case_id}/record": ("GET", "POST"),
     "/app/case/{case_id}/ledger": ("GET",),
-    "/app/intake": ("POST",),        # 확장 21호 — 27번째 표면: 묶음 evidence + 첫 질문으로 스레드 자동 시작
     "/app/thread": ("GET",),         # 확장 22호 — Tracker: 저장소별 스레드 전부 (읽기 전용)
     "/app/thread/{case_id}": ("GET",),   # 확장 22호 — Tracker: 스레드 7칸 상태(resume) + 커밋 (읽기 전용)
     "/app/status": ("GET",),         # 확장 31호 — 현황: 주제로 묶은 스레드, 단계·차례·결과(읽을 때 도출)
@@ -51,17 +43,6 @@ ROUTES: dict[str, tuple[str, ...]] = {
     "/app/join": ("GET", "POST"),    # 확장 108호 — 가입 신청 줄 보기 · 승인/거절(body: user_id, action). 운영자 전용
     "/app/topic": ("GET", "POST"),   # 확장 24호 — 주제 목록 · 만들기/스레드 넣기(body: name|topic_id, case_ids, summary, repos, remove)
                                      # 확장 47호 — 합치기(topic_id + merge_into) · 옮기기(topic_id + case_ids + from_topic_id)
-    # tickets 그룹
-    "/tickets/member": ("GET",),
-    "/tickets/ticket": ("GET", "POST"),
-    "/tickets/ticket/{ticket_id}": ("GET",),
-    "/tickets/ticket/{ticket_id}/case": ("POST",),
-    "/tickets/ticket/{ticket_id}/claim": ("POST",),
-    "/tickets/ticket/{ticket_id}/comment": ("POST",),
-    "/tickets/ticket/{ticket_id}/fork": ("POST",),
-    "/tickets/ticket/{ticket_id}/redact": ("POST",),
-    "/tickets/ticket/{ticket_id}/snapshot": ("POST",),
-    "/tickets/ticket/{ticket_id}/transition": ("POST",),
 }
 
 
@@ -101,7 +82,8 @@ def operator_only(path: str, method: str = "GET") -> bool:
 
 def create_app(casebook: Any, tickets: Any, cors_origins: list[str] | None = None,
                enforce_access: bool = False):
-    """FastAPI 앱 조립. casebook: core.app.Casebook, tickets: core.tickets.Tickets.
+    """FastAPI 앱 조립. casebook: core.worktrail.Worktrail(기록만) 또는 core.app.Casebook(조사까지),
+    tickets: core.tickets.Tickets 또는 None. 조사·티켓 길은 그 객체가 있을 때만 붙는다(확장 130호).
 
     cors_origins: 프론트 origin 허용목록. None 이면 "*"(로컬 개발). 서빙 시에는
     main.py 가 CASEBOOK_CORS_ORIGINS 로 넘긴다 — 토큰이 Authorization 헤더로 가므로
@@ -311,15 +293,6 @@ def create_app(casebook: Any, tickets: Any, cors_origins: list[str] | None = Non
         return casebook.topic_by_name(uid, body.get("name") or "", body.get("summary") or "", body.get("repos") or [], ids,
                                       conclusion=body.get("conclusion"))
 
-    @api.post("/app/intake")
-    async def intake(body: dict = Body(...), authorization: str | None = Header(default=None)):
-        return casebook.intake(
-            _user(authorization), body.get("focus"), body.get("worktree"), body.get("items") or [],
-            body.get("ask"), body.get("action_key") or uuid.uuid4().hex,
-            title=body.get("title"), authority=body.get("authority") or "agent",
-            via=body.get("via") or "intake", topic=body.get("topic"), next_=body.get("next"),
-        )
-
     @api.post("/app/case/{case_id}/status")
     async def set_status(case_id: int, body: dict = Body(...),
                          authorization: str | None = Header(default=None)):
@@ -331,135 +304,15 @@ def create_app(casebook: Any, tickets: Any, cors_origins: list[str] | None = Non
             return {"case_id": case_id, "status": "resolved"}      # 응답 모양은 종전 그대로(test_http_surface 가 고정)
         return casebook.set_status(uid, case_id, status, result)
 
-    @api.post("/app/case/{case_id}/turn")
-    async def submit_turn(case_id: int, body: dict = Body(...),
-                          authorization: str | None = Header(default=None)):
-        return casebook.submit_turn(
-            _user(authorization), case_id, body.get("content"), body.get("action_key"),
-            effort=body.get("effort"), web=body.get("web"),
-        )
-
-    @api.get("/app/case/{case_id}/turn/{turn_id}")
-    async def get_turn(case_id: int, turn_id: int,
-                       authorization: str | None = Header(default=None)):
-        out = casebook.get_turn(_user(authorization), case_id, turn_id)
-        return {k: out[k] for k in (
-            "status", "answer_status", "error", "assistant_message", "brief", "brief_stale",
-        )}
-
-    @api.post("/app/case/{case_id}/recovery")
-    async def recover(case_id: int, body: dict = Body(...),
-                      authorization: str | None = Header(default=None)):
-        return casebook.recover(
-            _user(authorization), case_id, body.get("source_turn_id"), body.get("action_key"),
-            effort=body.get("effort"), web=body.get("web"),
-        )
-
-    @api.post("/app/case/{case_id}/draft-query")
-    async def draft_query(case_id: int, body: dict = Body(...),
-                          authorization: str | None = Header(default=None)):
-        # 모델 호출(수 초)이 이벤트 루프를 막지 않게 — 다른 사용자의 폴링이 멈추지 않는다
-        return await run_in_threadpool(
-            casebook.draft_query, _user(authorization), case_id, body.get("candidate")
-        )
-
-    @api.post("/app/case/{case_id}/web-lookup")
-    async def web_lookup(case_id: int, body: dict = Body(...),
-                         authorization: str | None = Header(default=None)):
-        return casebook.web_lookup(
-            _user(authorization), case_id, body.get("query"),
-            body.get("engine"), body.get("action_key"),
-        )
-
-    @api.get("/app/case/{case_id}/record")
-    async def list_records(case_id: int, authorization: str | None = Header(default=None)):
-        return casebook.list_records(_user(authorization), case_id)
-
-    @api.post("/app/case/{case_id}/record")
-    async def generate_record(case_id: int, authorization: str | None = Header(default=None)):
-        return casebook.generate_record(_user(authorization), case_id)
-
     @api.get("/app/case/{case_id}/ledger")
     async def list_ledger(case_id: int, authorization: str | None = Header(default=None)):
         return casebook.list_ledger(_user(authorization), case_id)
 
-    # ── tickets ─────────────────────────────────────────────────────
-    @api.get("/tickets/member")
-    async def members(authorization: str | None = Header(default=None)):
-        _user(authorization)
-        return tickets.list_members()
-
-    @api.get("/tickets/ticket")
-    async def list_tickets(status: str, authorization: str | None = Header(default=None)):
-        _user(authorization)
-        return tickets.list_tickets(status)
-
-    @api.post("/tickets/ticket")
-    async def create_ticket(body: dict = Body(...),
-                            authorization: str | None = Header(default=None)):
-        return tickets.create_ticket(
-            _user(authorization), body.get("title"), body.get("description"),
-            body.get("priority"), body.get("action_key"),
-        )
-
-    @api.get("/tickets/ticket/{ticket_id}")
-    async def get_ticket(ticket_id: int, authorization: str | None = Header(default=None)):
-        _user(authorization)
-        return tickets.get_ticket(ticket_id)
-
-    @api.post("/tickets/ticket/{ticket_id}/case")
-    async def link_case(ticket_id: int, body: dict = Body(...),
-                        authorization: str | None = Header(default=None)):
-        return tickets.link_case(
-            _user(authorization), ticket_id, body.get("case_id"), body.get("action_key")
-        )
-
-    @api.post("/tickets/ticket/{ticket_id}/claim")
-    async def claim(ticket_id: int, body: dict = Body(...),
-                    authorization: str | None = Header(default=None)):
-        return tickets.claim(
-            _user(authorization), ticket_id, body.get("expected_version"), body.get("action_key")
-        )
-
-    @api.post("/tickets/ticket/{ticket_id}/comment")
-    async def comment(ticket_id: int, body: dict = Body(...),
-                      authorization: str | None = Header(default=None)):
-        return tickets.comment(
-            _user(authorization), ticket_id, body.get("content"),
-            body.get("snapshot_version"), body.get("anchor"), body.get("action_key"),
-        )
-
-    @api.post("/tickets/ticket/{ticket_id}/fork")
-    async def fork(ticket_id: int, body: dict = Body(...),
-                   authorization: str | None = Header(default=None)):
-        return tickets.fork(
-            _user(authorization), ticket_id, body.get("case_id"),
-            body.get("snapshot_version"), body.get("action_key"),
-        )
-
-    @api.post("/tickets/ticket/{ticket_id}/redact")
-    async def redact(ticket_id: int, body: dict = Body(...),
-                     authorization: str | None = Header(default=None)):
-        return tickets.redact(
-            _user(authorization), ticket_id, body.get("comment_id"), body.get("action_key")
-        )
-
-    @api.post("/tickets/ticket/{ticket_id}/snapshot")
-    async def snapshot(ticket_id: int, body: dict = Body(...),
-                       authorization: str | None = Header(default=None)):
-        return tickets.snapshot(
-            _user(authorization), ticket_id, body.get("source_case_id"),
-            body.get("source_turn_count_before"), body.get("source_turn_count_after"),
-            body.get("brief"), body.get("evidence_items"), body.get("record_content"),
-            body.get("action_key"),
-        )
-
-    @api.post("/tickets/ticket/{ticket_id}/transition")
-    async def transition(ticket_id: int, body: dict = Body(...),
-                         authorization: str | None = Header(default=None)):
-        return tickets.transition(
-            _user(authorization), ticket_id, body.get("to"), body.get("expected_version"),
-            body.get("snapshot_version"), body.get("action_key"),
-        )
+    # 확장 130호 (D16054) — 조사·티켓의 길은 private 전용 모듈(http_api_legacy)에 있다. 조사 객체(intake 가
+    # 있는 것)나 tickets 가 주어졌을 때만 늦게 불러 붙인다: Worktrail 만 띄우는 서버와 로컬 창은 그 모듈이
+    # 없어도 돈다 — 공개 저장소와 설치 묶음에는 그 파일이 없다.
+    if tickets is not None or hasattr(casebook, "intake"):
+        from casebook.adapters import http_api_legacy
+        http_api_legacy.mount(api, casebook, tickets, _user, run_in_threadpool)
 
     return api
