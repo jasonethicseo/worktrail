@@ -56,8 +56,6 @@ sh tools/hooks/install_claude_hooks.sh          # optional: session-start and po
 .venv/bin/python -m casebook.adapters.ui_server  # the window
 ```
 
-Running your own server: copy `.env.example` to `.env`, fill it in, and `docker compose up -d` brings up the API, the MCP door, Caddy with TLS, and the read-only demo. See `compose.yml`.
-
 ## Layout
 
 - `casebook/core` — the record: threads, turns, evidence, decisions, the first-line rules.

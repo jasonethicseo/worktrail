@@ -4,27 +4,27 @@
 
 **AI 코딩 에이전트가 일하며 남긴 작업 기록. 다음 세션이 코드에서 추측하지 않게 한다.**
 
-Worktrail 은 MCP 서버와 작은 로컬 창이다. Claude Code 나 Codex 가 저장소에서 일하는 동안 그 일을 **스레드**로 남긴다. 이 스레드가 무엇을 위한 것인지, 무엇을 정했고 무엇을 보고 정했는지, 아직 안 풀린 것은 무엇인지, 다음은 무엇인지. 다음 세션이든 다른 에이전트든 당신이든, diff 를 다시 읽는 대신 그 기록에서 이어받는다.
+Worktrail 은 MCP 서버와 작은 로컬 창이다. Claude Code 나 Codex 가 저장소에서 일하는 동안 그 일을 **스레드**로 남긴다. 이 스레드가 무엇을 위한 것인지, 무엇을 정했고 왜 그렇게 정했는지, 아직 안 풀린 것은 무엇인지, 다음은 무엇인지. 다음 세션, 다른 에이전트, 혹은 다른 사람이건 상관 없이, diff 를 다시 읽는 대신 그 기록에서 이어받는다.
 
-- **데모** (읽기 전용, 지어낸 팀의 기록): https://casebook-api.syncflo.cloud/demo/ · [영어판](https://casebook-api.syncflo.cloud/demo/en/)
-- **사용 신청** (호스팅 서버): https://casebook-api.syncflo.cloud/join — 구글 로그인, 자리 몇 개, 선착순
+- **데모** (읽기 전용, 가상 팀의 기록): https://casebook-api.syncflo.cloud/demo/ · [영어판](https://casebook-api.syncflo.cloud/demo/en/)
+- **사용 신청** (호스팅 서버): https://casebook-api.syncflo.cloud/join — 구글 로그인, 5자리, 선착순
 - **피드백**: [GitHub Issues](https://github.com/jasonethicseo/worktrail/issues)
 
-## 무엇이 남는가
+## 무엇이 기록되는가
 
 스레드마다 네 가지를 따로 둔다. 각각을 뒤집는 것이 다르기 때문이다.
 
 - **초점** — 이 스레드가 무엇을 위한 것이고 무엇이 되면 끝나는가.
-- **결정과 제약** — 앞으로 따를 선택. 이유와 누가 정했는지(사람인지 에이전트인지)가 붙는다. 고치지 않고 대체한다.
-- **증거** — 기계나 사람이 실제로 말한 것, 바이트 그대로. 테스트 결과, 에러, diff. 절대 요약하지 않는다.
-- **노트** — 에이전트가 단계마다 본 것과 결론, 그리고 **다음**: 누구 차례이고 무엇을 하는가.
+- **결정과 제약** — 앞으로 따를 선택. 이유와 누가 정했는지(사람인지 에이전트인지)가 붙는다. 옛 결정은 사라지지 않고 대체된다.
+- **증거** — 기계나 사람이 실제로 말한 것, 바이트 그대로. 테스트 결과, 에러, diff. 요약하지 않는다.
+- **노트** — 에이전트가 단계마다 본 것과 결론, 그리고 **다음**: 누구 차례이고 무엇을 할 차례인가.
 
-화면은 스레드를 사람이 아무것도 열지 않고 읽을 수 있는 세 줄로 보여 준다. 어디까지 왔는지, 다음은 무엇인지, 왜 그런지. 그 뒤의 규칙은 에이전트의 기억이 아니라 서버가 지킨다. 주제 없이는 스레드를 못 열고, 다음 차례를 안 적으면 next 를 못 남기고, 모든 글의 첫 줄은 제목이며(120칸 이내, 기록 번호 없이), 증거는 글에 붙여 넣는 대신 번호로 단다.
+화면은 스레드를 사람이 아무것도 열지 않고 읽을 수 있는 세 줄로 보여 준다. 어디까지 왔는지, 다음은 무엇인지, 왜 그런지. 그 뒤의 규칙은 에이전트의 기억이 아닌, 서버가 지킨다. 주제 없이는 스레드를 못 열고, 다음 차례를 안 적으면 next 를 못 남기고, 모든 글의 첫 줄은 제목이며(120칸 이내, 기록 번호 없이), 증거는 글에 붙여 넣는 대신 번호로 단다.
 
 ## 붙는 곳
 
 - **Claude Code** — 세션 훅이 있어 세션을 시작하면 열린 스레드가 저절로 뜬다.
-- **Codex CLI** — `codex mcp add` 로 등록. 시작할 때 한 번 "casebook 열린 스레드 보여줘".
+- **Codex CLI** — `codex mcp add` 로 등록. 시작할 때 한 번 "casebook 열린 스레드 보여줘", "casebook 사용해서 기록 남기며 작업해줘".
 - **claude.ai** — 커넥터로, OAuth 로그인 (호스팅 서버만).
 
 **맥·리눅스·WSL** 에서 된다. 윈도우 네이티브는 아직 아니다. 설치기와 실행기가 `sh` 다.
@@ -56,8 +56,6 @@ sh tools/hooks/install_claude_hooks.sh          # 선택: 세션 시작·post-co
 .venv/bin/python -m casebook.adapters.ui_server  # 창
 ```
 
-서버를 직접 돌리려면 `.env.example` 을 `.env` 로 복사해 채우고 `docker compose up -d`. API, MCP 문, TLS 를 받는 Caddy, 읽기 전용 데모가 뜬다. `compose.yml` 을 보면 된다.
-
 ## 구조
 
 - `casebook/core` — 기록: 스레드·턴·증거·결정, 첫 줄 규칙.
@@ -68,4 +66,4 @@ sh tools/hooks/install_claude_hooks.sh          # 선택: 세션 시작·post-co
 
 ## 라이선스
 
-[Functional Source License 1.1, Apache 2.0 Future License](LICENSE) (FSL-1.1-ALv2, Sentry 가 쓰는 것). 쓰고, 복사하고, 고치고, 배포하는 것은 어떤 용도로든 된다. 안 되는 것은 하나, 이것으로 경쟁 제품이나 서비스를 내는 것이다. 판마다 공개 2년 뒤에는 그 판이 Apache 2.0 이 된다. 오픈소스가 아니라 source-available 이라 GitHub 에는 "Other" 로 뜬다.
+[Functional Source License 1.1, Apache 2.0 Future License](LICENSE) (FSL-1.1-ALv2, Sentry 가 쓰는 것). 쓰고, 복사하고, 고치고, 배포하는 것은 어떤 용도로든 된다. 안 되는 것은 이것으로 경쟁 제품이나 서비스를 출시하는 것이다. 판마다 공개 2년 뒤에는 그 판이 Apache 2.0 이 된다. 오픈소스가 아니라 source-available 이라 GitHub 에는 "Other" 로 뜬다.
