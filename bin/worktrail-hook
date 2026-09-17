@@ -1,0 +1,27 @@
+#!/bin/sh
+# Worktrail 플러그인 훅 (#541) — hooks/hooks.json 이 부른다. 세션을 막거나 깨지 않는다.
+# 파이썬 환경이 아직 없으면(첫 실행) session-start 는 뒤에서 환경을 만들기 시작하고 그 사실을 한 줄로 알린다.
+# 나머지 훅은 아무것도 하지 않는다 — 준비가 끝나기 전에 커밋 연결을 기다리게 하지 않는다.
+BIN="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$BIN/.." && pwd)"
+if "$BIN/worktrail-run" --ready; then
+  WORKTRAIL_PLUGIN=1 exec "$("$BIN/worktrail-run" --python)" "$ROOT/tools/hooks/casebook_hook.py" "$@"
+fi
+cat > /dev/null 2>&1 || true
+case "${1:-}" in
+  session-start)
+    LOG="${WORKTRAIL_VENV:-$HOME/.casebook/plugin-venv}.log"
+    mkdir -p "$(dirname "$LOG")"
+    nohup "$BIN/worktrail-run" --prepare > "$LOG" 2>&1 &
+    # 문구는 사용자가 썼다(2026-09-17, 한국어). 영어는 그 문장을 옮긴 것이다. 언어는 clientmode.say 와 같은 순서로 고른다.
+    L="${CASEBOOK_LANG:-$(cat "$HOME/.casebook/lang" 2>/dev/null || true)}"
+    case "$L" in ko|en) ;; *) case "${LC_ALL:-${LANG:-}}" in ko*) L=ko ;; *) L=en ;; esac ;; esac
+    if [ "$L" = ko ]; then
+      MSG="Worktrail : 첫 실행에 필요한 파이썬 환경을 만드는 중입니다.(1분 내외) 끝나면 /mcp에서 casebook을 다시 연결합니다."
+    else
+      MSG="Worktrail: setting up the Python environment needed for the first run (about a minute). When it finishes, reconnect casebook from /mcp."
+    fi
+    printf '{"systemMessage": "%s"}\n' "$MSG"
+    ;;
+  *) printf '{}\n' ;;
+esac

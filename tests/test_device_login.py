@@ -7,9 +7,12 @@
 """
 from __future__ import annotations
 
+import contextlib
 import http.server
 import json
 import os
+import pathlib
+import sys
 import threading
 import time
 import urllib.parse
@@ -90,7 +93,7 @@ class Fake:
 @pytest.fixture
 def fake(tmp_path, monkeypatch):
     monkeypatch.setenv("CASEBOOK_OAUTH_FILE", str(tmp_path / "oauth.json"))
-    monkeypatch.delenv("CASEBOOK_LANG", raising=False)
+    monkeypatch.setenv("CASEBOOK_LANG", "ko")     # 한국어 문구를 본다 — 신호가 없으면 이제 영어다(#541)
     f = Fake()
     _RESOURCE[0] = f.base + "/mcp"
     yield f
@@ -529,3 +532,154 @@ def test_갱신은_한_번에_하나만_한다(fake):
 
     assert fake.token_calls - before == 1, "갱신 요청이 여러 번 나갔다 — refresh token 이 폐기된다"
     assert {_name(t) for t in got} == {"at-2"}         # 여덟 다 새 토큰을 받았다
+
+
+# ── 확장 131호 — 여러 프로세스가 같은 토큰 파일을 갱신한다 ────────────────────
+# oauth.json 을 프록시·훅 다섯·창이 같이 쓴다. 갱신 자물쇠가 threading.Lock 이라 프로세스를
+# 못 넘고, 임시 파일 이름이 모두 oauth.tmp 였다. 2026-09-17 08:55 에 실제로 찢어졌다 —
+# 유효한 JSON 1388바이트 뒤에 `}` 하나. 그 뒤로 이 맥의 기록 도구와 훅이 전부 멈췄는데
+# load() 가 파싱 실패를 없는 것으로 삼켜 증상은 서버 에러로만 보였다(#517 증거 #2294).
+
+_RACER = r'''
+import os, sys, time
+sys.path.insert(0, os.environ["ROOT"])
+from casebook.adapters import device_login as dl
+
+def fake_post(url, form, timeout=15):
+    with open(os.environ["COUNTER"], "a") as f:
+        f.write(form["refresh_token"] + "\n")
+    time.sleep(0.4)                       # 갱신이 확실히 겹치게 한다
+    me = str(os.getpid())
+    return 200, {"access_token": "at-" + me, "refresh_token": "rt-" + me, "expires_in": 3600}
+
+dl._post_form = fake_post
+open(os.path.join(os.environ["READY"], str(os.getpid())), "w").close()
+while not os.path.exists(os.environ["GO"]):
+    time.sleep(0.002)
+print(dl.access_token(), flush=True)
+'''
+
+
+def _race(tmp_path, n=6):
+    """n 개 프로세스를 출발선에 세웠다가 한꺼번에 access_token() 을 부르게 한다."""
+    import subprocess
+    root = pathlib.Path(__file__).resolve().parent.parent
+    tok = tmp_path / "oauth.json"
+    tok.write_text(json.dumps({"access_token": "at-old", "refresh_token": "rt-old",
+                               "expires_at": time.time() - 5, "issuer": "https://as.test",
+                               "client_id": "cid", "token_endpoint": "https://as.test/token",
+                               "base": "https://h.test", "resource": ""}, indent=2), encoding="utf-8")
+    ready, go, counter = tmp_path / "ready", tmp_path / "go", tmp_path / "calls"
+    ready.mkdir()
+    env = {**os.environ, "ROOT": str(root), "CASEBOOK_OAUTH_FILE": str(tok),
+           "READY": str(ready), "GO": str(go), "COUNTER": str(counter)}
+    procs = [subprocess.Popen([sys.executable, "-c", _RACER], env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+             for _ in range(n)]
+    deadline = time.time() + 30
+    while len(list(ready.iterdir())) < n and time.time() < deadline:
+        time.sleep(0.01)
+    go.write_text("")
+    outs = [p.communicate(timeout=60) for p in procs]
+    return tok, counter, outs
+
+
+def test_여러_프로세스가_한꺼번에_갱신해도_갱신은_한_번이다(tmp_path):
+    """AuthKit 은 갱신할 때마다 refresh token 을 바꾼다(확장 103호). 둘이 같이 갱신하면 뒤엣것이
+    이미 폐기된 토큰을 내밀어 로그인이 통째로 끊긴다 — 103호의 자물쇠는 프로세스 사이에 없었다."""
+    tok, counter, outs = _race(tmp_path)
+    for out, err in outs:
+        assert "Traceback" not in err, err
+    calls = counter.read_text().splitlines()
+    assert len(calls) == 1, f"프로세스 {len(calls)}개가 따로 갱신했다: {calls}"
+    got = {out.strip() for out, _ in outs}
+    assert len(got) == 1, f"프로세스마다 다른 토큰을 쥐었다: {got}"
+
+
+def test_여러_프로세스가_한꺼번에_갱신해도_파일은_온전하다(tmp_path):
+    tok, _, outs = _race(tmp_path)
+    saved = json.loads(tok.read_text(encoding="utf-8"))        # 찢어졌으면 여기서 터진다
+    assert saved["access_token"] == outs[0][0].strip()
+    assert oct(tok.stat().st_mode & 0o777) == "0o600"
+    assert not [p.name for p in tmp_path.iterdir() if p.name.endswith(".tmp")], "임시 파일이 남았다"
+
+
+def test_찢어진_토큰_파일은_살려_읽고_조용히_넘어가지_않는다(fake, capsys):
+    """08:55 에 실제로 나온 모양 그대로 — 앞의 JSON 은 온전하고 뒤에 한 글자가 붙었다.
+
+    종전에는 이것을 없는 것으로 삼켜 access_token() 이 None, route() 는 닫힌 경로 토큰 문으로
+    돌아갔다. 사람에게 보이는 것은 "Server returned an error response" 뿐이었다."""
+    p = dl._path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    body = {"access_token": "at-ok", "refresh_token": "rt-ok", "expires_at": time.time() + 3600,
+            "issuer": "https://as.test", "client_id": "cid", "token_endpoint": "https://as.test/token",
+            "base": "https://h.test", "resource": ""}
+    p.write_text(json.dumps(body, indent=2) + "}", encoding="utf-8")
+
+    assert dl.access_token() == "at-ok", "찢어진 파일을 없는 것으로 삼켰다"
+    assert "oauth.json" in capsys.readouterr().err, "고쳤다는 것을 말하지 않았다"
+    assert json.loads(p.read_text(encoding="utf-8"))["access_token"] == "at-ok", "파일을 다시 쓰지 않았다"
+
+
+def test_살릴_수_없게_깨진_파일은_다시_로그인하라고_말한다(fake, capsys):
+    p = dl._path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("{ 망가짐", encoding="utf-8")
+    assert dl.load() is None
+    assert "casebook-login" in capsys.readouterr().err
+
+
+def test_윈도우에는_fcntl_이_없어도_import_된다():
+    """윈도우 설치(확장 122~125호)도 이 모듈을 쓴다. fcntl 을 맨 위에서 부르면 거기서 죽는다."""
+    import subprocess
+    root = pathlib.Path(__file__).resolve().parent.parent
+    code = ("import sys; sys.modules['fcntl'] = None; sys.path.insert(0, %r); "
+            "import casebook.adapters.device_login as dl; print('ok')") % str(root)
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert r.stdout.strip() == "ok", r.stderr
+
+
+def test_윈도우_자물쇠는_msvcrt_로_잡고_푼다(tmp_path, monkeypatch):
+    """이 맥에서는 msvcrt 가 없으니 가짜를 끼워 잡고 푸는 순서만 본다. 실제 윈도우는 사용자 기계에서."""
+    import types
+    calls = []
+    fake_ms = types.SimpleNamespace(LK_NBLCK=2, LK_UNLCK=0,
+                                    locking=lambda fd, mode, n: calls.append((mode, n)))
+    monkeypatch.setitem(sys.modules, "msvcrt", fake_ms)
+    with dl._file_lock(tmp_path / "x.lock", nt=True):
+        assert calls == [(2, 1)]
+    assert calls == [(2, 1), (0, 1)]
+
+
+def test_자물쇠를_쥔_채_찢어진_파일을_만나도_멈추지_않는다(fake, monkeypatch):
+    """업데이트해도 이미 떠 있는 프록시는 옛 코드다(Claude Code 가 다시 띄울 때까지). 그 옛 프록시가
+    갱신 자물쇠 밖에서 파일을 찢으면, 새 코드는 자물쇠를 쥔 채 찢어진 파일을 읽게 된다.
+    거기서 살리려고 같은 자물쇠를 다시 잡으면 threading.Lock 은 영원히 멈춘다 — 훅이 서면
+    커밋이 서고, 프록시가 서면 기록 도구가 전부 선다."""
+    p = dl._path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    body = {"access_token": "at-old", "refresh_token": "rt-old", "expires_at": time.time() - 5,
+            "issuer": "https://as.test", "client_id": "cid", "token_endpoint": "https://as.test/token",
+            "base": "https://h.test", "resource": ""}
+    p.write_text(json.dumps(body, indent=2), encoding="utf-8")
+
+    real_lock = dl._file_lock
+
+    @contextlib.contextmanager
+    def tearing_lock(*a, **k):
+        with real_lock(*a, **k) as held:
+            p.write_text(json.dumps(body, indent=2) + "}", encoding="utf-8")   # 옛 프록시가 방금 찢었다
+            yield held
+
+    monkeypatch.setattr(dl, "_file_lock", tearing_lock)
+    monkeypatch.setattr(dl, "_post_form", lambda url, form, timeout=15: (
+        200, {"access_token": "at-new", "refresh_token": "rt-new", "expires_in": 3600}))
+
+    got = []
+    t = threading.Thread(target=lambda: got.append(dl.access_token()), daemon=True)
+    t.start()
+    t.join(timeout=5)
+    assert not t.is_alive(), "자물쇠를 쥔 채 같은 자물쇠를 다시 잡으려다 멈췄다"
+    assert got == ["at-new"]
+    monkeypatch.setattr(dl, "_file_lock", real_lock)
+    assert json.loads(p.read_text(encoding="utf-8"))["access_token"] == "at-new"

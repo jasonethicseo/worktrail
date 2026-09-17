@@ -11,6 +11,8 @@
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import threading
 import uuid
 from typing import Any
@@ -167,25 +169,65 @@ class Worktrail:
 
     def external_turn(self, user_id: int, case_id: int, content: str, action_key: str,
                       note: str | None = None, source: dict | None = None, note_kind: str | None = None,
-                      refs: list[int] | None = None) -> dict:
+                      refs: list[int] | None = None, keep_message: bool = False) -> dict:
         """확장 4호 — MCP 문의 턴. content 는 byte-exact evidence, note 는 호스트의 결론(선택).
         refs (확장 123호) — 이 결론이 기대는 증거 번호들. 글 속 "(증거 #N)" 대신 여기로 온다.
 
-        입력 턴과 같은 생성 이벤트를 쓰고(user_message · canonical_evidence_created ·
-        turn_status_changed), 워커는 답변 호출 없이 기록자만 돌린다.
+        생성 이벤트는 canonical_evidence_created · turn_status_changed 다. #540 (D16413) — 예전에는 입력 턴을
+        본떠 같은 글을 message(role=user)에도 쓰고 user_message 를 냈는데, 기록 경로가 모델을 부르지 않게 된
+        뒤(확장 39호) 그 복사본을 읽는 곳이 없어 쓰지 않는다. keep_message 는 조사 intake 전용이다 — 그 묶음은
+        다음 입력 턴의 모델 컨텍스트에 대화 줄로 들어가야 한다(workers._build_context).
         """
         self._assert_case_owner(user_id, case_id)
         if not (content or "").strip():
             raise InputError("Content cannot be empty.")
         if (note or "").strip():
             note = check_headline(note, "conclusion")      # 확장 52호 — 관찰(content)은 원문 그대로, 결론만 제목 규칙
+        def result_of(turn: dict) -> dict:
+            return {"turn_id": turn["id"], "status": turn["status"],
+                    "evidence_id": turn["evidence_id"], "sequence": turn["sequence"]}
+
+        # 같은 열쇠는 "같은 요청의 재전송"일 때만 같은 기록이다. 열쇠가 같아도 내용이 다르면 재전송이 아니라
+        # 새 기록이므로 새 열쇠로 받는다 — 조용히 합치면 두 번째 기록이 "stored" 라는 답과 함께 사라진다.
+        fingerprint = hashlib.sha256(json.dumps(
+            [content, note or "", note_kind or "", sorted(int(i) for i in refs or [])],
+            ensure_ascii=False).encode()).hexdigest()
+
+        def same_request(key: str) -> bool | None:
+            row = self.db.conn.execute(
+                "SELECT fingerprint FROM mcp_request WHERE user_id=? AND case_id=? AND request_id=?",
+                (user_id, case_id, key)).fetchone()
+            if row is None:
+                return None                                # 열쇠 표 이전의 턴 — 종전대로 같은 것으로 본다
+            return row["fingerprint"] in (None, fingerprint)
+
         existing = self.db.query("turn", where={"case_id": case_id, "action_key": action_key})
         if existing:
-            return {"turn_id": existing[0]["id"], "status": existing[0]["status"]}
+            if same_request(action_key) is not False:
+                return result_of(existing[0])
+            action_key = uuid.uuid4().hex
 
         sequence = self.db.count("turn", where={"case_id": case_id}) + 1
         with self.db.transaction():
-            msg = self.db.add("message", {"case_id": case_id, "role": "user", "content": content})
+            claimed = self.db.conn.execute(
+                "INSERT OR IGNORE INTO mcp_request(user_id, request_id, case_id, turn_id, created_at, fingerprint) "
+                "VALUES (?,?,?,?,?,?)", (user_id, action_key, case_id, None, self.db.now_ms(), fingerprint))
+            if claimed.rowcount == 0 and same_request(action_key) is False:
+                action_key = uuid.uuid4().hex
+                self.db.conn.execute(
+                    "INSERT INTO mcp_request(user_id, request_id, case_id, turn_id, created_at, fingerprint) "
+                    "VALUES (?,?,?,?,?,?)", (user_id, action_key, case_id, None, self.db.now_ms(), fingerprint))
+            elif claimed.rowcount == 0:
+                request = self.db.conn.execute(
+                    "SELECT turn_id FROM mcp_request WHERE user_id=? AND case_id=? AND request_id=?",
+                    (user_id, case_id, action_key)).fetchone()
+                if request is None or request["turn_id"] is None:
+                    raise InputError("request_id points to an incomplete record")
+                turn = self.db.get("turn", request["turn_id"])
+                if turn is None:
+                    raise InputError("request_id points to a missing record")
+                return result_of(turn)
+            msg = self.db.add("message", {"case_id": case_id, "role": "user", "content": content}) if keep_message else None
             ev = self.db.add("evidence", {
                 "case_id": case_id, "kind": "user_paste", "content": content,
                 "source": source or {"via": "mcp"},
@@ -194,14 +236,15 @@ class Worktrail:
                 "case_id": case_id, "sequence": sequence, "turn_kind": "external",
                 "status": "pending", "answer_status": "not_attempted",
                 "action_key": action_key,
-                "user_message_id": msg["id"], "evidence_id": ev["id"],
+                "user_message_id": msg["id"] if msg else None, "evidence_id": ev["id"],
             })
-            self.db.attach_turn("message", msg["id"], turn["id"])
             self.db.attach_turn("evidence", ev["id"], turn["id"])
-            self.db.add("ledger", {
-                "case_id": case_id, "turn_id": turn["id"],
-                "event_type": "user_message", "payload": {"message_id": msg["id"]},
-            })
+            if msg:
+                self.db.attach_turn("message", msg["id"], turn["id"])
+                self.db.add("ledger", {
+                    "case_id": case_id, "turn_id": turn["id"],
+                    "event_type": "user_message", "payload": {"message_id": msg["id"]},
+                })
             self.db.add("ledger", {
                 "case_id": case_id, "turn_id": turn["id"],
                 "event_type": "canonical_evidence_created", "payload": {"evidence_id": ev["id"]},
@@ -210,6 +253,9 @@ class Worktrail:
                 "case_id": case_id, "turn_id": turn["id"],
                 "event_type": "turn_status_changed", "payload": {"from": None, "to": "pending"},
             })
+            self.db.conn.execute(
+                "UPDATE mcp_request SET turn_id=? WHERE user_id=? AND case_id=? AND request_id=?",
+                (turn["id"], user_id, case_id, action_key))
         self.enqueue("external_turn_worker", turn_id=turn["id"], note=note, note_kind=note_kind,
                      **({"refs": [int(i) for i in refs]} if refs else {}))
         return {"turn_id": turn["id"], "status": "pending", "evidence_id": ev["id"], "sequence": sequence}
@@ -455,7 +501,7 @@ class Worktrail:
         """확장 16호 — worktree 를 주면 Anchor(live git)를 싣는다. 단, 그 worktree 가 이 스레드의 저장소일 때만."""
         case = self._assert_case_owner(user_id, case_id)
         if worktree:
-            threads.reconcile_repo(self.db, worktree)       # identity 승격은 읽기에서도 — mismatch 가 거짓 경보가 되지 않게
+            threads.reconcile_repo(self.db, user_id, worktree)  # 자기 저장소의 identity 만 승격한다
         siblings = threads.repo_case_ids(self.db, user_id, case_id)
         repo = threads.repo_of_case(self.db, case_id)
         anc = None

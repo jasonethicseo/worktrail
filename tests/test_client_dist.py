@@ -655,3 +655,150 @@ def test_깐_것이_없으면_그렇게_말한다(tmp_path):
                        capture_output=True, text=True,
                        env={"HOME": str(other), "PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8"})
     assert r.returncode == 0 and "Nothing is installed." in r.stdout
+
+
+# ── 확장 122호 — 윈도우 설치 지시문 ──────────────────────────────────────────
+# 설치기는 sh 라 윈도우에서 안 돈다. 그런데 설치가 하는 일은 받아서 풀고·venv 만들고·파일 쓰고·
+# 등록하는 것뿐이고, sh 가 필요한 곳은 실행기 껍데기 하나다(프록시는 파이썬 한 줄로 뜬다).
+# 그래서 PowerShell 설치기 대신 에이전트에게 붙여넣을 지시문을 서버가 만들어 낸다.
+
+def test_윈도우_지시문에_그_사람의_주소가_박힌다():
+    """사람이 주소를 손으로 적지 않는다 — install.sh 와 같은 이유다(확장 34호)."""
+    out = client_dist.windows_prompt("https://h.test/mcp/TOK")
+    assert "https://h.test/mcp/TOK/client.tar.gz" in out
+    assert "?mode=local" in out, "로컬 묶음을 받는 길이 빠졌다 — 문구가 아니라 그 길이 있어야 한다"
+    assert out.count("<URL>") == 0, "치환되지 않은 자리가 남았다"
+
+
+def test_윈도우_지시문은_sh_없이_돌게_시킨다():
+    """실행기(bin/*)는 sh 스크립트라 윈도우에서 못 쓴다. 파이썬을 직접 가리켜야 한다."""
+    out = client_dist.windows_prompt("https://h.test/mcp/TOK")
+    assert ".venv\\Scripts\\python.exe" in out, "윈도우 파이썬 경로가 아니다"
+    assert "runpy.run_module" in out, "부트스트랩 한 줄이 빠졌다"
+    assert "bin/casebook-proxy" not in out, "sh 실행기를 가리키고 있다"
+
+
+def test_윈도우_지시문이_훅_명세를_베끼지_않는다():
+    """손으로 옮기면 한쪽만 고쳐졌을 때 조용히 갈린다 — 설치기의 --print-spec 이 하나뿐인 원본이다."""
+    import json
+    import subprocess
+    spec = json.loads(subprocess.run(
+        ["sh", str(ROOT / "tools/hooks/install_claude_hooks.sh"), "--print-spec"],
+        capture_output=True, text=True, check=True).stdout)
+    assert client_dist.hook_spec() == spec
+
+    out = client_dist.windows_prompt("https://h.test/mcp/TOK")
+    for h in spec:                                   # 다섯이 전부 지시문에 들어 있다
+        assert f'casebook_hook.py {h["arg"]}' in out, f'훅 {h["arg"]} 가 빠졌다'
+        if h.get("status"):
+            assert h["status"] in out
+
+
+def test_윈도우_지시문이_로컬과_서버를_가른다():
+    """로컬인데 remote-url 이 남으면 기록이 서버로 간다 — 그 사람이 로컬을 고른 이유가 무너진다."""
+    out = client_dist.windows_prompt("https://h.test/mcp/TOK")
+    # 의존성이 갈린다 — 로컬은 엔진과 화면까지 돌려야 하므로 셋이 필요하다
+    assert '"mcp", "fastapi", "uvicorn"' in out, "로컬 모드 의존성이 빠졌다"
+    # remote-url 이 있고 없고가 곧 서버냐 로컬이냐다
+    assert "remote-url" in out
+    assert "casebook.db" in out, "기록 파일을 함부로 지우지 말라는 말이 없다"
+
+
+def test_윈도우_지시문은_문에서_받는다(door):
+    """토큰 뒤에서 내준다 — install.sh 와 같은 문, 같은 문지기."""
+    r = door.get(door.token_path + "/windows.md")
+    assert r.status_code == 200
+    assert "text/markdown" in r.headers["content-type"]
+    assert door.token_path in r.text, "받은 주소가 지시문에 박혀 있어야 한다"
+    assert client_dist.windows_prompt("x") != r.text
+
+
+@pytest.mark.parametrize("path", ["/mcp/badtoken/windows.md"])
+def test_토큰이_틀리면_윈도우_지시문도_401(door, path):
+    assert door.get(path).status_code == 401
+
+
+def test_윈도우_지시문이_윈도우_기본_PowerShell_에서_돈다():
+    """실측 2026-09-16, 3단계에서 멈췄다:
+       Set-Content : A parameter cannot be found that matches parameter name 'NoNewline'.
+    -NoNewline 은 PowerShell 7 부터다. 윈도우가 들고 나오는 것은 5.1 이라 7 전용을 쓰면 안 된다."""
+    out = client_dist.windows_prompt("https://h.test/mcp/TOK")
+    called = [l.strip() for l in out.splitlines() if l.strip().startswith("Set-Content")]
+    assert not called, f"5.1 에 없는 Set-Content 를 부른다: {called}"
+    assert "[IO.File]::WriteAllText" in out, "파일 쓰는 길이 사라졌다"
+    assert "Windows PowerShell 5.1" in out, "어느 판을 전제하는지 적혀 있어야 한다"
+
+
+def test_부트스트랩에_큰따옴표를_쓰지_않는다():
+    """같은 문자열이 세 곳에 들어간다 — PowerShell 명령줄·config.toml·settings.json.
+    5.1 은 네이티브 명령에 넘기는 인자의 따옴표를 망가뜨리고, 뒤의 둘에서는 이스케이프가 필요해진다.
+    작은따옴표로 두면 셋이 한꺼번에 깨끗해진다."""
+    import json
+    out = client_dist.windows_prompt("https://h.test/mcp/TOK")
+    assert "run_name='__main__'" in out
+    assert 'run_name="__main__"' not in out
+    # settings.json 에 넣는 훅 블록이 그대로 JSON 으로 읽혀야 한다
+    block = out.split("```json", 1)[1].split("```", 1)[0]
+    hooks = json.loads(block)
+    assert len(hooks) == len(client_dist.hook_spec())
+
+
+def test_모든_블록이_스스로_선다():
+    """실측 2026-09-16: 3단계가 exit 1 로 멈췄다. 많은 에이전트가 블록마다 새 셸을 연다 —
+    앞 블록에서 정의한 $H 가 비어 있으면 파일이 엉뚱한 곳에 떨어지거나 그냥 죽는다."""
+    import re
+    out = client_dist.windows_prompt("https://h.test/mcp/TOK")
+    blocks = re.findall(r"```powershell\n(.*?)```", out, re.S)
+    assert len(blocks) >= 5
+    for n, b in enumerate(blocks, 1):
+        for var in ("$H", "$C", "$PY", "$MODE"):
+            if var in b:
+                assert re.search(rf"\{var}\s*=", b), f"{n}번 블록이 {var} 를 정의 없이 쓴다"
+
+
+def test_로컬_모드가_주석으로_갈리지_않는다():
+    """블록을 그대로 돌린 사람이 로컬을 골랐는데 remote-url 이 써지면, 기록이 서버로 간다 —
+    그 사람이 로컬을 고른 이유가 통째로 무너지고, 본인은 그것을 볼 수 없다."""
+    import re
+    out = client_dist.windows_prompt("https://h.test/mcp/TOK")
+    block = next(b for b in re.findall(r"```powershell\n(.*?)```", out, re.S) if "remote-url" in b)
+    for line in block.splitlines():
+        t = line.strip()
+        if "remote-url" in t and "WriteAllText" in t:
+            assert not t.startswith("#"), "서버용 줄이 주석으로만 갈려 있다"
+    assert re.search(r'if\s*\(\s*\$MODE\s+-eq\s+"server"\s*\)', block), "모드를 코드로 가르지 않는다"
+    assert "Remove-Item" in block, "로컬에서 remote-url 을 지우지 않는다"
+
+
+def test_없는_에이전트를_부르지_않는다():
+    """실측 2026-09-16, 5단계에서 멈췄다:
+       The term 'claude' is not recognized as a name of a cmdlet, function, script file...
+    PowerShell 은 없는 명령을 조용히 건너뛰지 않고 터진다. sh 설치기는 command -v 로 가려서
+    있는 것만 등록하는데(M_NOCLAUDE·M_NOCODEX), 지시문에 그 가드가 빠져 있었다."""
+    import re
+    out = client_dist.windows_prompt("https://h.test/mcp/TOK")
+    for tool in ("claude", "codex"):
+        called = [l.strip() for l in out.splitlines()
+                  if re.match(rf"^\s*{tool}\s+mcp\b", l)]
+        assert called, f"{tool} 등록 줄이 아예 없다"
+        assert f"Get-Command {tool}" in out, f"{tool} 이 있는지 보지 않고 부른다"
+    # 둘 다 없는 사람에게도 무슨 일이 일어났는지 말해 준다
+    assert "No agent CLI found" in out
+    assert "Get-Command python" in out, "파이썬이 없을 때 조용히 죽는다"
+
+
+def test_토큰_자물쇠와_남은_임시_파일까지_지운다(tmp_path):
+    """확장 131호 — 토큰 갱신이 프로세스를 넘는 자물쇠(oauth.json.lock)를 쓰고, 쓰다 죽은 프로세스는
+    .oauth.json.*.tmp 를 남길 수 있다. 그것을 빠뜨리면 rmdir 이 실패해 "지웠다" 고 말하고
+    ~/.casebook 이 남는다."""
+    h = _uninstall_home(tmp_path)
+    (h / "oauth.json.lock").write_text("")
+    (h / ".oauth.json.abc123.tmp").write_text("{}")
+    r = _run(h, "--yes", "--records")
+    assert r.returncode == 0, r.stderr
+    assert not h.exists(), f"~/.casebook 이 남았다: {sorted(p.name for p in h.iterdir())}"
+
+
+def test_윈도우_지시문도_토큰_자물쇠를_지운다():
+    out = client_dist.windows_prompt("https://h.test/mcp/TOK")
+    assert "oauth.json.lock" in out

@@ -293,7 +293,7 @@ def import_local(worktree: str, sessions: list[dict[str, Any]]) -> dict[str, Any
     facts = facts_for(worktree)
     with threads.provided(facts):
         threads.ensure(cb.db)
-        repo = threads._repo_for(cb.db, threads.identify(facts["worktree"]))
+        repo = threads._repo_for(cb.db, uid, threads.identify(facts["worktree"]))
         cut = prior.cutoff_for(cb.db, uid, repo["id"])
         out = prior.import_sessions(cb.db, uid, repo["id"], sessions, reset=True, cutoff=cut)
     out["repository"] = repo["identity"]

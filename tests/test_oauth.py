@@ -555,7 +555,11 @@ def test_상태는_줄을_선_사람에게_설치_줄을_주지_않는다(keypai
     c.post("/join/consent", headers=_hdr(keypair))
     body = c.get("/join/status", headers=_hdr(keypair)).json()
     assert body["state"] == access.STATE_ALLOWED
-    assert body["install"].startswith("curl -fsSL") and "/install.sh | sh" in body["install"]
+    # 확장 126호 — 모드는 신청 화면에서 이미 골랐으므로 설치기에게 넘긴다. 윈도우는 sh 가 없어
+    # 지시문 주소를 준다 — 돌지 않는 줄을 쥐여 주지 않는다.
+    assert body["install"]["server"].endswith("| sh -s -- --server")
+    assert body["install"]["local"].endswith("| sh -s -- --local")
+    assert body["install"]["windows"].endswith("/windows.md")
 
 
 # ── 확장 115호 — 동의를 남기는 길 ────────────────────────────────────────────
@@ -596,7 +600,7 @@ def test_신청_페이지에서_동의하면_기록이_열린다(keypair, tmp_pa
     access.check(wt.db, uid)                      # 이제 지난다 — 여기서 터지면 안 된다
 
     body = c.get("/join/status", headers=_hdr(keypair)).json()
-    assert body["install"].startswith("curl -fsSL")
+    assert body["install"]["server"].startswith("curl -fsSL")
 
 
 def test_동의_판은_서버가_정한다(keypair, tmp_path):
@@ -734,3 +738,101 @@ def test_교환이_거절되면_사람이_읽을_말로_올린다(monkeypatch):
                                                          "error_description": "code already used"})
     with pytest.raises(o.OAuthError, match="code already used"):
         o.exchange_code("code", "verifier", "https://ours.test/join/callback")
+
+
+def test_로컬을_고른_사람은_다른_안내문에_동의한다(keypair, tmp_path):
+    """확장 126호 — 로컬은 서버 보관·삭제·열람·종료가 해당되지 않는다. 그 사람이 맡기는 것은
+    신청한 구글 이메일 하나뿐이다. 같은 글을 읽히면 사실이 아닌 것에 동의를 받는 셈이고,
+    실제로 주저를 만든다(사용자 2026-09-17)."""
+    from casebook.core import access
+    wt, c = _join_client(tmp_path)
+    c.post("/join/request", headers=_hdr(keypair))
+    uid = wt.db.get_by("user", "email", "newbie@x.test")["id"]
+
+    r = c.post("/join/consent", headers=_hdr(keypair), json={"mode": "local"})
+    assert r.status_code == 200
+    assert access.state(wt.db, uid)["consent_version"] == access.NOTICE_VERSION_LOCAL
+    assert access.NOTICE_VERSION_LOCAL != access.NOTICE_VERSION
+
+    # 서버를 고르면 서버 안내문 판이 박힌다
+    c.post("/join/consent", headers=_hdr(keypair), json={"mode": "server"})
+    assert access.state(wt.db, uid)["consent_version"] == access.NOTICE_VERSION
+    # 모드를 안 주면 더 엄격한 쪽(서버)으로 적는다 — 덜 읽은 것으로 기록하지 않는다
+    c.post("/join/consent", headers=_hdr(keypair))
+    assert access.state(wt.db, uid)["consent_version"] == access.NOTICE_VERSION
+
+
+# ── 확장 127호 — 들어오는 길을 실제보다 좁게 말하지 않는다 ──────────────────
+def test_신청_화면이_들어오는_길을_좁게_말하지_않는다():
+    """화면이 문 하나만 이름 지어 부르면, 그 계정이 없는 사람은 자기가 못 쓰는 줄 알고 닫는다.
+
+    로그인 문은 다섯이다 — 실측 2026-09-17, AuthKit 로그인 화면의 링크:
+      provider=GoogleOAuth · MicrosoftOAuth · GitHubOAuth · AppleOAuth · 그리고 이메일.
+    윈도우는 122~125호로 제 지시문을 타고 들어오므로 WSL 을 시킬 일이 없다.
+
+    사용자 2026-09-17: "맥/리눅스/wsl 에서 쓴다는 이제 안 쓰니까 바꿔야지. 구글 계정으로
+    신청한다는 것도 구글 아니라 다른 것도 sso 되니까 바꾸고."
+    """
+    page = (pathlib.Path(__file__).resolve().parent.parent / "web/join/index.html").read_text(encoding="utf-8")
+    code = "\n".join(ln for ln in page.splitlines() if not ln.strip().startswith("//"))
+
+    assert "WSL" not in code, "윈도우는 제 지시문으로 들어온다 — WSL 터미널을 시키지 않는다"
+
+    btn = code.split('id="go"', 1)[1].split("</button>", 1)[0]
+    assert "구글" not in btn and "Google" not in btn, \
+        f"로그인 단추가 제공자 하나를 이름 지어 부른다: {btn!r}"
+
+    notice = code.split("const NOTICE_LOCAL", 1)[1].split("const NOTICE ", 1)[0]
+    assert "구글" not in notice and "Google" not in notice, \
+        "로컬 안내문이 이메일 주소를 '구글 이메일' 이라고 좁혀 부른다"
+
+
+# ── 확장 129호 — 안내문 판을 올리면 실제로 다시 읽힌다 ──────────────────────
+def test_옛_판에_동의한_계정은_안내문을_다시_받는다(keypair, tmp_path):
+    """NOTICE_VERSION 을 올려도 아무 일이 일어나지 않던 자리다.
+
+    동의를 보는 곳이 전부 "값이 있는가" 만 물었다 — access.check 의 `not consent_version`,
+    /join/status 의 `and st["consent_version"]`. 그래서 안내문 문구를 고치고 판을 올려도
+    옛 판에 동의한 사람은 그대로 설치 줄을 받고, 바뀐 글을 영영 보지 않는다.
+
+    사용자 2026-09-17 "올려" — 올리는 행위에 뜻이 생기려면 묻는 쪽이 판을 비교해야 한다.
+    옛 동의 기록 자체는 지우지 않는다. 언제 무엇에 동의했는지가 기록이다.
+    """
+    from casebook.core import access
+    wt, c = _join_client(tmp_path)
+    c.post("/join/request", headers=_hdr(keypair))
+    uid = wt.db.get_by("user", "email", "newbie@x.test")["id"]
+
+    # 지금 판에 동의하면 설치 줄이 나온다
+    c.post("/join/consent", headers=_hdr(keypair), json={"mode": "local"})
+    now = c.get("/join/status", headers=_hdr(keypair)).json()
+    assert now["consent_current"] is True and "install" in now
+
+    # 안내문이 바뀌어 판이 올라간 뒤 — 같은 계정이 설치 줄 대신 안내문을 다시 받는다
+    access.record_consent(wt.db, uid, "2026-09-15+local")
+    old = c.get("/join/status", headers=_hdr(keypair)).json()
+    assert old["consent"] == "2026-09-15+local", "동의한 사실은 그대로 남는다"
+    assert old["consent_current"] is False
+    assert "install" not in old, "옛 판에 동의한 사람에게 설치 줄을 주면 바뀐 글을 못 본다"
+
+    # grandfathered 는 동의가 아니다 — 표가 생길 때 적어 둔 표시일 뿐이다
+    assert access.notice_current(access.CONSENT_GRANDFATHERED) is False
+    assert access.notice_current(None) is False
+
+    # 화면도 값이 있는가가 아니라 판을 본다
+    page = (pathlib.Path(__file__).resolve().parent.parent / "web/join/index.html").read_text(encoding="utf-8")
+    assert "body.consent_current" in page, "화면이 아직 동의 여부만 보고 판을 안 본다"
+
+
+def test_동의를_받으면_일하다_끊기지는_않는다(tmp_path):
+    """판이 올라가도 기록은 계속 간다. 다시 읽히는 것이 목적이지 일을 끊는 것이 목적이 아니다.
+
+    check 까지 판을 보게 하면, 옛 판에 동의한 사람의 에이전트가 브라우저로 가서 다시 동의할
+    때까지 매 기록에서 403 을 받는다 — 그 사람은 무엇이 고장 났는지 알 길이 없다."""
+    from casebook.core import access
+    wt, _ = _join_client(tmp_path)
+    u = wt.db.add("user", {"email": "old@x.test", "name": "old"})
+    access.set_state(wt.db, u["id"], access.STATE_ALLOWED)
+    access.record_consent(wt.db, u["id"], "2026-09-15")        # 옛 판
+    assert access.notice_current("2026-09-15") is False
+    assert access.check(wt.db, u["id"])["consent_version"] == "2026-09-15"

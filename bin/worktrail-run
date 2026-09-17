@@ -1,0 +1,77 @@
+#!/bin/sh
+# Worktrail 플러그인 실행기 (#541) — 플러그인 폴더의 casebook 모듈을 플러그인 전용 파이썬 환경으로 돌린다.
+#   worktrail-run <module> [args...]   환경이 없으면 만든 뒤 모듈을 돌린다 (MCP 서버·casebook-login 등)
+#   worktrail-run --prepare            환경만 만든다 (세션 훅이 뒤에서 부른다)
+#   worktrail-run --ready              환경이 준비됐으면 0
+#   worktrail-run --python             환경의 python 경로를 찍는다
+#
+# 플러그인 폴더는 Claude Code 가 캐시에 복사한 읽기 전용 자리라 venv 를 거기 두지 않는다. 판이 바뀌어도
+# 같은 자리를 쓰도록 ~/.casebook/plugin-venv 에 두고, 의존성 목록이 바뀌었을 때만 다시 만든다.
+# MCP 서버와 SessionStart 훅이 동시에 뜨므로 만드는 쪽은 한 번에 하나다(잠금 폴더).
+set -e
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VENV="${WORKTRAIL_VENV:-$HOME/.casebook/plugin-venv}"
+# pyproject.toml 의 범위와 같게 둔다 — tests/test_plugin.py 가 지킨다.
+DEPS='mcp>=2,<3 fastapi>=0.139,<0.140 uvicorn>=0.51,<0.52'
+STAMP="$VENV/.worktrail-deps"
+
+ready() { [ -x "$VENV/bin/python" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "$DEPS" ]; }
+
+find_python() {
+  for c in python3.13 python3.12 python3.11 python3; do
+    p="$(command -v "$c" 2>/dev/null)" || continue
+    "$p" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null && { echo "$p"; return 0; }
+  done
+  return 1
+}
+
+prepare() {
+  ready && return 0
+  mkdir -p "$(dirname "$VENV")"
+  LOCK="$VENV.lock"
+  waited=0
+  until mkdir "$LOCK" 2>/dev/null; do
+    # 만들다 죽은 프로세스가 남긴 잠금은 10분이 지나면 걷는다.
+    if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +10 2>/dev/null)" ]; then rmdir "$LOCK" 2>/dev/null || true; continue; fi
+    waited=$((waited + 1))
+    [ "$waited" -le 300 ] || { echo "worktrail: another setup did not finish in 5 minutes ($LOCK)" >&2; return 1; }
+    sleep 1
+  done
+  (
+    trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
+    ready && exit 0
+    rm -rf "$VENV"
+    if PY="$(find_python)"; then
+      "$PY" -m venv "$VENV"
+      # shellcheck disable=SC2086 — 목록을 낱말로 가른다
+      "$VENV/bin/python" -m pip install -q --disable-pip-version-check $DEPS
+    elif command -v uv >/dev/null 2>&1; then
+      uv venv -q --python 3.12 "$VENV"
+      # shellcheck disable=SC2086
+      uv pip install -q --python "$VENV/bin/python" $DEPS
+    else
+      # 문구는 사용자가 썼다(2026-09-17, 한국어). 영어는 그 문장을 옮긴 것이다.
+      L="${CASEBOOK_LANG:-$(cat "$HOME/.casebook/lang" 2>/dev/null || true)}"
+      case "$L" in ko|en) ;; *) case "${LC_ALL:-${LANG:-}}" in ko*) L=ko ;; *) L=en ;; esac ;; esac
+      if [ "$L" = ko ]; then
+        echo 'Python 3.11 이상이 필요합니다. macOS: `brew install python@3.12` 또는 uv 설치 후 세션을 다시 여세요.' >&2
+      else
+        echo 'Python 3.11 or newer is required. macOS: `brew install python@3.12` or install uv, then reopen the session.' >&2
+      fi
+      exit 1
+    fi
+    printf '%s\n' "$DEPS" > "$STAMP"
+  )
+}
+
+case "${1:-}" in
+  --ready)  ready ;;
+  --prepare) prepare ;;
+  --python) prepare && echo "$VENV/bin/python" ;;
+  ""|-*)    echo "usage: worktrail-run <module> [args...] | --prepare | --ready | --python" >&2; exit 2 ;;
+  *)
+    MOD="$1"; shift
+    prepare
+    exec "$VENV/bin/python" -c 'import sys; sys.path.insert(0, sys.argv[1]); m = sys.argv[2]; sys.argv[:] = [m, *sys.argv[3:]]; import runpy; runpy.run_module(m, run_name="__main__")' "$ROOT" "$MOD" "$@"
+    ;;
+esac

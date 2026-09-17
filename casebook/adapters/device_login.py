@@ -23,10 +23,12 @@ access token 은 짧다. offline_access 를 함께 요청해 refresh token 을 �
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import pathlib
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -148,27 +150,153 @@ def discover(base: str) -> dict:
 
 
 # ── 토큰 보관 ────────────────────────────────────────────────────────────────
-def save(tok: dict, cfg: dict) -> None:
+# 확장 131호 — 이 파일은 한 프로세스의 것이 아니다. 프록시·훅 다섯·창이 저마다 따로 떠서 같은
+# oauth.json 을 읽고 갱신한다. 종전의 자물쇠(threading.Lock)는 한 프로세스 안에서만 들었고 임시
+# 파일 이름(oauth.tmp)은 모두 같아서, 만료 60초 전에 둘이 겹치면 한쪽이 남의 임시 파일을 옮겨
+# 버리거나(FileNotFoundError) 짧은 쪽이 긴 쪽 위에 덮여 꼬리가 남았다. 2026-09-17 08:55 에 실제로
+# 찢어졌다 — 유효한 JSON 1388바이트 뒤에 `}` 하나. 그 뒤로 이 맥의 기록 도구와 훅이 전부 멈췄다.
+_LOCK_WAIT = 30.0        # 남이 갱신하는 동안 기다리는 한도. 토큰 요청 timeout(15초)보다 길게.
+
+
+def _lock_path() -> pathlib.Path:
     p = _path()
+    return p.with_name(p.name + ".lock")
+
+
+@contextlib.contextmanager
+def _file_lock(path: pathlib.Path | None = None, nt: bool | None = None):
+    """프로세스를 넘는 자물쇠. 잠금 파일은 내용이 없고 지우지 않는다 — 지우면 그 틈에 셋째가 새로 만든다.
+
+    윈도우에는 fcntl 이 없어 msvcrt 로 첫 바이트를 잠근다(확장 122~125호로 윈도우도 이 모듈을 쓴다).
+    둘 다 import 는 여기서만 한다 — 맨 위에 두면 없는 쪽 기계에서 모듈 자체가 안 뜬다.
+
+    기다림에는 끝이 있다. 한도를 넘으면 자물쇠 없이 지나간다 — 매달린 프로세스 하나 때문에 훅과
+    프록시가 같이 서는 것(#519)이 찢어질 위험보다 나쁘고, 쓰기는 _write 가 따로 원자적으로 한다."""
+    path = path or _lock_path()
+    nt = (os.name == "nt") if nt is None else nt
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    held = False
+    try:
+        deadline = time.monotonic() + _LOCK_WAIT
+        while True:
+            try:
+                if nt:
+                    import msvcrt
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                held = True
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.05)
+        yield held
+    finally:
+        if held:
+            try:
+                if nt:
+                    import msvcrt
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+        os.close(fd)
+
+
+def _write(p: pathlib.Path, body: dict) -> None:
+    """임시 파일에 다 쓰고 한 번에 바꿔 끼운다. 임시 파일 이름은 부를 때마다 새로 짓는다.
+
+    권한은 만들 때부터 0600 이다(mkstemp) — 잠깐도 남이 읽을 수 있는 순간이 없다."""
     p.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=p.parent, prefix="." + p.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(body, indent=2))
+        os.chmod(tmp, 0o600)
+        for attempt in range(40):
+            try:
+                os.replace(tmp, p)
+                break
+            except PermissionError:
+                # 윈도우에서는 남이 그 순간 파일을 열어 읽고 있으면 바꿔 끼우기가 거절된다. 읽기는 짧다.
+                if attempt == 39:
+                    raise
+                time.sleep(0.05)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def save(tok: dict, cfg: dict) -> None:
     body = {"access_token": tok["access_token"], "refresh_token": tok.get("refresh_token"),
             "expires_at": time.time() + float(tok.get("expires_in") or 3600),
             "issuer": cfg["issuer"], "client_id": cfg["client_id"], "token_endpoint": cfg["token"],
             "base": cfg["base"], "resource": cfg.get("resource", "")}
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(body, indent=2), encoding="utf-8")
-    os.chmod(tmp, 0o600)                                          # 쓰기 전에 권한부터 — 잠깐도 열지 않는다
-    tmp.replace(p)
+    # 로그인도 자물쇠 안에서 쓴다 — 남이 옛 refresh token 으로 갱신하던 것을 뒤늦게 써서 방금 받은
+    # 새 로그인을 덮으면 안 된다.
+    with _REFRESH_LOCK, _file_lock():
+        _write(_path(), body)
+
+
+def _salvage(text: str) -> dict | None:
+    """찢어진 파일에서 앞의 온전한 토큰을 건진다. 찢어진 모양은 늘 "온전한 JSON + 남의 꼬리" 였다."""
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(text.lstrip())
+    except ValueError:
+        return None
+    if isinstance(obj, dict) and isinstance(obj.get("access_token"), str):
+        return obj
+    return None
+
+
+def _read(p: pathlib.Path) -> tuple[dict | None, bool]:
+    """파일을 읽기만 한다 — (토큰, 찢어졌었나). 자물쇠를 잡지 않으므로 자물쇠 안에서도 부를 수 있다.
+
+    확장 131호 — 깨진 것을 없는 것으로 삼키면 route() 가 닫힌 경로 토큰 문으로 돌아가, 사람에게는
+    "Server returned an error response" 만 보이고 훅은 조용히 skipped 로 넘어간다. 그래서 말한다."""
+    if not p.is_file():
+        return None, False
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError:
+        return None, False
+    try:
+        return json.loads(text), False
+    except ValueError:
+        pass
+    saved = _salvage(text)
+    if saved is None:
+        print(say(f"casebook: {p} 이 깨져 읽을 수 없다 — casebook-login 으로 다시 로그인한다.",
+                  f"casebook: {p} is corrupt and cannot be read — run casebook-login again."),
+              file=sys.stderr)
+        return None, False
+    print(say(f"casebook: {p} 뒤에 찌꺼기가 붙어 있었다 — 앞의 토큰을 살려 다시 쓴다.",
+              f"casebook: {p} had trailing garbage — keeping the token in front and rewriting the file."),
+          file=sys.stderr)
+    return saved, True
 
 
 def load() -> dict | None:
+    """토큰을 읽는다. 찢어져 있었으면 살린 것으로 파일을 고쳐 쓴다.
+
+    자물쇠 안에서는 이것을 부르지 않는다 — 여기서 자물쇠를 잡기 때문이다. 안에서는 _read 를 쓴다."""
     p = _path()
-    if not p.is_file():
-        return None
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:                                             # noqa: BLE001 — 깨졌으면 없는 것과 같다
-        return None
+    saved, torn = _read(p)
+    if torn:
+        with _REFRESH_LOCK, _file_lock():
+            again, still = _read(p)                              # 기다리는 사이 남이 이미 고쳤을 수 있다
+            if still:
+                _write(p, again)
+            saved = again or saved
+    return saved
 
 
 def logout() -> bool:
@@ -194,11 +322,7 @@ def _refresh(saved: dict) -> dict | None:
     saved["access_token"] = body["access_token"]
     saved["refresh_token"] = body.get("refresh_token") or saved["refresh_token"]
     saved["expires_at"] = time.time() + float(body.get("expires_in") or 3600)
-    p = _path()
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(saved, indent=2), encoding="utf-8")
-    os.chmod(tmp, 0o600)
-    tmp.replace(p)
+    _write(_path(), saved)                  # 부르는 쪽(access_token)이 자물쇠를 쥐고 있다
     return saved
 
 
@@ -207,14 +331,20 @@ def access_token() -> str | None:
 
     갱신은 한 번에 하나만 한다(확장 103호). AuthKit 은 갱신할 때마다 refresh token 을 새것으로
     바꾸므로, 둘이 동시에 갱신하면 뒤엣것이 이미 폐기된 것을 내밀어 로그인이 통째로 끊긴다.
-    자물쇠를 잡은 뒤 파일을 다시 읽는 것이 요점이다 — 기다리는 동안 남이 이미 받아 놓았다."""
+    자물쇠를 잡은 뒤 파일을 다시 읽는 것이 요점이다 — 기다리는 동안 남이 이미 받아 놓았다.
+
+    확장 131호 — "하나만" 이 프로세스 안에서만 지켜졌다. 이 파일을 여는 것은 프록시·훅·창이
+    저마다 따로 뜬 프로세스라, 스레드 자물쇠에 파일 자물쇠를 더했다."""
     saved = load()
     if not saved or not saved.get("access_token"):
         return None
     if time.time() < float(saved.get("expires_at") or 0) - _EARLY:
         return saved["access_token"]
-    with _REFRESH_LOCK:
-        saved = load() or saved
+    with _REFRESH_LOCK, _file_lock():
+        again, torn = _read(_path())                             # load() 는 자물쇠를 다시 잡는다 — 여기선 안 된다
+        if torn:
+            _write(_path(), again)
+        saved = again or saved
         if not saved.get("access_token"):
             return None
         if time.time() < float(saved.get("expires_at") or 0) - _EARLY:
@@ -248,7 +378,8 @@ def route(url: str) -> tuple[str, dict[str, str]]:
     return _bare(url), {"Authorization": f"Bearer {tok}"}
 
 
-_REFRESH_LOCK = threading.Lock()
+# 확장 131호 — RLock 이다. 지금은 안에서 다시 잡는 길이 없지만, 생기는 순간 Lock 은 말없이 영원히 선다.
+_REFRESH_LOCK = threading.RLock()
 _BEARER: object | None = None
 
 

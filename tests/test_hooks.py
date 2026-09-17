@@ -160,7 +160,8 @@ def test_post_compact_without_resume_has_no_active_thread(tmp_path):
 
 
 def test_실패해도_세션을_막지_않는다(tmp_path):
-    out = _run("session-start", str(tmp_path / "missing.db"), email="nobody@example.test")
+    # 열 수 없는 DB(폴더)로 실패를 만든다. 없는 DB 는 이제 실패가 아니다 — 로컬 첫 세션처럼 사용자를 만든다(#541).
+    out = _run("session-start", str(tmp_path), email="nobody@example.test")
     assert "skipped" in out["systemMessage"] and "hookSpecificOutput" not in out
     out = _run("bogus", str(tmp_path / "missing.db"))
     assert "skipped" in out["systemMessage"]

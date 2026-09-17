@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Worktrail</title>
 <!--
-확장 101호 (D15414) — 신청 페이지. 아무나 여기 와서 구글로 로그인하고 줄을 선다.
+확장 101호 (D15414) — 신청 페이지. 아무나 여기 와서 로그인하고 줄을 선다.
 
 설정이 없다: /.well-known/oauth-protected-resource/mcp 에서 인가 서버·client_id·자원을 읽고,
 그 인가 서버의 discovery 에서 authorize·token 주소를 얻는다. 서버 주소 말고는 아무것도 모른다.
@@ -49,6 +49,12 @@
      한 명이 이 화면까지 와서 가입하지 않았다). 놀라서 닫는 것과 알고 누르는 것은 다르다.
      인가 서버 주소 자체는 여기 적지 않는다 — 메타데이터에서 읽는 것이 이 페이지의 규칙이다. */
   .via{font-size:13px;color:var(--dim);margin:12px 0 0}
+  /* 확장 127호 — 어느 기계인지는 고르는 것이지 고백하는 것이 아니다. 둘을 나란히 두고
+     지금 보고 있는 쪽을 칠한다 — 단추 하나가 "윈도우인데요" 라고 말을 걸면, 그것이 지금
+     상태인지 바꾸는 단추인지 읽는 사람이 한 번 멈춘다. */
+  .os{display:flex;gap:8px;margin:0 0 14px}
+  .os button{padding:7px 14px;font-size:13px}
+  button.ghost.on{background:var(--accent);color:var(--bg);border-color:var(--accent)}
 </style>
 <main>
   <div class="mark">Worktrail</div>
@@ -111,86 +117,166 @@ async function signIn() {
   location.href = cfg.authorize + "?" + q.toString();
 }
 
-const api = (path, method = "GET") =>
-  fetch(path, { method, headers: { Authorization: "Bearer " + TOKEN } })
+const api = (path, method = "GET", payload = null) =>
+  fetch(path, { method,
+    headers: { Authorization: "Bearer " + TOKEN,
+               ...(payload ? { "Content-Type": "application/json" } : {}) },
+    ...(payload ? { body: JSON.stringify(payload) } : {}) })
     .then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
 
 // 확장 115호 (D15637) — 서버에 기록을 맡기는 조건. 설치 안내문과 같은 넷을 말한다.
 // 여기서 받는 이유: 설치기에서만 받으면 웹 커넥터로만 쓰는 사람이 영영 동의를 남길 수 없다.
-const NOTICE = T(
-`기록은 운영자의 서버에 저장됩니다. 맡기시는 것이므로 이렇게 다룹니다.
+// 확장 126호 — 로컬로 쓸 사람에게 서버 안내문을 읽히면 사실이 아닌 것에 동의를 받는 셈이고,
+// 실제로 주저를 만든다. 그 사람이 맡기는 것은 신청한 이메일 주소 하나뿐이다.
+const NOTICE_LOCAL = T(
+`기록은 이 컴퓨터에만 존재합니다.
 
-  · 보관 — 계정이 살아 있는 동안 둡니다. 시험 기간이라 기한을 못 박지 않습니다.
-  · 삭제 — 말씀하시면 그 계정의 기록을 전부 지웁니다. 7일 안에 처리합니다.
-  · 열람 — 운영자는 기술적으로 DB 를 열 수 있습니다. 그게 구조입니다.
+  · 저장 — sqlite 파일 하나(~/.casebook/casebook.db)로 이 PC 안에 남습니다.
+  · 제가 아는 것 — 신청하신 이메일 주소 하나뿐입니다.
+  · 갱신 — 받은 시점에 멈춰 있습니다. 업데이트 하시려면 casebook-update 를 직접 해주셔야 합니다.
+  · 나중에 — 서버로 바꾸고 싶으시면 그때 설치 화면이 조건을 보여 드립니다.
+
+지우고 싶으시면 casebook-uninstall 을 하시면 됩니다.`,
+`Your records exist on this computer only.
+
+  · Stored — as one sqlite file (~/.casebook/casebook.db), inside this PC.
+  · What I know — the email address you signed up with. Nothing else.
+  · Updates — your copy is frozen at install time. Run casebook-update yourself to update it.
+  · Later — if you switch to the server, the installer shows you the terms then.
+
+To remove it, run casebook-uninstall.`);
+
+const NOTICE = T(
+`기록은 서버를 통해 저장됩니다.
+
+  · 보관 — 계정이 살아 있는 동안 보관합니다.
+  · 삭제 — 말씀하시면 계정의 기록을 전부 지웁니다. 7일 안에 처리합니다.
+  · 열람 — 운영자는 DB에 '기술적으로는' 접근 가능합니다.
   · 종료 — 시험을 끝낼 때 알리고 30일 뒤 전부 지웁니다. 그 전에 받아 가실 수 있습니다.
 
-그리고 작업하다 나온 에러 메시지나 명령 출력을 에이전트가 원문 그대로 기록에 넣습니다.
-거기 API 키 같은 것이 섞여 있으면 그것도 같이 올라갑니다.
-("그건 기록하지 마" 라고 하면 넣지 않습니다.)`,
-`Your records are kept on the operator's server. You are entrusting them, so here is how they are handled.
+작업하다 나온 에러 메시지나 명령 출력을 에이전트가 원문 그대로 기록합니다.
+API키나 민감 정보는 '기록하지마' 라고 미리 알려주세요.`,
+`Your records are stored on the server.
 
-  · Kept — for as long as the account lives. This is a test period, so no fixed term.
+  · Kept — for as long as the account lives.
   · Deleted — say the word and every record on that account goes. Done within 7 days.
-  · Read — the operator can technically open the database. That is how it is built.
+  · Read — the operator can 'technically' reach the database.
   · Ending — when the test ends you are told, and everything is deleted 30 days later.
     You can take your records out before that.
 
-Also: your agent stores error messages and command output verbatim. If an API key is
-sitting in that output, it goes up with it.
-(Say "don't record that" and it will not be stored.)`);
+Your agent records error messages and command output verbatim.
+Say "don't record that" in advance for API keys or anything sensitive.`);
 
-async function askConsent(body) {
-  $("h").textContent = T("맡기는 조건", "How your records are handled");
-  $("sub").textContent = T("읽고 동의하시면 다음으로 넘어갑니다.",
-                           "Read it, agree, and you move on.");
+// 확장 126호 — 어디에 둘지를 먼저 고른다. 종전에는 설치 중에 물었는데, 그러면 로컬로 쓸 사람이
+// 서버 안내문을 먼저 읽고 거기서 닫는다. 고르고 나면 그 모드의 안내문만 보이고, 설치 줄도 그 모드로
+// 나간다(설치기가 --local/--server 를 받는다) — 같은 것을 두 번 묻지 않는다.
+function askMode(body) {
+  $("h").textContent = T("기록이 저장되는 위치", "Where your records are stored");
+  $("sub").textContent = T("나중에 바꿀 수 있습니다. 그때까지 쌓인 기록은 선택한 곳에만 존재합니다.",
+                           "You can change this later. Records written until then exist only where you chose.");
+  const card = $("card");
+  card.hidden = false;
+  card.innerHTML = `
+    <button id="mLocal">${T("이 컴퓨터에만", "On this machine only")}</button>
+    <p class="via">${T("기록은 이 컴퓨터에만 존재합니다. 코딩에이전트(codex, claude code)가 확인 가능합니다.",
+                       "Records exist on this computer only. Your coding agent (Codex, Claude Code) can read them.")}</p>
+    <button id="mServer" class="ghost" style="margin-top:14px">${T("서버에 두기", "On the server")}</button>
+    <p class="via">${T("에이전트와 웹 채팅에서 같은 기록을 공유합니다. 코딩에이전트와 웹(GPT, Claude)에서도 확인 가능합니다.",
+                       "The same records shared across agents and web chat \u2014 your coding agent and the web (GPT, Claude).")}</p>
+    <div class="who"></div>`;
+  const who = card.querySelector(".who");
+  if (body.email) who.textContent = body.email;
+  $("mLocal").onclick = () => askConsent(body, "local");
+  $("mServer").onclick = () => askConsent(body, "server");
+}
+
+async function askConsent(body, mode) {
+  const local = mode === "local";
+  $("h").textContent = local ? T("이 컴퓨터에만 둡니다", "Kept on this machine")
+                             : T("맡기는 조건", "How your records are handled");
+  $("sub").textContent = T("읽고 동의하시면 다음으로 넘어갑니다.", "Read it, agree, and you move on.");
   const card = $("card");
   card.hidden = false;
   card.innerHTML = `<div class="notice"></div>
     <label class="agree"><input type="checkbox" id="ok">
       <span>${T("읽었고 동의합니다.", "I have read this and I agree.")}</span></label>
     <button id="agree" disabled>${T("동의하고 계속", "Agree and continue")}</button>
+    <button id="back" class="ghost" style="margin-left:8px">${T("뒤로", "Back")}</button>
     <div class="who"></div>`;
-  card.querySelector(".notice").textContent = NOTICE;   // 문구는 텍스트로만 넣는다
+  card.querySelector(".notice").textContent = local ? NOTICE_LOCAL : NOTICE;
   const who = card.querySelector(".who");
   if (body.email) who.textContent = body.email;
+  $("back").onclick = () => askMode(body);
   $("ok").onchange = () => { $("agree").disabled = !$("ok").checked; };
   $("agree").onclick = async () => {
     $("agree").disabled = true;
-    const r = await api("/join/consent", "POST");
+    const r = await api("/join/consent", "POST", { mode });
     if (r.status >= 400) return fail(new Error(r.body.error || ("HTTP " + r.status)));
     const st = await api("/join/status");
     paint(st.body);
   };
 }
 
+// 어느 기계인가. 윈도우에는 sh 가 없어 curl … | sh 가 돌지 않는다 — 없는 줄을 쥐여 주지 않는다.
+const ONWIN = /win/i.test((navigator.userAgentData && navigator.userAgentData.platform)
+                          || navigator.platform || "");
+
+function installCard(body) {
+  const ins = body.install || {};
+  const local = (body.consent || "").endsWith("+local");
+  const unix = local ? ins.local : ins.server;
+  const card = $("card");
+  card.hidden = false;
+  card.innerHTML = `<span class="tag ok">${local ? T("로컬", "local") : T("서버", "server")}</span>
+    <div class="os">
+      <button id="osNix" class="ghost">${T("맥 · 리눅스", "macOS · Linux")}</button>
+      <button id="osWin" class="ghost">Windows</button>
+    </div>
+    <code id="line"></code>
+    <button id="copy">${T("복사", "Copy")}</button>
+    <div class="who"></div>`;
+  let win = ONWIN;
+  const draw = () => {
+    $("h").textContent = T("사용 가능합니다.", "You're all set");
+    $("sub").textContent = win
+      ? T("윈도우에는 셸 설치기가 없습니다. 이 주소를 열어 통째로 코딩 에이전트에게 붙여넣으세요.",
+          "Windows has no shell installer. Open this and paste the whole page to your coding agent.")
+      : T("터미널에 이 줄을 붙여넣으세요.", "Paste this line into your terminal.");
+    $("line").textContent = win ? (ins.windows || "") : (unix || "");
+    $("osNix").classList.toggle("on", !win);
+    $("osWin").classList.toggle("on", win);
+    $("copy").textContent = T("복사", "Copy");
+  };
+  draw();
+  $("osNix").onclick = () => { win = false; draw(); };
+  $("osWin").onclick = () => { win = true; draw(); };
+  $("copy").onclick = async () => {
+    await navigator.clipboard.writeText($("line").textContent);
+    $("copy").textContent = T("복사됨", "Copied");
+  };
+  const who = card.querySelector(".who");
+  if (body.email) who.textContent = body.email;
+}
+
 function paint(body) {
-  const { state, email, install, error: note } = body;
+  const { state, email, error: note } = body;
   // 확장 115호 — 승인 여부보다 동의가 먼저다. 동의가 없으면 설치 줄도 나오지 않는다(서버가 안 준다).
-  if ((state === "allowed" || state === "pending") && !body.consent) return askConsent(body);
+  // 확장 126호 — 그 전에 어디에 둘지부터 고른다. 안내문이 모드마다 다르기 때문이다.
+  // 확장 129호 — 동의했는가가 아니라 지금 판에 동의했는가를 본다. 안내문을 고치면 판이 올라가고,
+  // 옛 판에 동의한 사람은 여기서 다시 읽는다(서버가 consent_current 로 알려 준다).
+  if ((state === "allowed" || state === "pending") && !body.consent_current) return askMode(body);
   const card = $("card");
   card.hidden = false;
   if (state === "allowed") {
-    $("h").textContent = T("쓸 수 있습니다", "You're in");
-    $("sub").textContent = T("맥·리눅스·WSL 의 터미널에 이 줄을 붙여넣으세요. 윈도우 네이티브는 아직 아닙니다.",
-                             "Paste this line into a terminal on macOS, Linux or WSL. Native Windows is not supported yet.");
-    card.innerHTML = `<span class="tag ok">${T("승인됨", "approved")}</span>
-      <code id="line"></code>
-      <button id="copy">${T("복사", "Copy")}</button>
-      <div class="who"></div>`;
-    $("line").textContent = install || "";
-    $("copy").onclick = async () => {
-      await navigator.clipboard.writeText(install || "");
-      $("copy").textContent = T("복사됨", "Copied");
-    };
+    return installCard(body);          // 확장 126호 — 고른 모드와 이 기계에 맞는 줄만 낸다
   } else if (state === "pending") {
     // 확장 119호 — 자리가 남아 있으면 신청이 그 자리에서 열린다. 그러니 pending 은 곧 "자리가 찼다" 다.
-    $("h").textContent = T("지금은 자리가 찼습니다", "The seats are full right now");
-    $("sub").textContent = T("줄은 서 두었습니다. 자리가 나면 이 페이지에 설치 줄이 뜹니다.",
-                             "You are in line. When a seat opens, the install line appears here.");
+    $("h").textContent = T("남은 자리가 없습니다.", "No seats left");
+    $("sub").textContent = T("대기 인원에 등록되었습니다. 운영자가 승인하면 설치하실 수 있습니다.",
+                             "You are on the waiting list. Once the operator approves, you can install.");
     const n = (body.seats && body.seats.total) || "";
     card.innerHTML = `<span class="tag wait">${T("기다리는 중", "waiting")}</span>
-      <p>${T(`서버를 혼자 돌리고 있어서 ${n}자리까지만 받습니다. 이 페이지를 다시 열어 확인하면 됩니다.`,
+      <p>${T(`서버를 혼자 돌리고 있어서 ${n}자리까지만 받습니다. 이 페이지를 다시 열어 확인하시면 됩니다.`,
              `I host this myself, so there is room for ${n} at a time. Just open this page again to check.`)}</p>
       <div class="who"></div>`;
   } else if (state === "blocked") {
@@ -207,12 +293,12 @@ function paint(body) {
 
 function start() {
   $("h").textContent = T("Worktrail 사용 신청", "Request access to Worktrail");
-  $("sub").textContent = T("AI 코딩 에이전트가 일하며 남긴 작업 기록입니다. 맥·리눅스·WSL 에서 씁니다. 구글 계정으로 신청합니다.",
-                           "A record of what an AI coding agent did. Sign in with Google to request access. Works on macOS, Linux or WSL.");
+  $("sub").textContent = T("AI 에이전트가 일하며 남긴 작업 기록입니다. 맥 · 리눅스 · Windows 에서 사용 가능합니다.",
+                           "A record of what an AI agent did while it worked. Works on macOS, Linux and Windows.");
   const card = $("card");
   card.hidden = false;
-  card.innerHTML = `<button id="go">${T("구글로 로그인하고 신청하기", "Sign in with Google and request")}</button>
-    <p class="via">${T("구글 로그인은 WorkOS 대행을 씁니다.", "Sign-in goes through WorkOS.")}</p>`;
+  card.innerHTML = `<button id="go">${T("로그인하고 신청하기", "Sign in and request access")}</button>
+    <p class="via">${T("로그인은 WorkOS 대행을 씁니다.", "Sign-in goes through WorkOS.")}</p>`;
   $("go").onclick = () => { $("go").disabled = true; signIn().catch(fail); };
 }
 

@@ -53,7 +53,9 @@ def _open(db_path: str, email: str):
     reads.ensure(db)
     user = db.get_by("user", "email", email)
     if user is None:
-        raise RuntimeError(f"no user {email}")
+        # #541 — 문(mcp_server.build_from_env)과 같이 만든다. 플러그인은 MCP 서버와 SessionStart 훅이 함께 떠서,
+        # 첫 세션에 훅이 먼저 오면 "no user mcp@local" 로 첫 화면이 비었다.
+        user = db.add("user", {"name": email.split("@")[0], "email": email, "password": None})
     return db, user["id"], vitals
 
 
@@ -162,6 +164,12 @@ def main() -> None:
             out = hookctx.run(app, uid, cmd, wt, why, reason)
     except Exception as exc:  # noqa: BLE001 — 훅 실패가 세션을 막으면 안 된다
         out = {"systemMessage": f"casebook hook ({cmd}) skipped: {exc}"}
+    if cmd == "session-start" and os.environ.get("WORKTRAIL_PLUGIN"):
+        # #541 — 플러그인으로 돌 때만: 설치기가 깐 MCP 등록·훅을 치우고(D16467) 새 판을 알린다(D16507). 할 말이 있을 때만 말한다.
+        from casebook.adapters import plugin_setup
+        note = plugin_setup.on_session_start()
+        if note:
+            out["systemMessage"] = "\n".join(m for m in (out.get("systemMessage"), note) if m)
     print(json.dumps(out, ensure_ascii=False))
 
 

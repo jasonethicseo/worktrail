@@ -213,6 +213,8 @@ def resume(db, case: dict, mode: str = "continuity", siblings: set[int] | None =
     for t in turns:
         if t["user_message_id"] is not None:
             first_user = db.get("message", t["user_message_id"]); break
+        if t["turn_kind"] == "external" and t["evidence_id"] is not None:   # #540 — MCP 턴은 원문을 evidence 에만 둔다
+            first_user = db.get("evidence", t["evidence_id"]); break
     # Goal 은 사람이 쓴 것만: 케이스 제목(MCP 에선 open_case 의 한 줄) + 첫 입력 원문의 머리.
     # 브리프 focus(모델 문장)는 쓰지 않는다. 첫 입력이 로그 붙여넣기면 제목이 곧 goal 이다.
     first_text = (first_user["content"] if first_user else "") or ""
@@ -337,7 +339,11 @@ def turns_since_focus(db, case_id: int) -> dict:
     focus 를 다시 선언하면 그 시각부터 다시 센다. focus 가 한 번도 없는 케이스(open_case)는 전부 센다."""
     focus = current_declaration(db, case_id, "focus")
     # 시각이 아니라 원장 순서로 센다 — 같은 밀리초에 선언과 턴이 나란히 생기면 시각으로는 앞뒤를 못 가른다.
-    # 턴마다 user_message 이벤트가 하나다(external_turn · 조사 턴 모두).
+    # 입력 턴과 옛 external 턴은 user_message 를 하나씩 낸다. #540 부터 external 턴은 message 를 쓰지 않으므로
+    # 그 턴은 canonical_evidence_created 로 센다 — user_message_id 가 비어 있는 external 턴만이라 두 번 세지 않는다.
     after = focus["id"] if focus else 0
-    events = db.query("ledger", where={"case_id": case_id, "event_type": "user_message"}, order="id")
-    return {"turns": sum(1 for e in events if e["id"] > after), "focus": focus}
+    row = db.conn.execute(
+        "SELECT COUNT(*) FROM ledger l LEFT JOIN turn t ON t.id = l.turn_id WHERE l.case_id = ? AND l.id > ? AND "
+        "(l.event_type = 'user_message' OR (l.event_type = 'canonical_evidence_created' AND t.turn_kind = 'external' "
+        "AND t.user_message_id IS NULL))", (case_id, after)).fetchone()
+    return {"turns": row[0], "focus": focus}

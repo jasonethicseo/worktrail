@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "worktrail",
+  "version": "0.1.0",
+  "description": "Records your coding agent's work and shares it with you. Tracks the context around the code, not the code itself.",
+  "author": {
+    "name": "jasonethicseo",
+    "url": "https://github.com/jasonethicseo"
+  },
+  "homepage": "https://github.com/jasonethicseo/worktrail",
+  "repository": "https://github.com/jasonethicseo/worktrail",
+  "license": "FSL-1.1-ALv2",
+  "mcpServers": {
+    "casebook": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/worktrail-run",
+      "args": [
+        "casebook.adapters.mcp_proxy"
+      ]
+    }
+  }
+}

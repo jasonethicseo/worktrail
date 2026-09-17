@@ -30,6 +30,8 @@ import os
 import pathlib
 import re
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 from casebook.core import access, auth, headline, hookctx, oauth, prior, reads, state, threads
@@ -90,8 +92,36 @@ def client_from_ctx(ctx: Any) -> str | None:
     except Exception:      # noqa: BLE001 — 이름을 못 읽어도 기록은 된다
         return None
 
+_REQUEST_ID: ContextVar[str | None] = ContextVar("casebook_mcp_request_id", default=None)
+# 재시도 열쇠는 요청의 _meta 로만 받는다. 도구 입력칸에 두면 모델이 그 칸을 채울 수 있고, 같은 값을 두 번 쓰면
+# 채팅 커넥터·옛 프록시에서 두 번째 기록이 합쳐진다. 모델은 _meta 를 보지도 쓰지도 않는다.
+REQUEST_ID_META = "casebook/request_id"
+
+
+def request_id_from(ctx: Any) -> str | None:
+    try:
+        meta = ctx.request_context.meta
+    except Exception:      # noqa: BLE001 — 요청 밖(시험의 직접 호출)이면 열쇠가 없는 것이다
+        return None
+    value = meta.get(REQUEST_ID_META) if isinstance(meta, dict) else None
+    return value if isinstance(value, str) else None
+
+
+@contextmanager
+def _request_context(request_id: str | None):
+    """Pass the transport retry key without adding a bypass argument to Tools."""
+    token = _REQUEST_ID.set(request_id)
+    try:
+        yield
+    finally:
+        _REQUEST_ID.reset(token)
+
+
 def _key() -> str:
-    return uuid.uuid4().hex
+    key = (_REQUEST_ID.get() or "").strip() or uuid.uuid4().hex
+    if len(key) > 128:
+        raise InputError("request_id is too long")
+    return key
 
 class Tools:
     """도구 본체 — MCP 프레임워크와 무관한 평범한 메서드. 테스트는 이걸 직접 부른다."""
@@ -291,7 +321,8 @@ class Tools:
             # 거부도 측정한다 — Codex 2회차가 짚은 구멍: handoff_refused 는 남는데 이건 안 남았다
             reads.log(self.cb.db, self.uid, "evidence_refused", case_id, (text or "").strip()[:80])
             return bad
-        r = self.cb.external_turn(self.uid, case_id, text, action_key=_key(), note=None, source=self._source(client))
+        r = self.cb.external_turn(self.uid, case_id, text, action_key=_key(), note=None,
+                                  source=self._source(client))
         self.cb.run_workers()
         return f"Evidence #{r['evidence_id']} stored byte-exact as turn {r['sequence']} of case {case_id}."
 
@@ -454,7 +485,7 @@ class Tools:
             raise ApiError("import_prior needs facts with a worktree — the backfill script builds them")
         with threads.provided(facts):
             threads.ensure(self.cb.db)
-            repo = threads._repo_for(self.cb.db, threads.identify(facts["worktree"]))
+            repo = threads._repo_for(self.cb.db, self.uid, threads.identify(facts["worktree"]))
             cut = prior.cutoff_for(self.cb.db, self.uid, repo["id"])
             out = prior.import_sessions(self.cb.db, self.uid, repo["id"], sessions, reset=reset, cutoff=cut)
         out["repository"] = repo["identity"]
@@ -621,7 +652,8 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
 
     @server.tool(name="add_evidence", description="Store raw material VERBATIM as evidence: logs, error output, command results, config. Do not paraphrase or trim. Returns the evidence number.")
     def add_evidence(case_id: int, text: str, ctx: Context, client: str | None = None) -> str:
-        return _guard(T(ctx).add_evidence)(case_id, text, client or client_from_ctx(ctx))
+        with _request_context(request_id_from(ctx)):
+            return _guard(T(ctx).add_evidence)(case_id, text, client or client_from_ctx(ctx))
 
     @server.tool(name="add_evidence_file", description="Store a file's contents as evidence, read directly by the server (no need to repeat the text). Use for log files, command output saved to a file, configs. Absolute or ~ path. Not available over the remote door (chat clients) — use add_evidence.")
     def add_evidence_file(case_id: int, path: str, ctx: Context) -> str:
@@ -630,8 +662,9 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     @server.tool(name="note_turn", description="Record one diagnostic step: `observed` = what was seen (verbatim where possible), `conclusion` = what you concluded, ruled out, or propose next. kind (required) = change(바꿈: code/screen/config changed) · verified(확인: test/prod/repro confirmed) · finding(발견: measured or found out, a fact) · thought(생각: proposal/hypothesis/judgment — can be overturned); if two apply, split into two notes. `next` (required) = after this turn, what happens next, and `owner` (required) = whose turn it is: \"user\" (the engineer must act), \"watch\" (nothing to do, only watching), or an agent name such as \"codex\" / \"claude\". Say next EVERY turn, even when nothing changed — if it is the same line as before, nothing new is written, so this costs you a sentence and keeps the thread honest. A stale next is the failure this product exists to prevent: the next session reads it and goes off to do work that is already done. Updates the case brief. Call at the end of each step, not every message. Refused once 15 turns have piled up since the thread's focus was last declared: re-declare the focus if it is still the same work, or open_thread for the new subject. `evidence_ids` (optional) = the evidence numbers this conclusion rests on — cite them here, not in the text; the screen renders them as links. A next owned by the user is written TO the engineer ('Decide X'), never about them ('The user decides X'). FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest, numbers included, after a blank line as the body (the server refuses otherwise).")
     def note_turn(case_id: int, observed: str, conclusion: str, kind: str, next: str, owner: str,
                   ctx: Context, evidence_ids: list[int] | None = None, client: str | None = None) -> str:
-        return _guard(T(ctx).note_turn)(case_id, observed, conclusion, kind, next, owner,
-                                        client or client_from_ctx(ctx), evidence_ids)
+        with _request_context(request_id_from(ctx)):
+            return _guard(T(ctx).note_turn)(case_id, observed, conclusion, kind, next, owner,
+                                            client or client_from_ctx(ctx), evidence_ids)
 
     @server.tool(name="search_evidence", description="Search this engineer's recorded evidence across all their cases — the raw material, never past conclusions. When there is room left, results also include material from BEFORE casebook was installed (kind=\"pre_install\"): the engineer's own words imported from old session logs, with the source session. Treat those as raw material only — they are not decisions or constraints, and they may describe approaches that were later abandoned. A hit is retrieval, not a conclusion.")
     def search_evidence(query: str, ctx: Context, limit: int = 10, include_archived: bool = False) -> list:
@@ -691,7 +724,7 @@ RESOURCE_METADATA_PATHS = ("/.well-known/oauth-protected-resource/mcp",
 # 확장 98호 — 얇은 클라이언트가 받아 가는 것들. 경로 토큰이 있을 때는 /mcp/<토큰>/<이름> 이지만,
 # 로그인해서 머리로 붙으면 경로에 토큰이 없어 /mcp/<이름> 이 된다. 토큰은 늘 점이 든 긴 문자열이라
 # 이 셋과 헷갈리지 않는다.
-DIST_NAMES = ("install.sh", "ui", "client.tar.gz")
+DIST_NAMES = ("install.sh", "ui", "client.tar.gz", "windows.md")
 
 # 확장 100호 (D15414) — 신청제의 공개 길 둘. 이용 허용 검사 **앞**에 선다: 신청한 사람은
 # 정의상 아직 allowed 가 아니므로, 검사 뒤에 두면 자기 상태를 물어볼 수도 없다.
@@ -784,7 +817,7 @@ def _join_page():
 async def _join(casebook: Worktrail, request, path: str):
     """신청제의 공개 길 (확장 100호, D15414).
 
-        POST /join/request   구글로 로그인한 사람이 줄을 선다
+        POST /join/request   로그인한 사람이 줄을 선다
         GET  /join/status    지금 내 상태와, 승인됐으면 설치 한 줄
 
     신원은 OAuth 로 확인하고 이용 허용은 보지 않는다 — 신청한 사람은 아직 allowed 가 아니다.
@@ -841,7 +874,13 @@ async def _join(casebook: Worktrail, request, path: str):
             return JSONResponse({"error": "POST only"}, status_code=405)
         if user is None:
             return JSONResponse({"error": "request access first"}, status_code=404)
-        access.record_consent(casebook.db, user["id"], access.NOTICE_VERSION)
+        # 확장 126호 — 어느 안내문에 동의했는지 갈라 적는다. 로컬은 서버 보관·열람이 해당되지 않는다.
+        try:
+            form = await request.json()
+        except Exception:  # noqa: BLE001
+            form = {}
+        access.record_consent(casebook.db, user["id"],
+                              access.notice_version((form or {}).get("mode") or ""))
         st = access.state(casebook.db, user["id"])
         return JSONResponse({"email": email, "state": st["state"] if st["known"] else "none",
                              "consent": st["consent_version"], "notice": access.NOTICE_VERSION})
@@ -851,13 +890,20 @@ async def _join(casebook: Worktrail, request, path: str):
     st = access.state(casebook.db, user["id"])
     body = {"email": email, "state": st["state"] if st["known"] else "none",
             "consent": st["consent_version"], "notice": access.NOTICE_VERSION,
+            # 확장 129호 — 동의한 사실(consent)과 그것이 지금 판인가(consent_current)는 다른 질문이다.
+            # 옛 판은 지우지 않는다. 언제 무엇에 동의했는지가 기록이고, 화면은 둘째 칸만 본다.
+            "consent_current": access.notice_current(st["consent_version"]),
             "seats": access.seats(casebook.db)}      # 확장 119호 — 화면이 "몇 자리 남았나" 를 말한다
     # 설치 한 줄은 동의를 남긴 뒤에만 준다(확장 115호). 그 줄이 곧 기록에 닿는 열쇠인데 동의가
     # 없으면 그 열쇠로 첫 기록에서 403 을 받는다 — 쓸 수 없는 줄을 쥐여 주면 사람은 설치가
     # 고장 난 줄 알고, 거절문이 시키는 대로 다시 설치해도 풀리지 않는다.
-    if body["state"] == access.STATE_ALLOWED and st["consent_version"]:
-        base = _public_base(request)
-        body["install"] = f'curl -fsSL {base}{MCP_PATH}/{mint_token(casebook, email)}/install.sh | sh'
+    if body["state"] == access.STATE_ALLOWED and body["consent_current"]:
+        u = f"{_public_base(request)}{MCP_PATH}/{mint_token(casebook, email)}"
+        # 확장 126호 — 모드는 신청 화면에서 이미 골랐다. 설치기에게 그대로 넘겨 다시 묻지 않는다.
+        # 윈도우는 sh 가 없어 지시문을 준다(확장 122호) — 없는 줄을 쥐여 주지 않는다.
+        body["install"] = {"server": f"curl -fsSL {u}/install.sh | sh -s -- --server",
+                           "local": f"curl -fsSL {u}/install.sh | sh -s -- --local",
+                           "windows": f"{u}/windows.md"}
     return JSONResponse(body)
 
 
@@ -879,6 +925,9 @@ def _client_dist(casebook: Worktrail, request, what: str):
             return PlainTextResponse(client_dist.install_script(base), media_type="text/x-shellscript")
         if what == "ui":
             return Response(client_dist.tracker_html(), media_type="text/html; charset=utf-8")
+        if what == "windows.md":
+            # 확장 122호 — 윈도우에는 sh 가 없다. 설치기 대신 에이전트에게 붙여넣을 지시문을 낸다.
+            return PlainTextResponse(client_dist.windows_prompt(base), media_type="text/markdown; charset=utf-8")
         if what == "client.tar.gz":
             mode = "local" if "mode=local" in (request.url.query or "") else "thin"
             return Response(client_dist.build_tarball(mode=mode), media_type="application/gzip",
@@ -1011,7 +1060,8 @@ def build_http_app(casebook: Worktrail):
         return await inner(scope, receive, send)
 
     app.lifespan = inner   # uvicorn 은 scope["type"]=="lifespan" 도 app 으로 보낸다 — inner 로 그대로 흘러간다
-    return app
+    from casebook.adapters.request_limits import RequestSizeLimit
+    return RequestSizeLimit(app)
 
 def build_from_env() -> tuple[Worktrail, int]:
     from casebook.core import clientmode                  # 훅과 같은 기본값을 쓴다

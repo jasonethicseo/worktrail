@@ -142,7 +142,7 @@ def test_next_는_그_턴_뒤에_선다(wt, tmp_path):
     cid = t.open_thread("순서를 본다", _git_repo(tmp_path / "r"), topic="검증")["case_id"]
     t.note_turn(cid, "관찰", "결론", kind="finding", next="다음\n\n본문", owner="user")
     rows = wt.db.query("ledger", where={"case_id": cid}, order="id")
-    note = max(e["id"] for e in rows if e["event_type"] == "user_message")
+    note = max(e["id"] for e in rows if e["event_type"] == "canonical_evidence_created")
     nxt = max(e["id"] for e in rows if e["event_type"] == "next_declared")
     assert nxt > note
 

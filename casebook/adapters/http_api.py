@@ -253,26 +253,69 @@ def create_app(casebook: Any, tickets: Any, cors_origins: list[str] | None = Non
         rows = await run_in_threadpool(access.pending, casebook.db)
         # enforced=False 는 혼자 쓰는 로컬 창이다 — 거기엔 승인할 사람이라는 것이 없다.
         # 화면은 이 값으로 상단바에 자리를 낼지 정한다(빈 메뉴를 보여 주지 않는다).
+        # 확장 130호 — 자리를 쓰는 사람(holders)과 천장(seats_max)도 같이 낸다. 줄만 보이면
+        # 119호 뒤로 그 화면이 늘 비어 있고, 이미 들어온 사람은 손댈 길이 CLI 뿐이다.
         return {"pending": rows, "cap": access.PENDING_CAP, "enforced": bool(enforce_access),
-                "seats": access.seats(casebook.db)}     # 확장 119호 — 정원이 얼마나 찼나
+                "holders": await run_in_threadpool(access.holders, casebook.db),
+                "seats": access.seats(casebook.db),     # 확장 119호 — 정원이 얼마나 찼나
+                "seats_max": access.SEATS_MAX}
 
     @api.post("/app/join")
     async def join_decide(body: dict = Body(...), authorization: str | None = Header(default=None)):
-        """승인 또는 거절. 둘 다 되돌릴 수 있다 — 거절은 차단이고, 다시 승인하면 열린다."""
+        """승인·거절·삭제, 그리고 자리 수 돌리기.
+
+        되돌아오는 것과 안 오는 것이 한 문에 있으므로 삭제만 두 걸음이다 — confirm 없이 부르면
+        무엇이 몇 행 지워질지 세어 돌려주고, 그 숫자를 보고 다시 불러야 지운다. 서버 CLI 의
+        `forget EMAIL` / `forget EMAIL --yes` 와 같은 모양이다(확장 116호).
+        """
         from casebook.core import access
-        _user(authorization)
-        uid = int(body.get("user_id") or 0)
+        me = _user(authorization)                  # 미들웨어가 이미 운영자 범위를 봤다
         action = (body.get("action") or "").strip()
-        if action not in ("allow", "block"):
-            raise InputError("action 은 allow 또는 block 이다")
+
+        # 확장 130호 — 자리 수는 사람이 아니라 서버를 두고 하는 일이라 user_id 를 받지 않는다.
+        if action == "seats":
+            try:
+                total = await run_in_threadpool(
+                    access.set_total_seats, casebook.db, int(body.get("total")))
+            except (TypeError, ValueError) as e:
+                raise InputError(str(e)) from e
+            return {"total": total, **(await _join_body())}
+
+        uid = int(body.get("user_id") or 0)
+        if action not in ("allow", "block", "forget"):
+            raise InputError("action 은 allow · block · forget · seats 중 하나다")
         if casebook.db.get("user", uid) is None:
             raise InputError(f"그런 계정이 없다: {uid}")
+        # 이 화면이 끊거나 지울 수 있는 것은 화면에 보이는 사람뿐이다 — 자리를 쓰는 사람과 줄을 선 사람.
+        # 목록은 grandfathered 를 안 그리지만 요청은 아무 user_id 나 댈 수 있다. 막지 않으면 한 번의
+        # POST 로 운영자 본인 계정(기록 전부를 든 행)이 지워진다. 그런 일은 서버 CLI 에서 이메일을
+        # 손으로 쳐서 한다.
+        if action in ("block", "forget"):
+            target = access.state(casebook.db, uid)
+            if (uid == me or target["scope"] == access.SCOPE_OPERATOR
+                    or target["consent_version"] == access.CONSENT_GRANDFATHERED):
+                raise InputError("이 화면은 자리를 쓰는 사람과 줄을 선 사람만 다룬다 — "
+                                 "운영자와 기존 계정은 서버 CLI 로 한다")
+
+        if action == "forget":
+            if not body.get("confirm"):
+                plan = await run_in_threadpool(access.forget_plan, casebook.db, uid)
+                return {"plan": plan, **(await _join_body())}   # 세기만 한다 — 아직 아무것도 안 지운다
+            done = await run_in_threadpool(access.forget, casebook.db, uid)
+            return {"forgot": done, **(await _join_body())}
+
         st = await run_in_threadpool(
             access.set_state, casebook.db, uid,
             access.STATE_ALLOWED if action == "allow" else access.STATE_BLOCKED)
-        rows = await run_in_threadpool(access.pending, casebook.db)
-        return {"state": st["state"], "pending": rows, "cap": access.PENDING_CAP,
-                "enforced": bool(enforce_access)}
+        return {"state": st["state"], **(await _join_body())}
+
+    async def _join_body() -> dict:
+        """어느 길로 들어왔든 화면이 다시 그릴 재료를 같은 모양으로 돌려준다."""
+        from casebook.core import access
+        return {"pending": await run_in_threadpool(access.pending, casebook.db),
+                "holders": await run_in_threadpool(access.holders, casebook.db),
+                "cap": access.PENDING_CAP, "enforced": bool(enforce_access),
+                "seats": access.seats(casebook.db), "seats_max": access.SEATS_MAX}
 
     @api.get("/app/topic")
     async def list_topics(authorization: str | None = Header(default=None)):
@@ -315,4 +358,5 @@ def create_app(casebook: Any, tickets: Any, cors_origins: list[str] | None = Non
         from casebook.adapters import http_api_legacy
         http_api_legacy.mount(api, casebook, tickets, _user, run_in_threadpool)
 
-    return api
+    from casebook.adapters.request_limits import RequestSizeLimit
+    return RequestSizeLimit(api)

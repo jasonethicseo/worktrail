@@ -100,7 +100,11 @@ def lang() -> str:
 def say(ko: str, en: str) -> str:
     """맥에서 도는 것이 사람에게 하는 말 (확장 85호). 설치할 때 고른 언어로 고른다.
 
-    못 고르면 한국어다 — 신호가 없을 때 영어로 떨어지면 지금까지의 사용자가 못 읽는 화면을 받는다
-    (확장 83호에서 설치가 같은 이유로 빈 로케일에 아무것도 적지 않게 됐다). 서버가 내는 거절문은
-    이 길로 오지 않는다 — 서버는 부른 쪽의 ~/.casebook/lang 을 볼 수 없어 영어 한 벌이다."""
-    return en if lang() == "en" else ko
+    고른 것이 없으면 시스템 로케일이 ko 일 때만 한국어이고 그 밖에는 영어다(#541, D16501). 예전에는
+    한국어로 떨어졌는데, 플러그인은 설치 때 언어를 묻지 않아 마켓에서 온 사람 대부분이 lang 파일이 없다.
+    서버가 내는 거절문은 이 길로 오지 않는다 — 서버는 부른 쪽의 ~/.casebook/lang 을 볼 수 없어 영어 한 벌이다."""
+    chosen = lang()
+    if not chosen:
+        locale = (os.environ.get("LC_ALL") or os.environ.get("LANG") or "").lower()
+        chosen = "ko" if locale.startswith("ko") else "en"
+    return ko if chosen == "ko" else en

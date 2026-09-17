@@ -44,6 +44,7 @@ def test_로컬이라고_적혀_있으면_주소가_있어도_로컬이다(home)
 
 def test_서버인데_주소가_없으면_로컬로_내려가지_않고_멈춘다(home):
     """이 스레드가 막으려는 실패다: 서버에 쌓이는 줄 알고 빈 로컬 DB 에 쌓이는 것."""
+    (home / "lang").write_text("ko\n")          # 한국어 문구를 본다(#541: 신호가 없으면 영어)
     (home / "mode").write_text("server\n")
     with pytest.raises(ModeError) as exc:
         clientmode.resolve()
@@ -73,6 +74,7 @@ def test_모르는_값은_로컬로_보지_않고_거절한다(home):
 
 def test_프록시가_서버_모드에서_주소가_없으면_죽는다(home, capsys):
     """호스트에는 '서버 없음' 으로 보인다 — 로컬 문을 열어 주면 안 된다."""
+    (home / "lang").write_text("ko\n")          # 한국어 문구를 본다(#541: 신호가 없으면 영어)
     from casebook.adapters import mcp_proxy
     (home / "mode").write_text("server\n")
     with pytest.raises(SystemExit) as exc:
@@ -246,3 +248,16 @@ def test_토글이_목록_칸의_캐시를_무른다():
     html = pathlib.Path("web/worktrail/index.html").read_text()
     body = html[html.index("function setLang"):html.index("function setLang") + 500]
     assert "listDirty = true" in body
+
+
+def test_언어_신호가_없으면_영어로_말한다(home, monkeypatch):
+    """#541 (D16501) — 플러그인은 설치 때 언어를 묻지 않아 lang 파일이 없는 사람이 대부분이다. 예전에는 한국어로 떨어졌다."""
+    monkeypatch.delenv("CASEBOOK_LANG", raising=False)
+    monkeypatch.delenv("LC_ALL", raising=False)
+    monkeypatch.delenv("LANG", raising=False)
+    assert clientmode.say("한", "en") == "en"
+    monkeypatch.setenv("LANG", "ko_KR.UTF-8")
+    assert clientmode.say("한", "en") == "한"                  # 시스템 로케일이 한국어면 한국어
+    monkeypatch.setenv("LANG", "en_US.UTF-8")
+    (home / "lang").write_text("ko\n")
+    assert clientmode.say("한", "en") == "한"                  # 고른 값이 로케일을 이긴다

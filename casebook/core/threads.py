@@ -220,44 +220,86 @@ def identify(worktree: str) -> dict[str, Any]:
     return {"worktree": top, "identity": f"local:{common}", "hint": common, "aliases": [f"path:{top}"]}
 
 
-def _resolve_repo(db, ident: dict[str, Any], create: bool) -> dict[str, Any] | None:
+def _repo_has_user(db, repo_id: int, user_id: int) -> bool:
+    """An alias is usable only if this user already has records under it."""
+    if db.conn.execute(
+        'SELECT 1 FROM thread t JOIN "case" c ON c.id=t.case_id '
+        'WHERE t.repo_id=? AND c.user_id=? LIMIT 1', (repo_id, user_id)
+    ).fetchone():
+        return True
+    if db.conn.execute('SELECT 1 FROM worktree_binding WHERE repo_id=? AND user_id=? LIMIT 1',
+                       (repo_id, user_id)).fetchone():
+        return True
+    if db.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='prior_session'").fetchone():
+        return bool(db.conn.execute('SELECT 1 FROM prior_session WHERE repo_id=? AND user_id=? LIMIT 1',
+                                    (repo_id, user_id)).fetchone())
+    return False
+
+
+def _repo_has_any_records(db, repo_id: int) -> bool:
+    if db.conn.execute('SELECT 1 FROM thread WHERE repo_id=? LIMIT 1', (repo_id,)).fetchone():
+        return True
+    if db.conn.execute('SELECT 1 FROM worktree_binding WHERE repo_id=? LIMIT 1', (repo_id,)).fetchone():
+        return True
+    if db.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='prior_session'").fetchone():
+        return bool(db.conn.execute('SELECT 1 FROM prior_session WHERE repo_id=? LIMIT 1', (repo_id,)).fetchone())
+    return False
+
+
+def _resolve_repo(db, user_id: int, ident: dict[str, Any], create: bool) -> dict[str, Any] | None:
     """identity 로 repo 행을 찾되, 옛 identity(aliases)로 열린 행이 있으면 **승격**한다:
     현재 identity 행이 없으면 옛 행의 identity 를 제자리에서 바꾸고(id 유지 — 스레드·바인딩 그대로),
     있으면 옛 행의 스레드·바인딩을 현재 행으로 옮기고 옛 행을 지운다(병합)."""
-    row = db.get_by("repo", "identity", ident["identity"])
-    for alias in ident.get("aliases", []):
-        old = db.get_by("repo", "identity", alias)
-        if old is None:
-            continue
-        with db._lock:
-            if row is None:
-                db.conn.execute("UPDATE repo SET identity=?, hint=? WHERE id=?", (ident["identity"], ident["hint"], old["id"]))
-                db.conn.commit()
+    with db._lock:
+        row = db.get_by("repo", "identity", ident["identity"])
+        for alias in ident.get("aliases", []):
+            old = db.get_by("repo", "identity", alias)
+            if old is None or old["id"] == (row or {}).get("id") or not _repo_has_user(db, old["id"], user_id):
+                continue
+            if row is None and not _repo_has_any_other_user(db, old["id"], user_id):
+                # Sole owner: keep the old id, as older clients expect on path -> git upgrades.
+                db.conn.execute("UPDATE repo SET identity=?, hint=? WHERE id=?",
+                                (ident["identity"], ident["hint"], old["id"]))
                 row = db.get("repo", old["id"])
             else:
-                db.conn.execute("UPDATE thread SET repo_id=? WHERE repo_id=?", (row["id"], old["id"]))
-                db.conn.execute("UPDATE worktree_binding SET repo_id=? WHERE repo_id=?", (row["id"], old["id"]))
-                # 저장소 범위 행은 전부 따라와야 한다 — 확장 42호의 설치 전 기록이 옛 repo_id 를 붙들고
-                # 고아로 남으면 병합 뒤 현황·검색에서 통째로 사라진다.
-                if db.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table'"
-                                   " AND name='prior_session'").fetchone():
-                    db.conn.execute("UPDATE prior_session SET repo_id=? WHERE repo_id=?", (row["id"], old["id"]))
-                db.conn.execute("DELETE FROM repo WHERE id=?", (old["id"],))
-                db.conn.commit()
-    if row is None and create:
-        row = db.add("repo", {"identity": ident["identity"], "hint": ident["hint"]})
-    return row
+                if row is None:
+                    row = db.add("repo", {"identity": ident["identity"], "hint": ident["hint"]})
+                db.conn.execute('UPDATE thread SET repo_id=? WHERE repo_id=? AND case_id IN '
+                                '(SELECT id FROM "case" WHERE user_id=?)', (row["id"], old["id"], user_id))
+                db.conn.execute('UPDATE worktree_binding SET repo_id=? WHERE repo_id=? AND user_id=?',
+                                (row["id"], old["id"], user_id))
+                if db.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='prior_session'").fetchone():
+                    db.conn.execute('UPDATE prior_session SET repo_id=? WHERE repo_id=? AND user_id=?',
+                                    (row["id"], old["id"], user_id))
+                if not _repo_has_any_records(db, old["id"]):
+                    db.conn.execute('DELETE FROM repo WHERE id=?', (old["id"],))
+        if row is None and create:
+            row = db.add("repo", {"identity": ident["identity"], "hint": ident["hint"]})
+        return row
 
 
-def _repo_for(db, ident: dict[str, Any]) -> dict[str, Any]:
-    return _resolve_repo(db, ident, create=True)  # type: ignore[return-value]
+def _repo_has_any_other_user(db, repo_id: int, user_id: int) -> bool:
+    if db.conn.execute('SELECT 1 FROM thread t JOIN "case" c ON c.id=t.case_id '
+                       'WHERE t.repo_id=? AND c.user_id!=? LIMIT 1', (repo_id, user_id)).fetchone():
+        return True
+    if db.conn.execute('SELECT 1 FROM worktree_binding WHERE repo_id=? AND user_id!=? LIMIT 1',
+                       (repo_id, user_id)).fetchone():
+        return True
+    if db.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='prior_session'").fetchone():
+        return bool(db.conn.execute('SELECT 1 FROM prior_session WHERE repo_id=? AND user_id!=? LIMIT 1',
+                                    (repo_id, user_id)).fetchone())
+    return False
 
 
-def reconcile_repo(db, worktree: str) -> dict[str, Any]:
+def _repo_for(db, user_id: int, ident: dict[str, Any]) -> dict[str, Any]:
+    return _resolve_repo(db, user_id, ident, create=True)  # type: ignore[return-value]
+
+
+def reconcile_repo(db, user_id: int, worktree: str) -> dict[str, Any]:
     """읽기 경로(resume 등)에서도 승격이 일어나게 — identity 가 바뀐 뒤 첫 접근이 어디서 오든 같은 결과."""
     ensure(db)
     ident = identify(worktree)
-    _resolve_repo(db, ident, create=False)
+    _resolve_repo(db, user_id, ident, create=False)
     return ident
 
 
@@ -325,7 +367,7 @@ def open_thread(db, user_id: int, case: dict, focus: str, worktree: str, authori
     if not (focus or "").strip():
         raise InputError("focus is empty — say in one sentence what this thread is for")
     ident = identify(worktree)
-    repo = _repo_for(db, ident)
+    repo = _repo_for(db, user_id, ident)
     _ensure_thread(db, case, repo["id"])
     d = state.declare(db, case, "focus", focus, authority)
     _bind(db, user_id, ident["worktree"], repo["id"], case["id"])
@@ -342,7 +384,7 @@ def switch_thread(db, user_id: int, case: dict | None, worktree: str) -> dict[st
         return {"worktree": ident["worktree"], "current": None, "paused": bool(n)}
     if case["status"] != "open":
         raise InputError(f"thread {case['id']} is {case['status']} — reopen it before switching to it")
-    repo = _repo_for(db, ident)
+    repo = _repo_for(db, user_id, ident)
     row = _ensure_thread(db, case, repo["id"])
     if row["repo_id"] != repo["id"]:
         other = db.get("repo", row["repo_id"])
@@ -379,7 +421,7 @@ def list_threads(db, user_id: int, worktree: str, vitals: dict[int, dict[str, An
     """이 worktree 의 저장소에 속한 스레드 전부(open 먼저, 마지막 활동 순) + 이 worktree 의 current."""
     ensure(db)
     ident = identify(worktree)
-    repo = _resolve_repo(db, ident, create=False)          # 옛 identity 의 스레드가 있으면 여기서 승격된다
+    repo = _resolve_repo(db, user_id, ident, create=False)  # 자기 별칭의 스레드만 승격한다
     out: dict[str, Any] = {"worktree": ident["worktree"], "repo": ident["identity"], "current": None, "threads": []}
     if repo is None:
         return out

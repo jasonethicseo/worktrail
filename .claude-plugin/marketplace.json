@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "worktrail",
+  "description": "Records your coding agent's work and shares it with you. Tracks the context around the code, not the code itself.",
+  "owner": {
+    "name": "jasonethicseo",
+    "url": "https://github.com/jasonethicseo"
+  },
+  "plugins": [
+    {
+      "name": "worktrail",
+      "source": "./",
+      "description": "Records your coding agent's work and shares it with you. Tracks the context around the code, not the code itself."
+    }
+  ]
+}

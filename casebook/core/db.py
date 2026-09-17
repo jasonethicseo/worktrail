@@ -101,6 +101,17 @@ CREATE TABLE IF NOT EXISTS turn (
   source_evidence_id INTEGER
 );
 
+-- MCP 요청이 응답을 받지 못해 재전송돼도 한 턴만 만든다. 새 표라 기존 원장은 건드리지 않는다.
+CREATE TABLE IF NOT EXISTS mcp_request (
+  user_id INTEGER NOT NULL,
+  request_id TEXT NOT NULL,
+  case_id INTEGER NOT NULL,
+  turn_id INTEGER,
+  created_at INTEGER NOT NULL,
+  fingerprint TEXT,        -- 요청 내용의 해시. 열쇠가 같아도 이것이 다르면 재전송이 아니라 새 기록이다
+  PRIMARY KEY (user_id, case_id, request_id)
+);
+
 CREATE TABLE IF NOT EXISTS ledger (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at INTEGER NOT NULL,
@@ -223,6 +234,12 @@ class SqliteDB:
                 self.conn.execute("PRAGMA synchronous=NORMAL")
                 self.conn.execute("PRAGMA busy_timeout=5000")
             self.conn.executescript(DDL)
+            if "fingerprint" not in {r[1] for r in self.conn.execute("PRAGMA table_info(mcp_request)")}:
+                try:                         # fingerprint 없이 만들어진 mcp_request 표 (35c11b1 로 연 DB)
+                    self.conn.execute("ALTER TABLE mcp_request ADD COLUMN fingerprint TEXT")
+                except sqlite3.OperationalError as exc:   # 다른 프로세스가 먼저 더했다
+                    if "duplicate column" not in str(exc):
+                        raise
 
     # ── 시간 ─────────────────────────────────────────────────────────
     @staticmethod

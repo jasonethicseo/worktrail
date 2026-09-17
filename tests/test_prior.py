@@ -28,7 +28,7 @@ def app():
 
 def _repo(app, worktree: str) -> int:
     threads.ensure(app.db)
-    return threads._repo_for(app.db, threads.identify(worktree))["id"]
+    return threads._repo_for(app.db, USER, threads.identify(worktree))["id"]
 
 
 def _session(**kw):
@@ -320,9 +320,9 @@ def test_요청_하나가_통째로_되거나_통째로_안_된다(app, tmp_path
 def test_저장소가_병합되면_설치_전_기록도_따라온다(app, tmp_path):
     """repo 승격·병합이 thread·binding 만 옮기고 prior 를 두고 가면 기록이 통째로 사라진다."""
     threads.ensure(app.db)
-    old = threads._repo_for(app.db, {"identity": "path:/w", "hint": "/w", "aliases": []})
+    old = threads._repo_for(app.db, USER, {"identity": "path:/w", "hint": "/w", "aliases": []})
     prior.import_sessions(app.db, USER, old["id"], [_session()])
-    new = threads._repo_for(app.db, {"identity": "github.com/acme/w", "hint": "g", "aliases": ["path:/w"]})
+    new = threads._repo_for(app.db, USER, {"identity": "github.com/acme/w", "hint": "g", "aliases": ["path:/w"]})
     assert new["id"] != old["id"] or True
     assert prior.summary(app.db, USER, new["id"])["sessions"] == 1
 

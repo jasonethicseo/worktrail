@@ -1,0 +1,3 @@
+#!/bin/sh
+# Worktrail 플러그인 — 설치 전에 한 작업의 사람 지시를 가져온다 (#541). 플러그인이 켜져 있는 동안 Claude Code 의 PATH 에 오른다.
+exec "$(dirname "$0")/worktrail-run" casebook.adapters.backfill "$@"

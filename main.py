@@ -57,6 +57,13 @@ def investigation_wanted() -> bool:
     return os.environ.get("CASEBOOK_INVESTIGATION", "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def access_enforcement(host: str) -> bool:
+    """A network-facing server always protects operator routes; local-only mode may opt in."""
+    local = (host or "").strip().lower() in ("127.0.0.1", "localhost", "::1")
+    requested = os.environ.get("CASEBOOK_ENFORCE_ACCESS", "").strip().lower() in ("1", "true", "yes", "on")
+    return requested or not local
+
+
 def build(db_path: str):
     """기본은 Worktrail(기록)만 — 모델도 키도 필요 없다 (확장 130호, D16054). 운영 실측 2026-09-16: 최근
     7일 동안 조사·티켓 길 호출 0건, 모델 호출 0건. CASEBOOK_INVESTIGATION=1 이면 옛 조사 도구(Casebook)와
@@ -126,9 +133,9 @@ def main() -> None:
 
     import uvicorn
 
-    # 이용 허용 검사 (인계서 4절). 기본은 꺼 둔다 — 켜는 것은 운영 적용이고, 그 판단은 사용자 몫이다.
+    # 공개 주소에 바인딩한 서버는 운영자 경로 검사를 끌 수 없다. 로컬 전용 서버만 명시값을 따른다.
     # 켤 때 표가 처음 생기면 그때 있던 사용자를 허용으로 적는다(D15081).
-    enforce_access = os.environ.get("CASEBOOK_ENFORCE_ACCESS", "").strip() in ("1", "true", "yes")
+    enforce_access = access_enforcement(args.host)
     if enforce_access:
         from casebook.core import access
         n = access.grandfather(casebook.db)

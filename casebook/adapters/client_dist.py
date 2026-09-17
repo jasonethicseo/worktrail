@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import pathlib
 import tarfile
 import time
+from typing import Any
 
 # 클라이언트가 실제로 쓰는 파일. 여기 없는 것은 원격 모드에서 import 되지 않는다.
 CLIENT_FILES = (
@@ -136,7 +138,7 @@ FOUND=no
 echo "$T_HEAD:"
 [ -d "$H/client" ]      && { echo "  $H/client"; FOUND=yes; }
 [ -d "$H/client.old" ]  && { echo "  $H/client.old"; FOUND=yes; }
-for f in mode lang update-url remote-url oauth.json; do
+for f in mode lang update-url remote-url oauth.json oauth.json.lock; do
   [ -e "$H/$f" ] && { echo "  $H/$f"; FOUND=yes; }
 done
 command -v claude >/dev/null 2>&1 && claude mcp get casebook >/dev/null 2>&1 && { echo "  claude mcp: casebook"; FOUND=yes; }
@@ -184,6 +186,9 @@ PYEOF
 
 [ "$RECORDS" = yes ] && rm -f "$H/casebook.db" "$H/casebook.db-wal" "$H/casebook.db-shm"
 rm -f "$H/mode" "$H/lang" "$H/update-url" "$H/remote-url" "$H/oauth.json"
+# 확장 131호 — 토큰 갱신의 프로세스 간 자물쇠와, 쓰다 죽은 프로세스가 남긴 임시 파일. 빠뜨리면
+# 아래 rmdir 이 실패해 "지웠다" 고 말하고 폴더가 남는다.
+rm -f "$H/oauth.json.lock" "$H"/.oauth.json.*.tmp
 rm -rf "$H/client.old"
 # 마지막이다 — 이 스크립트가 그 안에 있다.
 rm -rf "$H/client"
@@ -211,6 +216,268 @@ LAUNCHERS = {
 }
 
 LAUNCHER = LAUNCHERS["bin/casebook-proxy"]      # 이름 유지 (기존 테스트·문서)
+
+
+WINDOWS_MD = r"""# Worktrail — Windows install
+
+**Paste this whole file to your coding agent (Claude Code or Codex) and tell it to follow the steps.**
+**이 파일 전체를 코딩 에이전트에게 붙여넣고 그대로 하라고 하세요.**
+
+---
+
+## For the agent
+
+Follow these steps exactly. Do not improvise or substitute commands. If a step fails, stop and
+report which step and the exact error — do not work around it. The address below already contains
+this person's key, so nothing else needs to be looked up.
+
+`<URL>` is used verbatim in several steps. Windows 10 and later ship `curl.exe` and `tar.exe`.
+
+These commands are written for **Windows PowerShell 5.1** — the one Windows ships. They also run on
+PowerShell 7. Do not replace them with 7-only equivalents.
+
+### Step 0 — ask which mode
+
+Ask the human, and do not guess:
+
+- **server** — records are kept on the operator's server. Needs one sign-in. Recommended for this test:
+  fixes reach you immediately, and the same records show up in Claude Code, Codex and claude.ai.
+- **local** — records never leave this machine. One sqlite file. Nothing is sent after the install.
+  Choose this for company code.
+
+Everything below says which steps differ.
+
+### Step 1 — settings every block repeats
+
+**Every PowerShell block below starts with these four lines.** Do not assume variables survive from
+an earlier block — many agents run each command in a fresh shell, and then `$H` is empty and the file
+lands somewhere wrong. Repeat them, every time.
+
+```powershell
+$MODE = "local"                       # "local" or "server" — whatever the human said in step 0
+$H    = "$env:USERPROFILE\.casebook"
+$C    = "$H\client"
+$PY   = "$C\.venv\Scripts\python.exe"
+```
+
+Set `$MODE` once here, and every later step branches on it in code. Never decide the mode by
+commenting a line in or out — a block run verbatim in the wrong mode is the one failure the person
+cannot see.
+
+### Step 2 — download and unpack
+
+```powershell
+$MODE = "local"; $H = "$env:USERPROFILE\.casebook"; $C = "$H\client"
+New-Item -ItemType Directory -Force -Path $C | Out-Null
+$q = ""; if ($MODE -eq "local") { $q = "?mode=local" }   # local needs the engine and the screen too
+curl.exe -fsSL "<URL>/client.tar.gz$q" -o "$env:TEMP\casebook-client.tar.gz"
+tar.exe -xzf "$env:TEMP\casebook-client.tar.gz" -C $C --strip-components=1
+if (-not (Test-Path "$C\casebook\adapters\mcp_proxy.py")) { throw "unpack failed" }
+```
+
+### Step 3 — python environment
+
+Needs Python 3.11 or later on PATH.
+
+```powershell
+$MODE = "local"; $H = "$env:USERPROFILE\.casebook"; $C = "$H\client"; $PY = "$C\.venv\Scripts\python.exe"
+if (-not (Get-Command python -ErrorAction SilentlyContinue)) { throw "python 3.11+ is not on PATH" }
+python -m venv "$C\.venv"
+$deps = @("mcp"); if ($MODE -eq "local") { $deps = @("mcp", "fastapi", "uvicorn") }
+& $PY -m pip install -q --disable-pip-version-check @deps
+& $PY -c "import mcp" ; if ($LASTEXITCODE -ne 0) { throw "mcp did not install" }
+```
+
+### Step 4 — write the settings files
+
+`Set-Content -NoNewline` does **not** exist in Windows PowerShell 5.1, which is what Windows ships
+(measured 2026-09-16: `A parameter cannot be found that matches parameter name 'NoNewline'`). Use
+.NET, which behaves the same on 5.1 and 7.
+
+The mode is decided here in code, not by commenting lines out. In local mode `remote-url` must **not**
+exist — that file is what sends records to the server.
+
+```powershell
+$MODE = "local"; $H = "$env:USERPROFILE\.casebook"
+New-Item -ItemType Directory -Force -Path $H | Out-Null
+[IO.File]::WriteAllText("$H\mode", $MODE)
+[IO.File]::WriteAllText("$H\update-url", "<URL>")
+if ($MODE -eq "server") {
+  [IO.File]::WriteAllText("$H\remote-url", "<URL>")
+} else {
+  Remove-Item -Force -ErrorAction SilentlyContinue "$H\remote-url"
+}
+Get-Content "$H\mode"; Test-Path "$H\remote-url"      # local must print: local, False
+```
+
+### Step 5 — register the MCP server
+
+There is no shell wrapper on Windows; point the agent straight at python.
+
+Register with whichever agents are actually installed. Asking for one that is not there is an error,
+not a skip — check first.
+
+```powershell
+$H = "$env:USERPROFILE\.casebook"; $C = "$H\client"; $PY = "$C\.venv\Scripts\python.exe"
+$BOOT = '<BOOT>'
+$any = $false
+if (Get-Command claude -ErrorAction SilentlyContinue) {
+  claude mcp remove casebook -s user 2>$null
+  claude mcp add casebook -s user -- $PY -c $BOOT $C casebook.adapters.mcp_proxy
+  "registered with Claude Code"; $any = $true
+} else { "Claude Code not found - skipped" }
+if (Get-Command codex -ErrorAction SilentlyContinue) {
+  codex mcp remove casebook 2>$null
+  codex mcp add casebook -- $PY -c $BOOT $C casebook.adapters.mcp_proxy
+  "registered with Codex CLI"; $any = $true
+} else { "Codex CLI not found - skipped" }
+if (-not $any) { "No agent CLI found. Use the Codex desktop app block below, or install one." }
+```
+
+**Codex desktop app (no CLI):** it reads `%USERPROFILE%\.codex\config.toml`. Add this block, keeping
+whatever else is in the file, then restart the app. Replace `<PY>` and `<DIR>` with the real paths and
+**double every backslash**, which TOML requires.
+
+```toml
+[mcp_servers.casebook]
+command = "<PY>"
+args = ["-c", "<BOOT>", "<DIR>", "casebook.adapters.mcp_proxy"]
+startup_timeout_sec = 30
+```
+
+`startup_timeout_sec` matters: the first connect builds a python environment and talks to the server,
+and the default wait is too short.
+
+### Step 6 — Claude Code hooks (skip this whole step if Claude Code was not found in step 5)
+
+Merge these into `%USERPROFILE%\.claude\settings.json` under `"hooks"`. Keep every hook that is
+already there; replace only entries whose command mentions `casebook_hook.py`. **Back the file up
+first.** In every `command`, replace `<PY>` with the python path from step 2 and `<DIR>` with the
+client folder, and double the backslashes (JSON requires it).
+
+```json
+<HOOKS>
+```
+
+Each entry goes into the array named by its `event`.
+
+### Step 7 — sign in (server mode only)
+
+```powershell
+$C = "$env:USERPROFILE\.casebook\client"; $PY = "$C\.venv\Scripts\python.exe"; $BOOT = '<BOOT>'
+& $PY -c $BOOT $C casebook.adapters.device_login
+```
+
+It prints a code and opens a browser. Local mode skips this entirely.
+
+### Step 8 — check it
+
+```powershell
+if (Get-Command claude -ErrorAction SilentlyContinue) { claude mcp list }
+if (Get-Command codex  -ErrorAction SilentlyContinue) { codex mcp list }
+```
+
+`casebook` should be listed. For the Codex desktop app there is no list command — restart the app and
+ask it to show your open Worktrail threads.
+
+Then open Claude Code in any repository; the first screen shows the open threads. In Codex there is no
+session hook, so say once at the start: "show my open Worktrail threads".
+
+To see the records in a browser:
+
+```powershell
+$C = "$env:USERPROFILE\.casebook\client"; $PY = "$C\.venv\Scripts\python.exe"; $BOOT = '<BOOT>'
+& $PY -c $BOOT $C casebook.adapters.ui_server
+```
+
+### If they want it gone
+
+The `casebook-uninstall` command is a shell script and does not run here. Do this instead:
+
+```powershell
+claude mcp remove casebook -s user 2>$null
+codex mcp remove casebook 2>$null
+# remove the casebook_hook.py entries from %USERPROFILE%\.claude\settings.json (back it up first)
+# remove the [mcp_servers.casebook] block from %USERPROFILE%\.codex\config.toml if you added it
+Remove-Item -Recurse -Force "$env:USERPROFILE\.casebook\client"
+Remove-Item -Force "$env:USERPROFILE\.casebook\mode","$env:USERPROFILE\.casebook\update-url","$env:USERPROFILE\.casebook\remote-url","$env:USERPROFILE\.casebook\oauth.json","$env:USERPROFILE\.casebook\oauth.json.lock" -ErrorAction SilentlyContinue
+Remove-Item -Force "$env:USERPROFILE\.casebook\.oauth.json.*.tmp" -ErrorAction SilentlyContinue
+```
+
+`%USERPROFILE%\.casebook\casebook.db` is left alone — in local mode that file is all of their records.
+Delete it only if they say so. Records kept on the server are not touched here; ask the operator.
+
+### Updating later
+
+`casebook-update` is also a shell script. To move to a new version, run this file's steps again — steps 2
+and 3 replace the client, and the records are untouched.
+"""
+
+
+# 확장 122호 — 윈도우. 설치기는 sh 스크립트라 윈도우에서 돌지 않지만, 설치가 실제로 하는 일은
+# 받아서 풀고 · venv 만들고 · 파일 몇 개 쓰고 · 에이전트에 등록하는 것뿐이다. sh 가 필요한 곳은
+# 실행기 껍데기 하나이고, 프록시는 파이썬 한 줄로 그냥 뜬다(실측 2026-09-16).
+#
+# 그래서 윈도우에는 PowerShell 설치기를 따로 만드는 대신 **프롬프트**를 내준다. 이 제품을 쓰는
+# 사람은 정의상 코딩 에이전트를 갖고 있으므로, 에이전트가 설치를 대신하는 것이 가장 짧은 길이다.
+# 다만 "알아서 해 줘"는 안 된다 — 사람마다 다른 모양으로 깔리면 나중에 무엇이 문제인지 물어볼 수
+# 없다. 명령을 정확히 박아 어느 에이전트가 읽어도 같은 결과가 나오게 한다.
+#
+# 훅 명세는 베끼지 않고 install_claude_hooks.sh --print-spec 에서 읽는다. 손으로 옮기면 한쪽만
+# 고쳐졌을 때 조용히 갈린다 — 만든 사람 맥과 설치본이 갈리지 않게 하는 것이 #495 의 규율이다.
+def hook_spec() -> list[dict[str, Any]]:
+    """훅 다섯의 명세. 설치기가 쓰는 그 값 그대로 — 두 곳에 적지 않는다."""
+    import subprocess
+    sh = source_root() / "tools" / "hooks" / "install_claude_hooks.sh"
+    out = subprocess.run(["sh", str(sh), "--print-spec"], capture_output=True, text=True, timeout=10)
+    if out.returncode != 0 or not out.stdout.strip():
+        raise FileNotFoundError(f"훅 명세를 읽지 못했다: {sh}")
+    return json.loads(out.stdout)
+
+
+PLUGIN_HOOK = "${CLAUDE_PLUGIN_ROOT}/bin/worktrail-hook"
+
+
+def plugin_hooks() -> dict[str, Any]:
+    """#541 — Claude Code 플러그인의 hooks/hooks.json. 설치기와 같은 명세에서 만든다(두 곳에 적지 않는다).
+    파일은 저장소에 있고 tests/test_plugin.py 가 이 값과 같은지 지킨다. 명세를 바꾸면 이것으로 다시 쓴다:
+        .venv/bin/python -c "import json; from casebook.adapters.client_dist import plugin_hooks as h; print(json.dumps(h(), indent=2, ensure_ascii=False))" > hooks/hooks.json
+    """
+    hooks: dict[str, list[dict[str, Any]]] = {}
+    for h in hook_spec():
+        one: dict[str, Any] = {"type": "command", "command": f"{PLUGIN_HOOK} {h['arg']}", "timeout": 15}
+        if h.get("status"):
+            one["statusMessage"] = h["status"]
+        if h.get("async"):
+            one["async"] = True
+        entry: dict[str, Any] = {"hooks": [one]}
+        if h.get("matcher"):
+            entry = {"matcher": h["matcher"], **entry}
+        hooks.setdefault(h["event"], []).append(entry)
+    return {"hooks": hooks}
+
+
+def windows_prompt(url: str) -> str:
+    """윈도우 사용자가 제 코딩 에이전트에게 붙여넣는 설치 지시문. 토큰은 이미 주소에 박혀 있다."""
+    hooks = []
+    for h in hook_spec():
+        one: dict[str, Any] = {"type": "command", "command": "<PY> <DIR>\\tools\\hooks\\casebook_hook.py " + h["arg"],
+                               "timeout": 15}
+        if h.get("status"):
+            one["statusMessage"] = h["status"]
+        if h.get("async"):
+            one["async"] = True
+        entry: dict[str, Any] = {"hooks": [one]}
+        if h.get("matcher"):
+            entry = {"matcher": h["matcher"], **entry}
+        hooks.append({"event": h["event"], "entry": entry})
+    hook_json = json.dumps(hooks, ensure_ascii=False, indent=2)
+    # 안에 큰따옴표를 쓰지 않는다. PowerShell 5.1 은 네이티브 명령에 넘기는 인자의 따옴표를
+    # 망가뜨리고, 같은 문자열이 config.toml 과 settings.json 에도 들어가 거기서는 이스케이프가
+    # 필요해진다. 작은따옴표로 두면 세 곳이 한꺼번에 깨끗해진다.
+    boot = ("import sys; sys.path.insert(0, sys.argv[1]); m = sys.argv[2]; "
+            "sys.argv[:] = [m, *sys.argv[3:]]; import runpy; runpy.run_module(m, run_name='__main__')")
+    return WINDOWS_MD.replace("<URL>", url).replace("<HOOKS>", hook_json).replace("<BOOT>", boot)
 
 
 def source_root() -> pathlib.Path:

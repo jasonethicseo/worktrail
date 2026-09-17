@@ -40,7 +40,13 @@ PENDING_CAP = 20
 # 누를 때까지 아무도 못 썼다: 사람이 병목이고, 밤에 신청한 사람은 아침까지 기다린다. 레딧에서
 # 온 사람에게 그것은 "대기 명단" 으로 읽히기도 한다.
 # 정원은 D15134 그대로 5명이고, 기존 계정은 정원 밖이다 — grandfather 가 적어 둔 것은 세지 않는다.
+# 확장 130호 — 이 숫자는 이제 운영자가 창에서 돌린다. 여기 있는 값은 아직 돌린 적이 없는
+# 서버의 출발값이고, 실제로 쓰는 값은 total_seats(db) 가 _meta 에서 읽는다.
 TESTER_SEATS = 5
+SEATS_KEY = "access_tester_seats"
+# 손이 닿는 범위의 천장. 혼자 돌리는 서버라 무한히 열 수 있으면 안 되고, 잘못 눌러 1000 이
+# 박히는 것도 막는다. 줄 상한(PENDING_CAP)과 같은 자리에 두는 숫자다.
+SEATS_MAX = 20
 
 SCOPE_WORKTRAIL = "worktrail"      # 기록만 — 테스터
 SCOPE_OPERATOR = "operator"        # 조사·tickets 까지 — 운영자
@@ -56,7 +62,35 @@ CONSENT_GRANDFATHERED = "grandfathered"
 # 위 CONSENT_GRANDFATHERED 의 "따로 정한다" 가 여기서 닫힌다 — 그 전까지는 동의를 남기는 길이
 # CLI 하나뿐이라 신청제로 들어온 계정이 전부 check 에서 막혔다.
 # 날짜인 이유는 판이 바뀐 것을 사람이 바로 읽을 수 있어서다. 안내문 문구를 고치면 이 값도 올린다.
-NOTICE_VERSION = "2026-09-15"
+NOTICE_VERSION = "2026-09-17"
+
+# 확장 126호 — 로컬로 쓰기로 한 사람이 동의한 것은 다른 것이다. 그 사람의 기록은 서버에 오지
+# 않으므로 보관·삭제·열람·종료가 해당되지 않고, 내가 받는 것은 신청한 이메일 주소 하나뿐이다.
+# 서버 안내문을 그대로 읽히면 사실이 아닌 것에 동의를 받는 셈이고, 실제로 주저를 만든다
+# (사용자 2026-09-17: "서버에 설치를 전제로 안내문이 뜨던데 그건 주저를 유발하지 않을까").
+# 나중에 서버로 바꾸는 사람은 설치 화면이 그때 맡기는 조건을 다시 보여 준다(확장 112호).
+NOTICE_VERSION_LOCAL = NOTICE_VERSION + "+local"
+
+
+def notice_version(mode: str) -> str:
+    """이 사람이 읽은 안내문의 판. 서버냐 로컬이냐로 갈린다 — 같은 글이 아니다."""
+    return NOTICE_VERSION_LOCAL if (mode or "").strip() == "local" else NOTICE_VERSION
+
+
+def notice_current(version: str | None) -> bool:
+    """이 사람이 동의한 것이 지금 보여 주는 안내문인가.
+
+    확장 129호 — NOTICE_VERSION 을 올려도 아무 일이 일어나지 않던 자리다. 동의를 보는 곳이
+    전부 "값이 있는가" 만 물었으므로(check 의 `not consent_version`, /join/status 의
+    `and st["consent_version"]`), 판을 올려도 옛 판에 동의한 사람은 그대로 지나갔다.
+    판을 올리는 행위에 뜻이 생기려면 묻는 쪽이 판을 비교해야 한다.
+
+    grandfathered 는 동의가 아니다(표가 생길 때 기존 계정에 적어 둔 표시일 뿐) — False 다.
+
+    check() 는 이것을 쓰지 않는다. 일하는 도중 403 을 내면 사람이 브라우저로 가서 다시 동의할
+    때까지 에이전트가 멈추는데, 다시 읽히는 것이 목적이지 일을 끊는 것이 목적이 아니다.
+    문구가 약해지거나 새 의무가 생겨 정말 끊어야 할 판이 오면 그때 여기를 check 에 건다."""
+    return version in (NOTICE_VERSION, NOTICE_VERSION_LOCAL)
 
 
 def grandfather(db: Any) -> int:
@@ -257,10 +291,34 @@ def taken_seats(db: Any) -> int:
                if r["consent_version"] != CONSENT_GRANDFATHERED)
 
 
+def total_seats(db: Any) -> int:
+    """지금 열어 둔 자리 수. 운영자가 돌린 값이 있으면 그것, 없으면 출발값이다.
+
+    확장 130호 — 종전에는 모듈 상수라 숫자를 바꾸려면 배포를 해야 했다. 사용자 2026-09-17:
+    "자리 추가도 버튼으로 쉽게 할 수 있게 열어놓으면 좋을 것 같은데."
+    값을 _meta 에 두는 이유는 GRANDFATHER_KEY 와 같다 — 코드가 아니라 이 서버의 상태다."""
+    v = db.meta(SEATS_KEY)
+    if v is None:
+        return TESTER_SEATS
+    try:
+        return max(0, min(SEATS_MAX, int(v)))
+    except (TypeError, ValueError):
+        return TESTER_SEATS          # 손으로 망가뜨린 값에 서버가 끌려가지 않는다
+
+
+def set_total_seats(db: Any, n: int) -> int:
+    """자리 수를 돌린다. 이미 앉은 사람은 건드리지 않는다 — 줄여도 아무도 쫓겨나지 않는다."""
+    n = int(n)
+    if not 0 <= n <= SEATS_MAX:
+        raise ValueError(f"자리 수는 0 과 {SEATS_MAX} 사이다: {n}")
+    db.set_meta(SEATS_KEY, str(n))
+    return n
+
+
 def seats(db: Any) -> dict[str, int]:
     """화면이 "3/5" 를 보이려고 읽는 값."""
-    taken = taken_seats(db)
-    return {"taken": taken, "total": TESTER_SEATS, "left": max(0, TESTER_SEATS - taken)}
+    taken, total = taken_seats(db), total_seats(db)
+    return {"taken": taken, "total": total, "left": max(0, total - taken)}
 
 
 def request_access(db: Any, email: str, name: str = "") -> dict[str, Any]:
@@ -280,7 +338,7 @@ def request_access(db: Any, email: str, name: str = "") -> dict[str, Any]:
     # 확장 119호 — 자리가 남아 있으면 그 자리에서 연다. 자리가 없을 때만 줄을 세운다.
     # 열려도 기록이 바로 오가지는 않는다: 안내문 동의가 먼저다(확장 115호). 정원은 그 문 앞의
     # 숫자일 뿐 동의를 건너뛰게 하지 않는다.
-    opened = taken_seats(db) < TESTER_SEATS
+    opened = taken_seats(db) < total_seats(db)
     if not opened and pending_count(db) >= PENDING_CAP:
         raise QueueFullError(
             "The waiting list is full right now. Ask the operator, or try again later.")
@@ -294,6 +352,28 @@ def request_access(db: Any, email: str, name: str = "") -> dict[str, Any]:
                                "scope": SCOPE_WORKTRAIL, "consent_version": None,
                                "consent_at": None, "updated_at": now})
     return {"state": state, "scope": SCOPE_WORKTRAIL, "new": True, "user_id": user["id"]}
+
+
+def holders(db: Any) -> list[dict[str, Any]]:
+    """자리를 쓰고 있는 사람. taken_seats 가 세는 바로 그 행들이다.
+
+    확장 130호 — 창의 승인 화면이 pending 만 그려서, 이미 들어온 사람은 화면 어디에도 없었다.
+    119호로 앞 다섯이 자동으로 열린 뒤로는 pending 이 대개 비어 있어 그 화면이 늘 "기다리는
+    신청이 없다" 만 보인다. 운영자가 자리를 비우거나 약속한 삭제를 하려면 서버에 들어가
+    CLI 를 쳐야 했다(사용자 2026-09-17 이 실제로 그렇게 했다).
+
+    consent_current 를 같이 낸다 — 안내문 판을 올린 뒤 누가 아직 옛 글에 머물러 있는지가
+    이 목록에서 바로 읽혀야 한다(확장 129호)."""
+    out = []
+    for r in db.query("user_access", {"state": STATE_ALLOWED}):
+        if r["consent_version"] == CONSENT_GRANDFATHERED:
+            continue                  # 정원 밖이다(D15134) — 세지 않으니 여기도 내지 않는다
+        u = db.get("user", r["user_id"])
+        out.append({"user_id": r["user_id"], "email": u["email"] if u else "?",
+                    "name": u["name"] if u else "", "since": r["updated_at"],
+                    "consent": r["consent_version"],
+                    "consent_current": notice_current(r["consent_version"])})
+    return sorted(out, key=lambda x: x["since"])
 
 
 def pending(db: Any) -> list[dict[str, Any]]:
