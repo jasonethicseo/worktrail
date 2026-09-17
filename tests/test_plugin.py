@@ -267,3 +267,29 @@ def test_끄면_묻지도_않는다(tmp_path, monkeypatch):
 def test_알림_주소는_공개_저장소의_이_매니페스트다():
     assert plugin_setup.LATEST_URL.endswith("/jasonethicseo/worktrail/master/.claude-plugin/plugin.json")
     assert plugin_setup.installed_version() == PLUGIN["version"]
+
+
+# ── 언어 (D16531) ──────────────────────────────────────────────────────────────
+
+def test_셸_알림도_파이썬과_같은_순서로_언어를_고른다(tmp_path):
+    """worktrail-hook·worktrail-run 의 알림은 파이썬이 뜨기 전에 나간다. 그래서 같은 판단을 셸로 한 번 더 한다."""
+    fake = tmp_path / "fakebin"
+    fake.mkdir()
+    defaults = fake / "defaults"
+    def langs(value: str):
+        defaults.write_text(f'#!/bin/sh\nprintf "(\\n    \\"{value}\\"\\n)\\n"\n')
+        defaults.chmod(defaults.stat().st_mode | stat.S_IEXEC)
+    def pick(**env):
+        base = {"HOME": str(tmp_path), "PATH": f"{fake}:/usr/bin:/bin"}
+        return subprocess.run([str(ROOT / "bin/worktrail-lang")], env={**base, **env},
+                              capture_output=True, text=True, check=True).stdout.strip()
+    langs("ko-KR")
+    assert pick() == "ko"                       # LANG 없음 → macOS 시스템 언어
+    assert pick(LANG="C") == "ko"               # C 는 신호가 아니다
+    assert pick(LANG="en_US.UTF-8") == "en"     # 로케일이 있으면 그것
+    assert pick(CASEBOOK_LANG="en") == "en"     # 고른 값이 이긴다
+    langs("en-US")
+    assert pick() == "en"
+    (tmp_path / ".casebook").mkdir()
+    (tmp_path / ".casebook/lang").write_text("ko\n")
+    assert pick(LANG="en_US.UTF-8") == "ko"

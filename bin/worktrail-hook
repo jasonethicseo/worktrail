@@ -13,9 +13,8 @@ case "${1:-}" in
     LOG="${WORKTRAIL_VENV:-$HOME/.casebook/plugin-venv}.log"
     mkdir -p "$(dirname "$LOG")"
     nohup "$BIN/worktrail-run" --prepare > "$LOG" 2>&1 &
-    # 문구는 사용자가 썼다(2026-09-17, 한국어). 영어는 그 문장을 옮긴 것이다. 언어는 clientmode.say 와 같은 순서로 고른다.
-    L="${CASEBOOK_LANG:-$(cat "$HOME/.casebook/lang" 2>/dev/null || true)}"
-    case "$L" in ko|en) ;; *) case "${LC_ALL:-${LANG:-}}" in ko*) L=ko ;; *) L=en ;; esac ;; esac
+    # 문구는 사용자가 썼다(2026-09-17, 한국어). 영어는 그 문장을 옮긴 것이다. 언어는 worktrail-lang 이 고른다.
+    L="$("$BIN/worktrail-lang")"
     if [ "$L" = ko ]; then
       MSG="Worktrail : 첫 실행에 필요한 파이썬 환경을 만드는 중입니다.(1분 내외) 끝나면 /mcp에서 casebook을 다시 연결합니다."
     else

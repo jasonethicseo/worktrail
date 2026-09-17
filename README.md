@@ -31,6 +31,21 @@ Works on **macOS, Linux and WSL**. Native Windows is not supported yet: the inst
 
 ## Install
 
+### Claude Code plugin
+
+- Claude Code users can install it as a plugin.
+
+```
+/plugin marketplace add jasonethicseo/worktrail
+/plugin install worktrail@worktrail
+```
+
+- On macOS and Linux it needs Python 3.11 or newer, or uv. (Windows: follow the existing instructions)
+- To get new versions automatically, turn on auto-update.
+- If you already installed it with the install line, installing the plugin cleans up the old registration and hooks automatically.
+
+### Install line
+
 The easy way is the hosted server. Sign in at https://casebook-api.syncflo.cloud/join, read the data notice, and paste the one install line it gives you into a terminal. That line installs the client, registers the MCP server with whichever agents it finds, and installs the hooks. Afterwards `casebook-ui` opens the window and `casebook-login` signs you in from a terminal.
 
 Two things worth knowing:

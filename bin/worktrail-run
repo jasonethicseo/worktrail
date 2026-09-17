@@ -51,8 +51,7 @@ prepare() {
       uv pip install -q --python "$VENV/bin/python" $DEPS
     else
       # 문구는 사용자가 썼다(2026-09-17, 한국어). 영어는 그 문장을 옮긴 것이다.
-      L="${CASEBOOK_LANG:-$(cat "$HOME/.casebook/lang" 2>/dev/null || true)}"
-      case "$L" in ko|en) ;; *) case "${LC_ALL:-${LANG:-}}" in ko*) L=ko ;; *) L=en ;; esac ;; esac
+      L="$("$ROOT/bin/worktrail-lang")"
       if [ "$L" = ko ]; then
         echo 'Python 3.11 이상이 필요합니다. macOS: `brew install python@3.12` 또는 uv 설치 후 세션을 다시 여세요.' >&2
       else

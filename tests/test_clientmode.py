@@ -250,14 +250,34 @@ def test_토글이_목록_칸의_캐시를_무른다():
     assert "listDirty = true" in body
 
 
-def test_언어_신호가_없으면_영어로_말한다(home, monkeypatch):
-    """#541 (D16501) — 플러그인은 설치 때 언어를 묻지 않아 lang 파일이 없는 사람이 대부분이다. 예전에는 한국어로 떨어졌다."""
-    monkeypatch.delenv("CASEBOOK_LANG", raising=False)
-    monkeypatch.delenv("LC_ALL", raising=False)
-    monkeypatch.delenv("LANG", raising=False)
-    assert clientmode.say("한", "en") == "en"
-    monkeypatch.setenv("LANG", "ko_KR.UTF-8")
-    assert clientmode.say("한", "en") == "한"                  # 시스템 로케일이 한국어면 한국어
+def _fake_defaults(tmp_path, languages: str) -> pathlib.Path:
+    """macOS 의 defaults 를 흉내 낸다 — AppleLanguages 를 실제 출력 모양으로 찍는다."""
+    import stat
+    d = tmp_path / "fakebin"
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / "defaults"
+    f.write_text(f'#!/bin/sh\nprintf "(\\n    \\"{languages}\\"\\n)\\n"\n')
+    f.chmod(f.stat().st_mode | stat.S_IEXEC)
+    return d
+
+
+def test_고른_언어가_없으면_시스템_언어를_따른다(home, tmp_path, monkeypatch):
+    """#541 (D16531) — macOS 는 LANG 이 비어 있는 일이 흔하다(만든 맥: LANG="", AppleLanguages ("ko-KR")).
+    환경변수만 보면 한국어 맥이 영어로 떨어졌다. 고른 것이 없고 한국어가 아니면 영어다."""
+    for k in ("CASEBOOK_LANG", "LC_ALL", "LC_MESSAGES", "LANG"):
+        monkeypatch.delenv(k, raising=False)
+    def fresh():
+        monkeypatch.setattr(clientmode, "_SYSTEM_LANG", [], raising=False)
+    monkeypatch.setenv("PATH", str(_fake_defaults(tmp_path / "ko", "ko-KR")))
+    fresh(); assert clientmode.say("한", "en") == "한"                   # LANG 없음 → macOS 시스템 언어
+    monkeypatch.setenv("LANG", "C")
+    fresh(); assert clientmode.say("한", "en") == "한"                   # C 는 신호가 아니다
     monkeypatch.setenv("LANG", "en_US.UTF-8")
+    fresh(); assert clientmode.say("한", "en") == "en"                   # 로케일이 있으면 그것
+    monkeypatch.delenv("LANG")
+    monkeypatch.setenv("PATH", str(_fake_defaults(tmp_path / "en", "en-US")))
+    fresh(); assert clientmode.say("한", "en") == "en"                   # 한국어가 아니면 영어
+    monkeypatch.setenv("PATH", str(tmp_path / "nothing"))
+    fresh(); assert clientmode.say("한", "en") == "en"                   # 아무 신호도 없으면 영어
     (home / "lang").write_text("ko\n")
-    assert clientmode.say("한", "en") == "한"                  # 고른 값이 로케일을 이긴다
+    fresh(); assert clientmode.say("한", "en") == "한"                   # 고른 값이 이긴다

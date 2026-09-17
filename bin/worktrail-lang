@@ -1,0 +1,14 @@
+#!/bin/sh
+# Worktrail 플러그인 — 사람에게 말할 언어를 ko 또는 en 으로 찍는다 (#541, D16531).
+# casebook/core/clientmode.say 와 같은 순서다: 고른 언어(CASEBOOK_LANG · ~/.casebook/lang) → 로케일 환경변수
+# (C·POSIX 는 신호가 아니다) → macOS 시스템 언어(defaults read -g AppleLanguages) → 영어.
+L="${CASEBOOK_LANG:-$(cat "$HOME/.casebook/lang" 2>/dev/null || true)}"
+case "$L" in ko|en) echo "$L"; exit 0 ;; esac
+for v in "${LC_ALL:-}" "${LC_MESSAGES:-}" "${LANG:-}"; do
+  case "$v" in ""|C|POSIX|C.*|POSIX.*) continue ;; ko*) echo ko; exit 0 ;; *) echo en; exit 0 ;; esac
+done
+if command -v defaults >/dev/null 2>&1; then
+  first="$(defaults read -g AppleLanguages 2>/dev/null | tr -d ' \n\t"()' | cut -d, -f1)"
+  case "$first" in ko*) echo ko; exit 0 ;; esac
+fi
+echo en

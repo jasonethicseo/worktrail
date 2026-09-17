@@ -31,6 +31,21 @@ Worktrail 은 MCP 서버와 작은 로컬 창이다. Claude Code 나 Codex 가 �
 
 ## 설치
 
+### Claude Code 플러그인
+
+- Claude Code 사용자는 플러그인으로 설치할 수 있습니다.
+
+```
+/plugin marketplace add jasonethicseo/worktrail
+/plugin install worktrail@worktrail
+```
+
+- macOS·Linux 에서는 Python 3.11 이상 또는 uv가 필요합니다. (Windows는 기존 안내)
+- 새 버전을 자동으로 받으려면 auto-update를 켭니다.
+- 설치 명령으로 이미 깐 사람은 플러그인을 깔면 기존 등록과 훅이 자동으로 정리됩니다.
+
+### 설치 한 줄
+
 쉬운 길은 호스팅 서버다. https://casebook-api.syncflo.cloud/join 에서 구글로 로그인하고 데이터 안내문을 읽으면 설치 한 줄을 준다. 그 줄을 터미널에 붙여 넣으면 클라이언트 설치, 찾은 에이전트에 MCP 서버 등록, 훅 설치까지 한 번에 끝난다. 그 뒤 `casebook-ui` 가 창을 열고 `casebook-login` 이 터미널에서 로그인한다.
 
 알아 둘 것 둘:
