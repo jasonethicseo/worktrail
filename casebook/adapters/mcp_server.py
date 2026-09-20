@@ -576,6 +576,46 @@ HANDOFF_LABELS = {
 
 REMOTE_TOKEN_TTL = 10 * 365 * 86400   # 커넥터에 한 번 넣는 토큰 — 회수는 auth_secret 교체(웹 로그인도 함께 풀린다)
 
+# 확장 134호 — 인자 경계가 깨진 호출(quant-events 545). 모델이 observed 를 잘못 닫자 conclusion·next 가 observed 안에
+# 글자로 들어갔고, SDK 의 pydantic 에러는 input_value 로 그 원문 마크업을 모델에게 되돌려줬다 — 그 대화는 곧 안전
+# 분류기에 막혔다. 그래서 에러는 인자 이름과 할 일만 말하고 값은 한 글자도 싣지 않는다.
+# 흔적으로 보는 것은 "이 도구의 **다른** 인자 이름을 단 parameter 여는 태그" 뿐이다: 이 사건을 증거로 남기는
+# add_evidence(text) 의 conclusion·next 는 그 도구의 인자가 아니므로 걸리지 않는다.
+_PARAM_OPEN = re.compile(r"<(?:[\w-]+:)?parameter\s+name\s*=\s*[\"']?([A-Za-z_]\w*)")
+
+
+def boundary_leak(tool: str, arguments: dict[str, Any], params: set[str]) -> str | None:
+    """문자열 인자 안에 같은 도구의 다른 인자가 섞여 들어갔으면 원문 없는 거절문, 아니면 None."""
+    for key, value in arguments.items():
+        if not isinstance(value, str):
+            continue
+        leaked = sorted({n for n in _PARAM_OPEN.findall(value) if n in params and n != key})
+        if leaked:
+            names = ", ".join(leaked)
+            return (f"{tool}: {key} contains other arguments ({names}) as text — the {key} value was closed "
+                    f"wrongly and swallowed the ones after it. Send {names} as separate arguments and call "
+                    f"{tool} again. Nothing was recorded.")
+    return None
+
+
+def argument_error(tool: str, exc: Any) -> str:
+    """pydantic ValidationError 를 인자 이름과 할 일로만 다시 쓴다 — input_value(원문)는 버린다."""
+    missing, other = [], []
+    for err in exc.errors():
+        loc = ".".join(str(p) for p in err.get("loc", ())) or "arguments"
+        if err.get("type") == "missing":
+            missing.append(loc)
+        else:
+            other.append(f"{loc}: {err.get('msg', 'invalid')}")
+    parts = []
+    if missing:
+        names = ", ".join(missing)
+        parts.append(f"missing required argument(s): {names}. Each is its own argument — if you did write them, "
+                     f"check they did not end up inside another argument's value (a wrongly closed argument "
+                     f"swallows the ones after it), then send them separately")
+    parts.extend(other)
+    return f"{tool}: " + "; ".join(parts) + ". Nothing was recorded."
+
 def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_user=None):
     """MCPServer 조립. mcp 는 여기서만 임포트한다 — 코어 테스트는 mcp 없이 돈다.
 
@@ -710,6 +750,28 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     def handoff(case_id: int, ctx: Context, engineer_asked: bool = False) -> str:
         return _guard(T(ctx).handoff)(case_id, engineer_asked)
 
+    # 확장 134호 — 인자 검증은 SDK 가 도구 함수보다 먼저 하므로 입구(call_tool)를 감싼다. 프록시는 인자를 그대로
+    # 넘기므로 여기 한 곳이 로컬·원격 문을 모두 덮는다.
+    from mcp.server.mcpserver.exceptions import ToolError
+    from pydantic import ValidationError
+
+    sdk_call_tool = server.call_tool
+    params_of: dict[str, set[str]] = {}
+
+    async def call_tool(name: str, arguments: dict[str, Any], context: Any = None):
+        if not params_of:
+            params_of.update({t.name: set((t.input_schema or {}).get("properties", {})) for t in await server.list_tools()})
+        bad = boundary_leak(name, arguments or {}, params_of.get(name, set()))
+        if bad:
+            raise ToolError(bad)
+        try:
+            return await sdk_call_tool(name, arguments, context)
+        except ToolError as exc:
+            if isinstance(exc.__cause__, ValidationError):
+                raise ToolError(argument_error(name, exc.__cause__)) from exc.__cause__
+            raise
+
+    server.call_tool = call_tool
     return server
 
 # ── 원격 문 (확장 27호) ─────────────────────────────────────────────────────────

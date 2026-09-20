@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
 import pathlib
 import shutil
@@ -22,26 +23,32 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
-import time
+import zoneinfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from casebook.core.db import SqliteDB          # noqa: E402
 from casebook.core.threads import ensure_change  # noqa: E402
 from casebook.core.worktrail import Worktrail   # noqa: E402
+from tools.demo_shift import days_to_shift, shift_all  # noqa: E402
 
+SEOUL = zoneinfo.ZoneInfo("Asia/Seoul")
 DISPLAY_HOME = "~/work"      # 기록에 남을 작업 폴더의 겉모습. 스냅샷의 SCRUB 이 홈 경로를 ~ 로 바꾸는 것과 같은 자리.
 EMAIL = "demo@example.com"
 NAME = "데모"
 
 
 class Clock:
-    """가상 시계 — 시드가 적은 시각으로 기록이 찍힌다."""
+    """가상 시계 — 시드가 적은 시각으로 기록이 찍힌다.
+
+    시드의 시각은 한국 시간이다. 짓는 기계의 시간대로 읽으면 안 된다 — 서버 컨테이너는 UTC 라 "9/14 16:50" 이
+    화면(KST)에서 "9/15 01:50" 으로 보였다(실측 2026-09-18, 실제 제작 기록의 시각까지 틀리게 나왔다)."""
     now = 0
 
     @classmethod
     def set(cls, stamp: str) -> int:
-        cls.now = int(time.mktime(time.strptime(stamp, "%Y-%m-%d %H:%M"))) * 1000
+        at = datetime.datetime.strptime(stamp, "%Y-%m-%d %H:%M").replace(tzinfo=SEOUL)
+        cls.now = int(at.timestamp()) * 1000
         return cls.now
 
     @classmethod
@@ -102,16 +109,35 @@ def rewrite_paths(db_path: str, pairs: list[tuple[str, str]]) -> None:
     dst.close()
 
 
-def seed(db_path: str, work: pathlib.Path, lang: str = "ko") -> dict:
+def now_seoul(at: datetime.datetime | None = None) -> datetime.datetime:
+    """짓는 순간을 한국 시간으로 (시드의 시각이 한국 시간이므로).
+
+    서버 컨테이너는 UTC 로 돈다. 거기서 naive datetime.now() 로 재면 한국보다 9시간 뒤처져서,
+    밀 날수가 하루 늦게 7일로 넘어간다(실측 2026-09-19 16:05 재빌드: 한국 기준 7일인데 0 이 나왔다)."""
+    return (at or datetime.datetime.now(datetime.timezone.utc)).astimezone(SEOUL).replace(tzinfo=None)
+
+
+def seed(db_path: str, work: pathlib.Path, lang: str = "ko", real: bool = True,
+         now: datetime.datetime | None = None, shift: bool = True) -> dict:
     # 시드 데이터는 따로 산다. 언어마다 한 벌씩 — 번역이 아니라 그 언어의 팀이 적었을 기록이다.
     # 원티드에는 한국어 데모를, 레딧에는 영어 데모를 낸다(D15188).
     if lang == "en":
         from tools.demo_seed_data_en import TOPICS, THREADS   # noqa: PLC0415
     else:
         from tools.demo_seed_data import TOPICS, THREADS      # noqa: PLC0415
+    # 가상 기록은 짓는 날에 맞춰 통째로 민다(7의 배수 — 요일이 남는다). 심사 기간에 열어도 열린 스레드가
+    # 몇 주 전에 멈춘 일로 보이지 않게. 글 안의 날짜도 같이 밀린다(tools/demo_shift.py).
+    moved = days_to_shift(THREADS, now or now_seoul()) if shift else 0
+    TOPICS, THREADS = shift_all(TOPICS, moved), shift_all(THREADS, moved)
+    start_stamp = shift_all("2026-08-17 09:00", moved)
+    if lang != "en":
+        if real:
+            # 한국어 데모에만 실제 기록을 다시 쓴 주제 하나를 얹는다(D16604). 실제 기록의 날짜는 사실이라 밀지 않는다.
+            from tools.demo_seed_data_real import TOPICS as REAL_TOPICS, THREADS as REAL_THREADS  # noqa: PLC0415
+            TOPICS, THREADS = [*TOPICS, *REAL_TOPICS], {**THREADS, **REAL_THREADS}
 
     SqliteDB.now_ms = staticmethod(lambda: Clock.now)     # 모든 created_at 이 가상 시계를 탄다
-    Clock.set("2026-08-17 09:00")
+    Clock.set(start_stamp)
     wt = Worktrail(SqliteDB(db_path))
     ensure_change(wt.db)
     wt.signup(NAME, EMAIL, "demo-password-not-used")
@@ -175,7 +201,7 @@ def seed(db_path: str, work: pathlib.Path, lang: str = "ko") -> dict:
             wt.conclude_topic(uid, topic["topic_id"], t["conclusion"])
 
     wt.run_workers()
-    counts = {"threads": len(cases), "topics": len(TOPICS), "repos": len(repos)}
+    counts = {"threads": len(cases), "topics": len(TOPICS), "repos": len(repos), "moved": moved}
     wt.db.conn.close()
     rewrite_paths(db_path, made)
     return counts
@@ -186,6 +212,10 @@ def main() -> int:
     ap.add_argument("--out", required=True, help="만들 sqlite 경로 (있으면 지우고 다시 만든다)")
     ap.add_argument("--lang", default="ko", choices=("ko", "en"),
                     help="기록의 언어 (기본 ko). 원티드는 ko, 레딧은 en")
+    ap.add_argument("--no-shift", action="store_true", help="가상 기록의 날짜를 밀지 않는다 (시드에 적힌 날짜 그대로)")
+    ap.add_argument("--now", default="", help="짓는 시각을 이것으로 본다: 'YYYY-MM-DD HH:MM' (시험·미리보기용)")
+    ap.add_argument("--no-real", action="store_true",
+                    help="한국어 데모에서 실제 기록을 다시 쓴 주제(demo_seed_data_real.py)를 뺀다")
     a = ap.parse_args()
 
     out = pathlib.Path(a.out)
@@ -194,10 +224,11 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     work = pathlib.Path(tempfile.mkdtemp(prefix="demo-seed-"))
     try:
-        c = seed(str(out), work, a.lang)
+        now = datetime.datetime.strptime(a.now, "%Y-%m-%d %H:%M") if a.now else None
+        c = seed(str(out), work, a.lang, real=not a.no_real, now=now, shift=not a.no_shift)
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    print(f"{out}  [{a.lang}] 스레드 {c['threads']} · 주제 {c['topics']} · 저장소 {c['repos']}  ({out.stat().st_size / 1e6:.1f} MB)")
+    print(f"{out}  [{a.lang}] 스레드 {c['threads']} · 주제 {c['topics']} · 저장소 {c['repos']}  ({out.stat().st_size / 1e6:.1f} MB) · 가상 기록 {c['moved']}일 밈")
     print(f"다음: python tools/demo_snapshot.py --out demo/site --db {out} --email {EMAIL}")
     return 0
 

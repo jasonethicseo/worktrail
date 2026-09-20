@@ -72,3 +72,40 @@ def test_사전_열쇠가_망가지지_않았다():
     block = js[js.index("const EN = {"):js.index("\n  };", js.index("const EN = {"))]
     assert "tr(" not in block and "${" not in block
     assert len(re.findall(r'"[^"]+":', block)) > 100
+
+
+def test_render_는_한_번에_하나만_돈다():
+    """확장 135호 — 두 render 가 await 사이에 엇갈리면 공용 view 가 root 로 돌려진 뒤 늦은 목록이 화면 전체를 덮어
+    #paneList 가 사라지고 "Cannot read properties of null (reading 'insertAdjacentHTML')" 이 떴다. 화면의 render
+    직렬화 코드를 그대로 떼어 node 에서 돌린다: 느린 renderOnce 를 겹쳐 불러도 동시에 둘이 돌지 않고, 도는 중에
+    들어온 요청은 끝난 뒤 한 번 더(그때의 주소로) 그려지며, 모든 호출자가 그 마지막 그리기까지 기다린다."""
+    import shutil
+    import subprocess
+    import pytest
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 없음")
+    js = _js()
+    start = js.index("let rendering = null")
+    serializer = js[start:js.index("async function renderOnce", start)]
+    harness = serializer + """
+let running = 0, maxRunning = 0, drawn = [], route = "a";
+async function renderOnce() {
+  running++; maxRunning = Math.max(maxRunning, running);
+  const at = route; await new Promise((r) => setTimeout(r, 20)); drawn.push(at); running--;
+}
+(async () => {
+  const p1 = render(); route = "b"; const p2 = render(); route = "c"; const p3 = render();
+  await Promise.all([p1, p2, p3]);
+  const afterAll = drawn.slice();
+  await render();
+  console.log(JSON.stringify({ maxRunning, afterAll, last: drawn[drawn.length - 1], total: drawn.length }));
+})();
+"""
+    out = subprocess.run([node, "-e", harness], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    import json
+    r = json.loads(out.stdout)
+    assert r["maxRunning"] == 1                     # 겹치지 않는다
+    assert r["afterAll"] == ["a", "c"]              # 도는 중의 요청 둘은 하나로 모여, 마지막 주소로 그린다
+    assert r["last"] == "c" and r["total"] == 3     # 끝난 뒤의 호출은 새로 한 번 돈다

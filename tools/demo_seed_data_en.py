@@ -262,7 +262,7 @@ THREADS["C3"] = {'repo': 'onstore/pay-gateway',
             'declare': {'kind': 'open',
                         's': 'We do not switch on without knowing the daily cancel limit\n'
                              '\n'
-                             'Asked our sales rep on the 8th and there is still no answer. If the limit sits below '
+                             'Asked our sales rep on September 8 and there is still no answer. If the limit sits below '
                              'what we cancel in a day (2,400,000 KRW on average, 8,100,000 KRW at peak), '
                              'cancellations start failing at month end. Once we have the number it goes into a '
                              'contract addendum and then we switch on.',

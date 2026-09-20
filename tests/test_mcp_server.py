@@ -197,3 +197,74 @@ def test_확장_31호_도구_인자_셋(tools, tmp_path):
     assert topic.endswith("Conclusion: 한 줄 결론") and app.list_topics(1)[0]["conclusion"] == "한 줄 결론"
     closed = t.close_thread(cid, result="잘 끝났다")
     assert closed["result"] == "잘 끝났다" and app.status(1)["topics"][0]["threads"][0]["result"] == "잘 끝났다"
+
+
+# ── 인자 경계가 깨진 호출 (quant-events case 545) ──
+# 모델이 observed 를 잘못 닫아 conclusion·next 가 observed 문자열 안에 글자로 들어갔다. SDK 의 pydantic 에러는
+# input_value 로 그 원문 마크업을 되돌려줬고, 대화는 곧 안전 분류기에 막혔다. 에러는 원문 없이 행동만 말해야 한다.
+LEAKED_OBSERVED = ('펀딩 기여 분해: 베이시스 수익의 절반 (2020년 65%).</observed>\n'
+                   '<parameter name="conclusion">베이시스 계열 KILL, 비용 뒤 남지 않는다\n'
+                   '</parameter>\n<parameter name="next">가격-거래량 쪽을 본다')
+
+
+def _call(app, name, args):
+    import asyncio
+    from casebook.adapters.mcp_server import build_server
+    server = build_server(app, 1)
+    return asyncio.run(server._handle_call_tool(None, _Params(name, args)))
+
+
+class _Params:
+    def __init__(self, name, arguments):
+        self.name, self.arguments, self.meta = name, arguments, None
+
+
+def _text(result):
+    return "".join(getattr(c, "text", "") for c in result.content)
+
+
+def test_경계가_깨진_note_turn_은_섞인_인자를_말하고_원문은_싣지_않는다(tools, tmp_path):
+    pytest.importorskip("mcp")
+    t, app, _ = tools
+    cid = t.open_thread("경계 시험", str(tmp_path), topic="테스트")["case_id"]
+    r = _call(app, "note_turn", {"case_id": cid, "kind": "finding", "owner": "claude", "observed": LEAKED_OBSERVED})
+    msg = _text(r)
+    assert r.is_error
+    assert "observed" in msg and "conclusion" in msg and "next" in msg
+    assert "<parameter" not in msg and "</observed>" not in msg      # 마크업을 되돌려주지 않는다
+    assert "베이시스" not in msg and "input_value" not in msg          # 인자 값도 되돌려주지 않는다
+    assert "Field required" not in msg
+
+
+def test_경계가_깨진_인자는_필수_인자가_다_있어도_거절된다(tools, tmp_path):
+    """conclusion 은 따로 왔지만 next 가 conclusion 안에 섞인 경우 — pydantic 은 next 누락만 본다.
+    필수가 모두 있고 다른 인자 조각만 섞인 경우(evidence_ids 등)는 조용히 기록될 뻔했다."""
+    pytest.importorskip("mcp")
+    t, app, _ = tools
+    cid = t.open_thread("경계 시험", str(tmp_path), topic="테스트")["case_id"]
+    args = {"case_id": cid, "kind": "finding", "owner": "claude", "observed": "raw", "next": "다음",
+            "conclusion": '결론이다</conclusion>\n<parameter name="evidence_ids">[3]'}
+    msg = _text(_call(app, "note_turn", args))
+    assert "conclusion" in msg and "evidence_ids" in msg and "<parameter" not in msg
+    ok = t.note_turn(cid, "raw", "결론", kind="finding", next="다음", owner="claude")
+    assert "Turn 1 recorded" in ok                                  # 거절된 호출은 아무것도 남기지 않았다
+
+
+def test_필수_인자_누락은_행동을_말하고_원문은_싣지_않는다(tools, tmp_path):
+    pytest.importorskip("mcp")
+    t, app, _ = tools
+    cid = t.open_thread("경계 시험", str(tmp_path), topic="테스트")["case_id"]
+    r = _call(app, "note_turn", {"case_id": cid, "kind": "finding", "owner": "claude", "observed": "비밀스러운 원문"})
+    msg = _text(r)
+    assert r.is_error
+    assert "conclusion" in msg and "next" in msg and "required" in msg
+    assert "비밀스러운" not in msg and "input_value" not in msg
+
+
+def test_증거에_마크업이_있는_것은_경계가_깨진_것이_아니다(tools, tmp_path):
+    """이 사건 자체를 증거로 남길 수 있어야 한다 — add_evidence 의 인자는 text 하나라, 다른 도구의 인자 이름은 흔적이 아니다."""
+    pytest.importorskip("mcp")
+    t, app, _ = tools
+    cid = t.open_thread("경계 시험", str(tmp_path), topic="테스트")["case_id"]
+    r = _call(app, "add_evidence", {"case_id": cid, "text": LEAKED_OBSERVED})
+    assert not r.is_error and "Evidence #" in _text(r)

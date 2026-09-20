@@ -23,6 +23,8 @@ tests/
 tools/demo_seed.py
 tools/demo_seed_data.py
 tools/demo_seed_data_en.py
+tools/demo_seed_data_real.py
+tools/demo_shift.py
 tools/demo_snapshot.py
 tools/hooks/
 tools/public_manifest.py

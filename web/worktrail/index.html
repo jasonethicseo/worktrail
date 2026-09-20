@@ -223,6 +223,15 @@
   .demo-note .what{font-size:var(--fs-small);color:var(--c-text-1);line-height:var(--lh);}
   .demo-note .what b{color:var(--c-text);font-weight:600;}
   .demo-note .fake{flex:none;font-size:var(--fs-meta);color:var(--c-amber);background:var(--amber-tint);border-radius:var(--r-pill);padding:3px 11px;}
+  /* 확장 137호 — 데모를 보고 마음이 동한 사람이 그 자리에서 갈 수 있는 길 둘. 띠 안에 있으므로 스냅샷 전용이다. */
+  .demo-note .cta{flex:none;margin-left:auto;display:flex;gap:10px;align-items:center;}
+  /* 확장 139호 — 눈에 띄는 것은 색으로 한다: 둘 다 강조색(고르는 것이므로 무게는 같다). 크기는 띠의 다른 글과 같다
+     (140호 — 14px·굵게·큰 여백은 사용자가 "너무 부담스럽다" 고 했다). */
+  .demo-note .cta a{font-size:var(--fs-small);text-decoration:none;border:1px solid var(--c-accent);border-radius:var(--r-pill);
+    padding:5px 13px;color:var(--c-accent);background:var(--acc-tint);white-space:nowrap;
+    transition:background var(--t-fast),border-color var(--t-fast);}
+  .demo-note .cta a:hover{background:var(--sel-2);border-color:var(--c-accent-2);color:var(--c-accent-2);}
+  .demo-note .cta .lead{font-size:var(--fs-meta);color:var(--c-text-2);}
   .tab{border:1px solid var(--ln-2);border-radius:var(--r-pill);padding:6px 14px;font-size:var(--fs-small);color:var(--c-text-2);cursor:pointer;background:none;transition:border-color var(--t-fast),color var(--t-fast);}
   .tab:hover{border-color:var(--ln-3);color:var(--c-text);} .tab.on{border-color:var(--c-accent);color:var(--c-accent);background:var(--acc-tint);}
   .tab .n{font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-2);margin-left:7px;}
@@ -621,6 +630,11 @@
   <div class="in">
     <span class="what"><b>Worktrail</b> — AI 코딩 에이전트가 일하며 남긴 작업 기록입니다. 무엇을 정했고(결정), 무엇을 보고 정했는지(증거)가 따로 남아, 다음 세션이 코드에서 추측하지 않습니다.</span>
     <span class="fake">이 데모의 기록은 지어낸 것입니다 · 가상 팀의 커머스 백엔드 4주치</span>
+    <span class="cta">
+      <span class="lead" id="demoCtaLead"></span>
+      <a id="demoJoin" href="/join?from=demo"></a>
+      <a id="demoSrc" href="https://github.com/jasonethicseo/worktrail" target="_blank" rel="noopener"></a>
+    </span>
   </div>
 </div>
 <div class="wrap" id="view"></div>
@@ -943,7 +957,11 @@
       lab: isLab,
       today: (t) => !isLab(t) && (today.has(t.case_id) || (t.last_event && dayKey(t.last_event.at) === todayKey)),
     };
+    // "완료된 주제" 줄은 완료된 주제 전부를 한꺼번에 연다. 예전에는 완료된 것 중 첫 번째 하나로만 이어져서
+    // 완료된 주제가 둘이 되는 순간 나머지는 현황에서 갈 길이 없었다.
+    const doneIds = new Set(topics.filter((tp) => tp.phase === "done").map((tp) => String(tp.topic_id)));
     const fpred = statusFilter === "t:none" ? ((t) => !isLab(t) && !(topicOf[t.case_id] || []).length)
+                : statusFilter === "t:done" ? ((t) => !isLab(t) && (topicOf[t.case_id] || []).some((tp) => doneIds.has(String(tp.topic_id))))
                 : statusFilter.startsWith("t:") ? ((t) => !isLab(t) && (topicOf[t.case_id] || []).some((tp) => String(tp.topic_id) === statusFilter.slice(2)))
                 : statusFilter.startsWith("r:") ? ((t) => !isLab(t) && t.repo === repos[parseInt(statusFilter.slice(2), 10)])
                 : (pred[statusFilter] || pred.all);
@@ -956,15 +974,16 @@
     const expand = statusFilter === "mine" || statusFilter === "agent" || statusFilter === "unset";   // 필터를 걸면 NEXT 문장이 펼쳐진다
     const titles = { all: "현황", mine: "내 차례", agent: "에이전트에게", watch: "관찰 중", unset: "미정", today: "오늘 바뀐 것", lab: "자동 조사" };
     const curTopic = statusFilter.startsWith("t:") ? topics.find((tp) => String(tp.topic_id) === statusFilter.slice(2)) : null;
-    const title = curTopic ? curTopic.name : statusFilter.startsWith("r:") ? shortRepo(repos[parseInt(statusFilter.slice(2), 10)] || "") : statusFilter === "t:none" ? tr("미분류") : titles[statusFilter] || "현황";
+    const title = curTopic ? curTopic.name : statusFilter.startsWith("r:") ? shortRepo(repos[parseInt(statusFilter.slice(2), 10)] || "") : statusFilter === "t:none" ? tr("미분류") : statusFilter === "t:done" ? tr("완료된 주제") : titles[statusFilter] || "현황";
     const sub = { all: "다음 손이 누구 것인지. 선언한 그대로.", mine: "내가 움직여야 하는 것", agent: "에이전트에게 맡긴 것", watch: "지켜보기만 하는 것", unset: "다음을 아직 안 정한 것", today: "오늘 기록이 있던 것", lab: "러너가 밀어 넣은 것 — 사람이 물은 질문이 아니다" }[statusFilter]
+              || (statusFilter === "t:done" ? topics.filter((tp) => tp.phase === "done").map((tp) => esc(tp.name)).join(" · ") : "")
               || (curTopic ? `${tr(TOPIC_KO[curTopic.phase] || "")}${curTopic.conclusion ? " · " + tr("결론") + ": " + esc(curTopic.conclusion) : curTopic.summary ? " · " + esc(curTopic.summary) : ""}` : "");
     const f = (key, label, n, cls) => `<div class="sf ${statusFilter === key ? "on" : ""} ${cls || ""}" data-f="${key}"><span>${label}</span><span class="n">${n}</span></div>`;
     const doneTopics = topics.filter((tp) => tp.phase === "done");
     const side = `<div class="side">
       <div class="grp">${f("all", tr("전체"), work.length)}${f("mine", tr("내 차례"), work.filter(pred.mine).length, "me")}${f("unset", tr("미정"), work.filter(pred.unset).length)}${f("agent", tr("에이전트에게"), work.filter(pred.agent).length)}${f("watch", tr("관찰 중"), work.filter(pred.watch).length)}${f("today", tr("오늘 바뀐 것"), work.filter(pred.today).length)}</div>
       ${c.intake ? `<div class="grp"><div class="label">${tr("따로 보기")}</div>${f("lab", tr("자동 조사"), c.intake, "dim")}</div>` : ""}
-      <div class="grp"><div class="label">${tr("주제")}</div>${topics.filter((tp) => tp.phase !== "done").map((tp) => f("t:" + tp.topic_id, esc(tp.name), tp.threads.filter((t) => t.state === "open" && !isLab(t)).length)).join("")}${(data.unassigned || []).length ? f("t:none", tr("미분류"), (data.unassigned || []).filter((t) => t.state === "open").length, "dim") : ""}${doneTopics.length ? f("t:" + doneTopics[0].topic_id, tr("완료된 주제"), doneTopics.length, "dim") : ""}</div>
+      <div class="grp"><div class="label">${tr("주제")}</div>${topics.filter((tp) => tp.phase !== "done").map((tp) => f("t:" + tp.topic_id, esc(tp.name), tp.threads.filter((t) => t.state === "open" && !isLab(t)).length)).join("")}${(data.unassigned || []).length ? f("t:none", tr("미분류"), (data.unassigned || []).filter((t) => t.state === "open").length, "dim") : ""}${doneTopics.length ? f("t:done", tr("완료된 주제"), doneTopics.length, "dim") : ""}</div>
       <div class="grp"><div class="label">${tr("저장소")}</div>${repos.map((r, i) => f("r:" + i, esc(shortRepo(r).split("/").pop()), work.filter((t) => t.repo === r).length)).join("")}</div></div>`;
     const li = (t) => threadRow(t, { topics: (topicOf[t.case_id] || []).map((tp) => esc(tp.name)).join(", ") || `<span class="dim">${tr("미분류")}</span>`,
                                       repo: repos.length > 1 && statusFilter.indexOf("r:") !== 0 ? shortRepo(t.repo).split("/").pop() : "", expand, last: t.state === "open" ? lastLine(t) : "" });
@@ -977,7 +996,7 @@
       ${priorLine(data.prior)}</div></div>`;
     view.querySelectorAll(".li[data-id]").forEach((el) => el.addEventListener("click", () => { location.hash = "#/threads/" + el.dataset.id; }));
     bindRail();
-    view.querySelectorAll(".side .sf").forEach((el) => el.addEventListener("click", () => { statusFilter = el.dataset.f; statusTab = "open"; listDirty = true; render(); }));
+    view.querySelectorAll(".side .sf").forEach((el) => el.addEventListener("click", () => { statusFilter = el.dataset.f; statusTab = statusFilter === "t:done" ? "closed" : "open"; listDirty = true; render(); }));
     view.querySelectorAll(".tab2").forEach((el) => el.addEventListener("click", () => { statusTab = el.dataset.tab; listDirty = true; render(); }));
   }
 
@@ -1982,7 +2001,20 @@
   }
 
   const markNav = () => { const h = location.hash || "#/threads"; document.querySelectorAll(".top a.btn").forEach((a) => a.classList.toggle("on", h.indexOf(a.getAttribute("href")) === 0)); };
-  async function render() {
+  // 확장 135호 — render 는 한 번에 하나만 돈다. 그리는 칸을 가리키는 view 가 모듈 변수라, 두 render 가 await 사이에
+  // 엇갈리면 늦게 돌아온 쪽이 이미 root 로 돌려진 view 에 목록을 덮어써 두 칸 껍데기가 사라졌다 — 그 뒤 shellView 가
+  // 없는 #paneList 에 insertAdjacentHTML 을 불러 "Cannot read properties of null" 이 화면에 떴다(느린 응답 중에
+  // 필터를 누르고 스레드를 고르면 재현된다). 도는 중에 온 요청은 하나로 모아, 끝난 뒤 그때의 주소로 한 번 더 그린다.
+  let rendering = null, renderAgain = false;
+  function render() {
+    if (rendering) { renderAgain = true; return rendering; }
+    rendering = (async () => {
+      try { do { renderAgain = false; await renderOnce(); } while (renderAgain); }
+      finally { rendering = null; }
+    })();
+    return rendering;
+  }
+  async function renderOnce() {
     stopStream(); markNav();
     try {
       if (!token()) return loginView();
@@ -2023,9 +2055,23 @@
     if (note) note.innerHTML = LANG === "en"
       ? '<b>Worktrail</b> — a record of what an AI coding agent did. What was decided, and what it was decided from, are kept apart, so the next session does not have to guess from the code.'
       : '<b>Worktrail</b> — AI 코딩 에이전트가 일하며 남긴 작업 기록입니다. 무엇을 정했고(결정), 무엇을 보고 정했는지(증거)가 따로 남아, 다음 세션이 코드에서 추측하지 않습니다.';
+    // 확장 138호 — 길 둘은 고르는 것이다: 기록을 서버에 두려면 신청, 이 기계에만 두려면 플러그인.
+    // 문구 자리 (사용자가 쓴다): 이끄는 말 · 서버 쪽 · 로컬 쪽. 플러그인 링크는 판마다 제 README 로 간다.
+    const lead = $("demoCtaLead"), join = $("demoJoin"), src = $("demoSrc");
+    // 한국어는 사용자가 쓴 문장 그대로다(2026-09-21). 영어는 그 문장을 옮긴 것이다.
+    if (lead) lead.textContent = LANG === "en" ? "Try it :" : "사용해보기 :";
+    if (join) join.textContent = LANG === "en" ? "store on the server - request access" : "서버에 저장 - 신청";
+    if (src) {
+      src.textContent = LANG === "en" ? "store locally - plugin" : "로컬에 저장 - 플러그인";
+      // 확장 141호 — 우리 서버를 한 번 거쳐 나간다(Caddy 가 302). 그래야 몇 명이 눌렀는지 접속 기록에 남는다.
+      src.href = LANG === "en" ? "/go/plugin" : "/go/plugin-ko";
+    }
     if (fake) fake.textContent = LANG === "en"
       ? "Every record here is made up · a fictional team's commerce backend, four weeks"
-      : "이 데모의 기록은 지어낸 것입니다 · 가상 팀의 커머스 백엔드 4주치";
+      : (CFG.LANG === "ko"
+          // 한국어 데모에만 실제 기록을 다시 쓴 주제가 하나 얹힌다(tools/demo_seed_data_real.py). --no-real 로 빼면 이 줄도 되돌린다.
+          ? "가상 팀의 커머스 백엔드 4주치는 지어낸 기록입니다 · 주제 '실제 제작 기록' 만 이 제품을 만들며 남긴 실제 기록을 줄여 옮긴 것"
+          : "이 데모의 기록은 지어낸 것입니다 · 가상 팀의 커머스 백엔드 4주치");
     paintStamp();
   }
   // 데모 도장("읽기 전용 데모 · 갱신 …")은 meta.json 을 받은 뒤 한 번만 그려졌다. 언어를 바꿔도
