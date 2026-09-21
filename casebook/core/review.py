@@ -288,7 +288,8 @@ def events_for_cases(db, user_id: int, case_ids: list[int]) -> dict[int, list[di
             if p.get("confirmed"):
                 continue
             out[cid].append(_ev(e["created_at"], kind, cid, p.get("statement", ""), id=e["id"],
-                                authority=p.get("authority"), supersedes=p.get("supersedes")))
+                                authority=p.get("authority"), supersedes=p.get("supersedes"),
+                                **({"owner": p["owner"]} if p.get("owner") else {})))   # 확장 153호 — 되짚기에 차례를
         elif et == "decision_recorded":
             # 확장 41호 — 대체 관계를 양쪽에서 보여 준다. supersedes 는 "내가 무엇을 대체했나",
             # superseded_by 는 그 포인터를 거꾸로 읽은 것("나를 무엇이 대체했나")이다. 판단하지 않는다.

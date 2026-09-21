@@ -43,7 +43,7 @@ def _session_context(lines: list[str], elsewhere: list[str]) -> str:
     if len(body) > budget:
         body = body[:budget - 1] + "…"
     if elsewhere:
-        heading = "\nOpen threads in other repositories (repo · thread · focus · next age):"
+        heading = "\nOpen threads in other repositories (overview() lists them):"
         omitted = "\n  (more open threads omitted)"
         if len(body) + len(heading) + len(omitted) <= budget:
             body += heading
@@ -87,50 +87,45 @@ def _case_line(r: dict) -> str:
     return line + (f"\n      focus: {focus}" if focus else "")
 
 
-def _thread_line(t: dict) -> str:
-    title = t["title"] if len(t["title"]) <= 70 else t["title"][:67] + "…"
-    focus = "" if (t["focus"] or "") == t["title"] else (t["focus"] or "")
-    focus = _clip(focus, 110)
-    line = f"  #{t['case_id']} · {title} · {t['turn_count']} turns · last {t['last_turn_status'] or 'no turns'} · {_fmt(t['updated_at'])}"
-    return line + (f"\n      focus: {focus}" if focus else "")
-
-
 def _clip(x: str | None, n: int = 160) -> str:
     x = (x or "").strip().split("\n", 1)[0].strip()        # 확장 52호 — 첫 줄이 제목이다, 본문은 resume 에서
     return x if len(x) <= n else x[:n - 1] + "…"
 
 
+def _next_line(r: dict, now: int) -> str:
+    n = r.get("next")
+    if not n:
+        return "  next:  (not declared)"
+    who = f"owner {n['owner']}, " if n.get("owner") else ""
+    return f"  next ({who}{_next_age(n, now)}):  {_clip(n['statement'])}"
+
+
 def _thread_block(app, uid: int, case_id: int, wt: str) -> list[str]:
-    """확장 18호 — 현재 스레드의 작은 resume: focus · open · next · anchor 한 줄. 전체 7칸은 resume(case_id)."""
+    """확장 153호 (D17255) — 가리키기만: 어느 스레드이고 다음이 누구 차례인가. 나머지는 resume 에서.
+    전에는 focus·open·anchor·마지막 커밋까지 넣었다 — 에이전트는 resume 을 부르면 같은 것을 다시 받는다."""
     r = app.resume(uid, case_id, "continuity", wt)
-    lines = [f"Current thread (bound to this worktree): #{case_id} · {_clip(r['title'], 90)}"]
-    if r["focus"] and r["focus"]["statement"] != r["title"]:
-        lines.append(f"  focus: {_clip(r['focus']['statement'])}")
-    lines.append(f"  open:  {_clip(r['open']['statement']) if r['open'] else '(not declared)'}")
-    lines.append(f"  next:  {_clip(r['next']['statement']) if r['next'] else '(not declared)'}")
-    if r.get("terms"):   # 확장 55호 — 이 스레드의 말: 다음 에이전트가 같은 이름을 쓰게
-        lines.append("  terms: " + " · ".join(f"{t['term']} = {_clip(t['meaning'], 60)}" for t in r["terms"][:6]))
+    lines = [f"Current thread (bound to this worktree): #{case_id} · {_clip(r['title'], 90)}",
+             _next_line(r, app.db.now_ms())]
     a = r.get("anchor") or {}
-    if a.get("head"):
+    if a.get("head"):   # 지금의 git — 한 줄. 커밋 이력은 trail 에서
         cp = a.get("last_checkpoint")
-        cps = (f" · last checkpoint {_fmt(cp['at'])} @ {cp['head'][:12]} dirty {cp['dirty']}"
+        cps = (f" · last checkpoint {_fmt(cp['at'])} @ {cp['head'][:12]}"
                f" · changed since: {'yes' if a.get('changed_since_checkpoint') else 'no'}") if cp else " · no checkpoint yet"
         lines.append(f"  anchor: {a['branch']} @ {a['head']} · dirty {a['dirty']}{cps}")
-        if a.get("commits"):
-            c = a["commits"][0]
-            lines.append(f"  last commit on thread: {c['head'][:12]} {_clip(c['message'], 80)}")
-    n_c, n_d = len(r["constraints"]), len(r.get("decisions", []))
-    lines.append(f"  thread-scope constraints {n_c} · decisions {n_d} → resume({case_id}) for all seven fields before continuing.")
+    lines += [f"  → resume({case_id}) before continuing: focus, open, decisions, constraints and anchor are there, not here. "
+             f"How it got here, only if you need it: trail({case_id})."]
     return lines, r
 
 
 def session_start(app, uid: int, wt: str) -> dict:
-    """확장 15·18호 — 이 worktree 의 current thread(작은 resume) + 저장소의 repo-scope durable state + 열린 스레드.
-    closed 스레드는 넣지 않는다(search 가 닿는다). 스레드가 없는 저장소면 옛 방식(열린 케이스)."""
+    """확장 15·18호, 153호 — 가리키기만. 이 worktree 의 현재 스레드 한 줄 + 다음 차례, 저장소 공통 제약의 제목,
+    같은 저장소의 다른 열린 스레드 한 줄씩. 결정·다른 저장소는 개수로만(resume · overview 가 준다).
+    closed 스레드는 넣지 않는다(find 가 닿는다). 스레드가 없는 저장소면 옛 방식(열린 케이스)."""
     db = app.db
     reads.ensure(db)
     v = vitals.case_vitals(db, uid)
     lt = threads.list_threads(db, uid, wt, v)
+    now = db.now_ms()
     lines = []
     if lt["threads"]:
         opened = [t for t in lt["threads"] if t["state"] == "open"]
@@ -145,16 +140,23 @@ def session_start(app, uid: int, wt: str) -> dict:
             lines.append("No thread is bound to this worktree — open_thread(focus) for new work, or switch_thread(case_id).")
             if opened:
                 repo_state = app.resume(uid, opened[0]["case_id"], "continuity").get("repo_state")
-        rc = (repo_state or {}).get("constraints", []); rd = (repo_state or {}).get("decisions", []); rt = (repo_state or {}).get("terms", [])
-        if rc or rd or rt:
-            lines.append("Repository durable state (repo scope — holds for every thread here):")
-            lines += [f"  C{x['constraint_id']} {_clip(x['statement'])} ({x['authority']})" for x in rc[:8]]
-            lines += [f"  D{x['decision_id']} {_clip(x['statement'])} ({x['authority']})" for x in rd[:8]]
-            lines += [f"  T{x['term_id']} {x['term']} = {_clip(x['meaning'], 100)}" for x in rt[:8]]   # 확장 55호
+        rc = (repo_state or {}).get("constraints", []); rd = (repo_state or {}).get("decisions", [])
+        if rc:
+            lines.append("Repository constraints (hold for every thread here; inspect(C<id>) for the full text):")
+            lines += [f"  C{x['constraint_id']} {_clip(x['statement'], 110)}" for x in rc[:8]]
+            if len(rc) > 8:
+                lines.append(f"  (+{len(rc) - 8} more in resume)")
+        if rd:
+            lines.append(f"Repository decisions: {len(rd)} (titles in resume).")
         others = [t for t in opened if not cur or t["case_id"] != cur["case_id"]]
         if others:
             lines.append("Other open threads here (most recent activity first):")
-            lines += [_thread_line(t) for t in others[:5]]
+            for t in others[:5]:
+                n = state.current_declaration(db, t["case_id"], "next")
+                who = f"next {n['owner']}" if n and n.get("owner") else "next"
+                lines.append(f"  #{t['case_id']} · {_clip(t['title'], 90)} · {who} {_next_age(n, now)}")
+            if len(others) > 5:
+                lines.append(f"  (+{len(others) - 5} more: list_threads)")
     else:
         rows = _cases(db, uid)
         lines.append("casebook (MCP) — no threads in this repository yet; this engineer's open cases, most recent activity first:")
@@ -163,15 +165,12 @@ def session_start(app, uid: int, wt: str) -> dict:
         if active:
             lines.append(f"Last resumed: #{active} at {_fmt(at)}.")
     elsewhere = []
-    now = db.now_ms()
     for repo in threads.all_threads(db, uid, v):
         if repo["identity"] == lt["repo"]:
             continue
-        for t in repo["threads"]:
-            if t["state"] == "open":
-                age = _next_age(state.current_declaration(db, t["case_id"], "next"), now)
-                elsewhere.append(f"  {_clip(repo['identity'], 160)} · #{t['case_id']} · "
-                                 f"{_clip(t['focus'] or t['title'], 110)} · next: {age}")
+        n_open = sum(1 for t in repo["threads"] if t["state"] == "open")
+        if n_open:
+            elsewhere.append(f"  {_clip(repo['identity'], 160)} · {n_open} open")
     return {"hookSpecificOutput": {"hookEventName": "SessionStart",
                                     "additionalContext": _session_context(lines, elsewhere)}}
 

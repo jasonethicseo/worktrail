@@ -100,9 +100,9 @@ def test_build_server_registers_twelve_tools(tools):
     import asyncio
     server = build_server(app, 1)
     names = sorted(x.name for x in asyncio.run(server.list_tools()))
-    assert names == ["add_evidence", "add_evidence_file", "assign_topic", "close_thread", "constrain", "decide", "declare", "define", "handoff",
+    assert names == ["add_evidence", "add_evidence_file", "assign_topic", "close_thread", "constrain", "decide", "declare", "define", "find", "handoff",
                      "hook", "import_prior", "inspect", "list_cases", "list_threads", "list_topics", "merge_topic", "note_turn", "open_case",
-                     "open_thread", "overview", "rate_handoff", "resume", "rule_out", "search_evidence", "search_prior", "switch_thread"]
+                     "open_thread", "overview", "rate_handoff", "resume", "rule_out", "search_evidence", "search_prior", "switch_thread", "trail"]
     # 확장 15·16호 스레드 4개 + declare · 24호 assign_topic · 26호 overview · 42호 import_prior(스크립트 전용)·search_prior
 
 

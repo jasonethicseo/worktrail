@@ -81,13 +81,13 @@ def test_session_start_cross_repo_open_threads_and_next_age(tmp_path):
     ctx = _run("session-start", path, worktree=here)["hookSpecificOutput"]["additionalContext"]
     assert f"Current thread (bound to this worktree): #{cur}" in ctx
     cross = ctx.split("Open threads in other repositories", 1)[1]
-    assert f"path:{away} · #{remote} · remote focus · next: 2d ago" in cross      # 확장 52호 — 첫 줄이 제목, 둘째 줄은 본문
-    assert f"#{missing} · no next yet · next: not declared" in cross
-    assert "here focus" not in cross
+    # 확장 153호 — 다른 저장소는 저장소마다 열린 개수 한 줄. 스레드 목록은 overview() 가 준다
+    assert f"path:{away} · 2 open" in cross
+    assert "remote focus" not in cross and "no next yet" not in cross and "here focus" not in cross
     assert "closed secret" not in ctx and "archived secret" not in ctx and "other user secret" not in ctx
     # 현재 저장소에 스레드가 없어도 교차 저장소 목록은 나온다.
     empty = _run("session-start", path, worktree=str(tmp_path / "empty"))["hookSpecificOutput"]["additionalContext"]
-    assert "Open threads in other repositories" in empty and f"#{remote}" in empty
+    assert "Open threads in other repositories" in empty and f"path:{away} · 2 open" in empty
 
 
 def test_session_start_cross_repo_cap_keeps_rules_and_complete_lines(tmp_path):
@@ -98,14 +98,14 @@ def test_session_start_cross_repo_cap_keeps_rules_and_complete_lines(tmp_path):
     app = Casebook(db=db, llm=FakeLLM(), search=FakeSearch())
     here = str(tmp_path / "here")
     app.open_thread(USER, "current focus", here)
-    for i in range(90):
-        app.open_thread(USER, f"{i}: 긴 제목\n\n" + "긴 문장" * 80, str(tmp_path / "away"))   # 확장 52호 — 제목 + 본문
+    for i in range(120):   # 확장 153호 — 다른 저장소는 저장소마다 한 줄이라, 한도를 넘기려면 저장소가 많아야 한다
+        app.open_thread(USER, f"{i}: 긴 제목\n\n" + "긴 문장" * 80, str(tmp_path / (f"away{i:03d}-" + "x" * 90)))
     ctx = _run("session-start", path, worktree=here)["hookSpecificOutput"]["additionalContext"]
     assert len(ctx) <= 10_000
     assert "current focus" in ctx and "more open threads omitted" in ctx
     assert ctx.endswith("Nothing is saved for you at compaction — record as you go.")
-    remote_lines = [line for line in ctx.splitlines() if " · next: " in line]
-    assert remote_lines and all(line.endswith("next: not declared") for line in remote_lines)
+    remote_lines = [line for line in ctx.splitlines() if "away" in line]
+    assert remote_lines and all(line.endswith(" · 1 open") for line in remote_lines)
 
 
 def test_post_compact_는_활성_케이스의_마지막_기록_시점을_말한다(tmp_path):
@@ -147,7 +147,7 @@ def test_post_compact_bound_thread_wins_over_closed_resume(tmp_path):
     app.set_status(USER, busy, "resolved")
     ctx = _run("post-compact", path, worktree=wt)["hookSpecificOutput"]["additionalContext"]
     assert f"Active thread: #{bound} · bound work" in ctx
-    assert "next:  continue bound work" in ctx and f"#{busy}" not in ctx
+    assert "):  continue bound work" in ctx and f"#{busy}" not in ctx
 
 
 def test_post_compact_without_resume_has_no_active_thread(tmp_path):
@@ -187,10 +187,12 @@ def test_session_start_스레드_경로는_현재_스레드의_작은_resume_와
     assert p.returncode == 0, p.stderr
     ctx = json.loads(p.stdout)["hookSpecificOutput"]["additionalContext"]
     assert f"Current thread (bound to this worktree): #{cur} · current work" in ctx
-    assert "open:  is the CSP the blocker?" in ctx and "next:  1. run smoke  2. commit" in ctx
+    # 확장 153호 — 가리키기만: open 은 resume 에서, next 와 차례는 여기서
+    assert "is the CSP the blocker?" not in ctx and f"resume({cur}) before continuing" in ctx
+    assert "next (owner user, " in ctx and "):  1. run smoke  2. commit" in ctx
     assert "anchor: main @" in ctx and "no checkpoint yet" in ctx
-    assert "Repository durable state" in ctx and "never touch the schema (user)" in ctx
-    assert f"#{other} · parallel work" in ctx and "finished work" not in ctx          # closed 는 주입하지 않는다
+    assert "Repository constraints" in ctx and "never touch the schema" in ctx
+    assert f"#{other} · parallel work · next not declared" in ctx and "finished work" not in ctx   # closed 는 주입하지 않는다
     assert len(ctx) <= CAP
 
 

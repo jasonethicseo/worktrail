@@ -150,7 +150,7 @@ def test_http_문_토큰이_사용자를_정한다():
         async def mine(s):
             tools = (await s.list_tools()).tools
             names = sorted(t.name for t in tools)
-            assert "note_turn" in names and "add_evidence_file" in names and len(names) == 26   # 55호 define
+            assert "note_turn" in names and "add_evidence_file" in names and len(names) == 28   # 55호 define, 153호 find·trail
             for t in tools:                                             # (7) ctx 는 스키마에 없다
                 assert "ctx" not in (t.input_schema.get("properties") or {})
             refused = _text(await s.call_tool("open_thread", {"focus": "주제 없이", "topic": ""}))
@@ -325,7 +325,7 @@ def test_프록시는_facts_를_채우고_hook_을_숨긴다(tmp_path):
             from casebook.adapters.mcp_server import INSTRUCTIONS
             assert p.instructions == INSTRUCTIONS
             names = [t.name for t in p.host_tools()]
-            assert "hook" not in names and "import_prior" not in names and len(names) == 24   # 호스트가 보는 것은 24개 (hook·import_prior 는 스크립트 전용; 55호 define)
+            assert "hook" not in names and "import_prior" not in names and len(names) == 26   # 호스트가 보는 것은 26개 (hook·import_prior 는 스크립트 전용; 55호 define)
             for t in p.host_tools():
                 assert "facts" not in t.input_schema.get("properties", {})
             assert "facts" in {t.name: t for t in p.tools}["open_thread"].input_schema["properties"]   # 원격에는 있다
@@ -556,3 +556,36 @@ def test_스크래치에서_온_git_사실은_버린다(app, tmp_path):
     facts = {"worktree": scratch, "identity": f"path:{scratch}", "hint": scratch, "aliases": []}
     assert t._wt(None, facts) == threads.VIRTUAL_IDENTITY
     assert t._facts(None, facts) is None
+
+
+def test_스레드가_많아도_목록은_한도_안이고_정리할_것은_보인다(app, tmp_path):
+    """확장 151호 — 스레드가 90개를 넘자 list_threads 가 56,958자가 되어 도구 한도를 넘었다(실측 2026-09-21).
+    초점 전문과 결과 전문을 스레드마다 실었기 때문이다. 이 시험은 증상을 본다: 닫힌 스레드 80개(긴 초점·긴 결과)와
+    열린 스레드 5개에서 목록이 몇 천 자 안에 든다. 결과 없이 화면에서 닫힌 것(needs_result)은 개수로 보이고,
+    include_closed=true 로 부르면 그 스레드를 찾을 수 있어야 한다."""
+    wt = _git_repo(tmp_path / "w")
+    t = Tools(app, USER)
+    body = "\n\n" + "초점의 긴 본문이다. " * 60
+    for i in range(80):
+        c = t.open_thread(f"닫힌 일 {i}{body}", worktree=wt, topic="테스트")
+        t.close_thread(c["case_id"], f"끝냈다 {i}\n\n" + "결과의 긴 본문이다. " * 40)
+    silent = t.open_thread(f"화면에서 결과 없이 닫힌 일{body}", worktree=wt, topic="테스트")["case_id"]
+    app.set_status(USER, silent, "resolved")
+    opened = [t.open_thread(f"열린 일 {i}{body}", worktree=wt, topic="테스트")["case_id"] for i in range(5)]
+    t.declare(opened[-1], "next", "배포를 승인한다\n\n긴 설명", owner="user")
+
+    out = t.list_threads(wt)
+    size = len(json.dumps(out, ensure_ascii=False))
+    assert size < 6000, f"목록이 {size}자다 — 한도 안에 들어야 한다"
+    rows = {r["case_id"]: r for r in out["threads"]}
+    assert all(rows[c]["state"] == "open" for c in opened), "열린 스레드가 빠졌다"
+    assert rows[opened[-1]]["next"] == "배포를 승인한다" and rows[opened[-1]]["owner"] == "user"
+    assert rows[opened[0]]["title"] == "열린 일 0", "제목은 초점의 첫 줄이어야 한다"
+    assert out["closed"] == {"count": 81, "needs_result": 1, "listed": False}, "정리할 스레드의 개수가 안 보인다"
+    assert len(out["threads"]) == 5, "닫힌 스레드가 기본으로 딸려 나온다"
+
+    everything = t.list_threads(wt, include_closed=True)
+    assert len(everything["threads"]) == 86 and everything["closed"]["listed"] is True
+    assert {r["case_id"]: r for r in everything["threads"]}[silent].get("needs_result") is True, "정리할 스레드를 찾을 길이 없다"
+    one = next(r for r in everything["threads"] if r["title"] == "닫힌 일 7")
+    assert one["result"] == "끝냈다 7", "닫힌 스레드는 결과 첫 줄만 싣는다"

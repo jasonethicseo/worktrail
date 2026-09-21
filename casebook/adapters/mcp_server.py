@@ -34,7 +34,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 
-from casebook.core import access, auth, headline, hookctx, oauth, prior, reads, state, threads
+from casebook.core import access, auth, headline, hookctx, oauth, prior, reads, recall, state, threads
 from casebook.core.worktrail import Worktrail
 from casebook.core.db import SqliteDB
 from casebook.core.errors import AccessDeniedError, ApiError, InputError
@@ -65,7 +65,7 @@ add_evidence / add_evidence_file take raw material VERBATIM — never paraphrase
 note_turn(kind=change|verified|finding|thought) after each step: what was observed, what you concluded.
 handoff only when the engineer asks where things stand — never to refresh your own memory.
 First line of every statement = its title: ≤120 columns (CJK=2), no ' — ', no record numbers (#517,
-D15635, turn 80, commit hash) — a person reads it; numbers go in the body or evidence_ids, else refused.
+D15635, turn 80, commit hash) — numbers go in the body or evidence_ids, else refused.
 A next for the user is written to them, not about them.
 
 Durable state — the boundary is "what could overturn it": a hypothesis (the world can still contradict
@@ -73,10 +73,78 @@ it) stays in note_turn, never in decide. A decision or constraint (only the engi
 to decide/constrain with authority, and is superseded, not edited. rule_out needs the evidence that
 killed the hypothesis AND the scope where that holds.
 
-resume / search_evidence / inspect return durable state and evidence, never past reasoning. A search
-hit is retrieval, not conclusion."""
+resume = the state now. Pull the past when needed: find(query) → trail(case_id) → inspect(ref).
+Notes there are interpretation; a hit is retrieval, not conclusion."""
+
+def _first_line(text: str | None, limit: int = 100) -> str:
+    """기록의 첫 줄(= 제목). 규칙이 서기 전의 옛 기록은 길어서 자른다."""
+    line = (text or "").strip().split("\n", 1)[0].strip()
+    return line if len(line) <= limit else line[: limit - 1] + "…"
+
+
+def compact_threads(db, rows: list[dict[str, Any]], include_closed: bool = False
+                    ) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """확장 151호 — 에이전트가 받는 스레드 목록을 한 줄씩으로 줄인다.
+
+    예전에는 저장소의 스레드 전부를 초점 전문·결과 전문째 냈다. 스레드가 90개를 넘자 56,958자가 되어 도구
+    한도를 넘었고, 에이전트는 매번 파일로 빠진 것을 다시 읽어야 했다(사용자 2026-09-21 "해봐"). 고르는 데
+    필요한 것은 제목과 누구 차례뿐이다 — 한 스레드의 전부는 resume 이 준다.
+    열린 스레드: 제목 · 턴 수 · 마지막 활동 · 다음 차례(선언된 next 의 첫 줄과 owner) · 묶인 worktree.
+    닫힌 스레드: 기본은 개수만 — 결과 줄이 비어 정리가 필요한 것(needs_result)도 개수로만 센다. 처음에는 그것들을
+    늘 한 줄씩 냈는데 실기록에서 17개가 목록의 절반을 차지했다. "정리해줘" 는 사람이 시킬 때만 하는 일이라
+    그때 include_closed=True 로 부르면 된다 — 닫힌 것 전부가 결과 첫 줄(또는 needs_result)과 함께 온다.
+    핵심 함수(threads.list_threads)는 그대로 둔다 — 세션 시작 훅이 전문을 쓴다."""
+    out: list[dict[str, Any]] = []
+    n_closed = n_need = 0
+    for t in rows:
+        title = _first_line(t.get("focus") or t.get("title"))
+        if t["state"] == "open":
+            row: dict[str, Any] = {"case_id": t["case_id"], "title": title, "state": "open",
+                                   "turns": t.get("turn_count", 0), "updated_at": t.get("updated_at")}
+            nxt = state.current_declaration(db, t["case_id"], "next")
+            if nxt:
+                row["next"] = _first_line(nxt["statement"])
+                row["owner"] = nxt.get("owner")
+            if t.get("bound_worktrees"):
+                row["bound_worktrees"] = t["bound_worktrees"]
+            out.append(row)
+            continue
+        n_closed += 1
+        n_need += bool(t.get("needs_result"))
+        if include_closed:
+            row = {"case_id": t["case_id"], "title": title, "state": "closed"}
+            if t.get("needs_result"):
+                row["needs_result"] = True
+            elif t.get("result"):
+                row["result"] = _first_line(t["result"])
+            out.append(row)
+    return out, {"count": n_closed, "needs_result": n_need, "listed": include_closed}
+
 
 CLIENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,47}$")
+
+EVIDENCE_INDEX_IN_RESUME = 20
+
+
+def compact_resume(out: dict[str, Any]) -> dict[str, Any]:
+    """확장 153호 — 에이전트가 받는 resume 은 지금만. 화면(thread_state)과 인계는 전문을 그대로 쓴다.
+    저장소 공통 결정·제약은 제목과 번호만 — 전문과 이유는 inspect(ref). 스레드 번호 목록은 개수로."""
+    rs = out.get("repo_state")
+    if rs:
+        rs["thread_count"] = len(rs.pop("threads", []) or [])
+        for key, pre in (("constraints", "C"), ("decisions", "D")):
+            if key in rs:
+                rs[key] = [{"ref": f"{pre}{x[key[:-1] + '_id']}", "title": _first_line(x["statement"], 120),
+                            "authority": x["authority"], "case_id": x["case_id"]} for x in rs[key]]
+        rs["note"] = "titles only; inspect(ref) gives the statement and reason in full"
+    idx = out.get("evidence_index") or []
+    if len(idx) > EVIDENCE_INDEX_IN_RESUME:
+        out["evidence_index"] = idx[-EVIDENCE_INDEX_IN_RESUME:]
+    out["note"] = ("durable state as it stands now, not how it got here. When you need the past: "
+                   f"trail({out['case_id']}) walks this thread line by line, find(query) searches every thread, "
+                   "inspect(ref) returns one record in full. Notes there are marked interpretation, not evidence.")
+    return out
+
 
 def normalize_client(name: str | None) -> str | None:
     """확장 40호 — 호스트가 initialize 에서 댄 이름(clientInfo.name). 받은 그대로 저장하고 화면이 사람 말로 옮긴다.
@@ -239,10 +307,12 @@ class Tools:
     def close_thread(self, case_id: int, result: str = "") -> dict[str, Any]:
         return self.cb.close_thread(self.uid, case_id, result or None)
 
-    def list_threads(self, worktree: str | None = None, facts: dict[str, Any] | None = None) -> dict[str, Any]:
+    def list_threads(self, worktree: str | None = None, facts: dict[str, Any] | None = None,
+                     include_closed: bool = False) -> dict[str, Any]:
         wt = self._wt(worktree, facts)
         with threads.provided(self._facts(worktree, facts)):
             out = self.cb.list_threads(self.uid, wt)
+        out["threads"], out["closed"] = compact_threads(self.cb.db, out["threads"], include_closed)
         if threads.is_virtual(wt):
             # 채팅에는 저장소가 없다 — "chat" 저장소의 스레드만 보이면 쓸모가 없으니 열린 작업 전부를 함께 낸다
             out["other_repositories"] = [r for r in self.cb.overview(self.uid) if r["identity"] != threads.VIRTUAL_IDENTITY]
@@ -435,9 +505,22 @@ class Tools:
         if room:
             hits += [self._as_hit(r) for r in prior.search(self.cb.db, self.uid, query, room)]
         return hits
-    def inspect(self, evidence_id: int) -> dict[str, Any]:
-        out = self.cb.inspect_evidence(self.uid, evidence_id)
-        reads.log(self.cb.db, self.uid, "inspect", out["case_id"], str(evidence_id))
+    def inspect(self, evidence_id: int | None = None, ref: str | None = None) -> dict[str, Any]:
+        if ref is None and evidence_id is None:
+            raise InputError("give ref (D17255, C11100, R42, N17252, E2513, 564:3) or evidence_id")
+        target = ref if ref is not None else evidence_id
+        out = recall.inspect(self.cb.db, self.uid, target)
+        reads.log(self.cb.db, self.uid, "inspect", out["case_id"], str(target))
+        return out
+
+    def find(self, query: str, limit: int = recall.FIND_LIMIT, include_closed: bool = True) -> dict[str, Any]:
+        out = recall.find(self.cb.db, self.uid, query, limit, include_closed)
+        reads.log(self.cb.db, self.uid, "find", None, query, len(out["records"]) + len(out["evidence"]))
+        return out
+
+    def trail(self, case_id: int, limit: int = recall.TRAIL_LIMIT, before: int | None = None) -> dict[str, Any]:
+        out = recall.trail(self.cb.db, self.uid, case_id, limit, before)
+        reads.log(self.cb.db, self.uid, "trail", case_id, str(before or ""))
         return out
 
     def decide(self, case_id: int, statement: str, reason: str = "", evidence_ids: list[int] | None = None,
@@ -469,7 +552,7 @@ class Tools:
         with threads.provided(self._facts(worktree, facts)):
             out = self.cb.resume(self.uid, case_id, mode, self._wt(worktree, facts))
         reads.log(self.cb.db, self.uid, "resume", case_id, mode)
-        return out
+        return compact_resume(out)
 
     def hook(self, event: str, facts: dict[str, Any], why: str = "", reason: str = "") -> dict[str, Any]:
         """확장 29호 — 훅 스크립트 전용(에이전트용 아님). 맥이 읽은 git 사실로 SessionStart 본문·commit·checkpoint 를 서버에서."""
@@ -646,9 +729,9 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
         return T(ctx).open_case(title)
 
     # ── 스레드 층 (확장 15호) ──
-    @server.tool(name="list_threads", description="This worktree's current thread and every thread of its repository (open first, most recent activity first) with focus and turn count. Call it first in a session; pass worktree (absolute path) when you are not in the server's cwd. From a chat client (no repository) it also lists open work across all repositories. Closed rows carry result and needs_result — needs_result=true means the engineer closed it from the screen without a result line; when they ask you to tidy up, read those threads and fill each with close_thread(case_id, result).")
-    def list_threads(ctx: Context, worktree: str | None = None, facts: dict | None = None) -> dict:
-        return T(ctx).list_threads(worktree, facts)
+    @server.tool(name="list_threads", description="This worktree's current thread and the threads of its repository, one line each (open first, most recent activity first): title (the focus's first line), turns, updated_at, and for open threads the declared next's first line with its owner. Closed threads are only counted (closed.count, closed.needs_result) unless include_closed=true. needs_result means the engineer closed it from the screen without a result line; when they ask you to tidy up, call list_threads(include_closed=true), read each thread marked needs_result and fill it with close_thread(case_id, result). For one thread's full state use resume(case_id). Call it first in a session; pass worktree (absolute path) when you are not in the server's cwd. From a chat client (no repository) it also lists open work across all repositories.")
+    def list_threads(ctx: Context, worktree: str | None = None, facts: dict | None = None, include_closed: bool = False) -> dict:
+        return T(ctx).list_threads(worktree, facts, include_closed)
 
     @server.tool(name="overview", description="Browse your open work across ALL repositories before choosing a directory, including in Codex where there is no SessionStart hook. Returns repositories with open threads: focus, next, updated_at (last turn, record or commit activity), and bound_worktrees. Repositories and threads are ordered by recent activity; closed/archived threads and repositories without open work are omitted. No worktree argument or model call. Use resume(case_id) for constraints and decisions before continuing a thread.")
     def overview(ctx: Context) -> list[dict]:
@@ -710,9 +793,17 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     def search_evidence(query: str, ctx: Context, limit: int = 10, include_archived: bool = False) -> list:
         return _guard(T(ctx).search_evidence)(query, limit, include_archived)
 
-    @server.tool(name="inspect", description="Return one evidence item verbatim with its provenance (case, turn, time, source). Not summarized.")
-    def inspect(evidence_id: int, ctx: Context) -> dict:
-        return _guard(T(ctx).inspect)(evidence_id)
+    @server.tool(name="inspect", description="Return one record in full by its number (ref), as find, trail and resume print it: D<id> decision · C<id> constraint · R<id> ruled-out · T<id> term · F/O/N<id> focus/open/next declaration (with what superseded it, if anything) · E<id> evidence verbatim with provenance · <case>:<turn> a note (the observed evidence verbatim plus the conclusion, marked interpretation). evidence_id=<n> still works for evidence. Not summarized.")
+    def inspect(ctx: Context, ref: str | None = None, evidence_id: int | None = None) -> dict:
+        return _guard(T(ctx).inspect)(evidence_id, ref)
+
+    @server.tool(name="find", description="Pull past context across every thread when you need it: decisions, constraints, ruled-outs, focus/open/next declarations, notes and close results whose text contains every word of query — one line each with its number (ref) and thread, in-force before superseded, newest first; evidence hits fill the remaining room. Use it when the engineer refers to something from before ('the one we rejected', 'why did we…') or you need a record's number. Notes are marked interpretation, not evidence. Then trail(case_id) or inspect(ref).")
+    def find(query: str, ctx: Context, limit: int = recall.FIND_LIMIT, include_closed: bool = True) -> dict:
+        return _guard(T(ctx).find)(query, limit, include_closed)
+
+    @server.tool(name="trail", description="Walk one thread back in time, one line per event: opened, focus/open/next declarations (with owner), decisions, constraints, ruled-outs, notes, evidence, commits, closed. The most recent `limit` lines; pass before=<the earliest line's at> for older ones. Use it when you need how a thread got where it is — resume gives only where it is now. Notes are marked interpretation, not evidence. inspect(ref) for any line in full.")
+    def trail(case_id: int, ctx: Context, limit: int = recall.TRAIL_LIMIT, before: int | None = None) -> dict:
+        return _guard(T(ctx).trail)(case_id, limit, before)
 
     @server.tool(name="decide", description="Record a decision the work will follow from now on — a choice, not a truth (e.g. 'use a separate auth_credentials table'). authority='user' if the engineer stated it, 'agent' if you made it while implementing. To change it later, decide again with supersedes=<decision id>. scope='thread' (default: archived with this thread) or 'repo' (holds for every thread of this repository — promotion is by declaring the scope, never automatic). Not for hypotheses about causes — those stay in note_turn. FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest, numbers included, after a blank line as the body (the server refuses otherwise). reason follows the same first-line rule — its first line is what the thread card shows as the reason.")
     def decide(case_id: int, statement: str, ctx: Context, reason: str = "", evidence_ids: list[int] | None = None, authority: str = "agent", supersedes: int | None = None, scope: str = "thread", client: str | None = None) -> str:
@@ -730,7 +821,7 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     def rule_out(case_id: int, hypothesis: str, scope: str, evidence_ids: list[int], ctx: Context) -> str:
         return _guard(T(ctx).rule_out)(case_id, hypothesis, scope, evidence_ids)
 
-    @server.tool(name="resume", description="Pick a thread up in a new session. Durable state only, seven fields: focus · anchor (live git of this worktree: branch, HEAD, dirty) · constraints · decisions (with reason and authority) · open (unresolved) · next (actions) · evidence_refs — plus repo_state (repo-scope constraints/decisions shared by every thread of the repository; if it conflicts with the thread's own, both are shown, nothing is resolved for you). mode='fresh' omits decisions and ruled-outs. Never includes hypotheses, the brief, or the record.")
+    @server.tool(name="resume", description="Pick a thread up in a new session. Durable state as it stands now, seven fields: focus · anchor (live git of this worktree: branch, HEAD, dirty) · constraints · decisions (with reason and authority) · open (unresolved) · next (actions) · evidence_refs — plus repo_state (repo-scope constraints/decisions shared by every thread of the repository, titles and numbers only — inspect(ref) for the full text; if one conflicts with the thread's own, both are shown, nothing is resolved for you). mode='fresh' omits decisions and ruled-outs. Never includes how it got here: pull that with trail(case_id) or find(query) when you need it.")
     def resume(case_id: int, ctx: Context, mode: str = "continuity", worktree: str | None = None, facts: dict | None = None) -> dict:
         return _guard(T(ctx).resume)(case_id, mode, worktree, facts)
 
