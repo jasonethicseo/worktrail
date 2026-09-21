@@ -4,6 +4,7 @@
 
 # 저장소 첫 화면·패키지·로컬 실행 (main.py 는 로컬 묶음이 싣는다)
 .gitignore
+glama.json
 LICENSE
 README.md
 README.ko.md

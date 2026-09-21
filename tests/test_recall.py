@@ -60,6 +60,18 @@ def test_find_는_스레드를_가로질러_한_줄씩_번호와_함께(app, tmp
         t.find("   ")
 
 
+def test_find_의_증거_발췌는_여러_줄이어도_맞은_낱말을_보인다(app, tmp_path):
+    # 발췌(FTS snippet)는 여러 줄로 온다 — 첫 줄만 자르면 맞은 낱말이 빠지고 "… None" 같은 앞 문맥만 남았다.
+    t, a, b, old, new = _setup(app, tmp_path)
+    t.add_evidence(a, "binding after screen close: None\n  #3 closed needs_result=True  result=None")
+    ev = t.find("needs_result")["evidence"]
+    assert len(ev) == 1 and "[needs_result]" in ev[0]["excerpt"]
+    assert "\n" not in ev[0]["excerpt"]
+    t.add_evidence(a, "prefix " * 40 + "\n" + "x" * 150 + " rarewordzz " + "suffix " * 40)
+    long = t.find("rarewordzz")["evidence"][0]["excerpt"]
+    assert "[rarewordzz]" in long and len(long) <= 160
+
+
 def test_trail_은_시간순_한_줄씩_노트는_해석으로(app, tmp_path):
     t, a, b, old, new = _setup(app, tmp_path)
     tr = t.trail(a)
@@ -98,3 +110,22 @@ def test_inspect_는_번호_하나를_전문으로(app, tmp_path):
         t.inspect(ref="pagination")
     with pytest.raises(NotFoundError):
         Tools(app, 999).inspect(ref=f"D{old}")
+
+
+def test_초점을_쓰는_도구는_설명을_먼저_출처_인용은_끝에_쓰라고_한다():
+    # 초점 본문이 사용자 인용으로 시작해 화면에서 무엇을 하는지가 안 보였다(사용자 2026-09-22) — 쓰는 쪽에서 순서를 잡는다.
+    pytest.importorskip("mcp")
+    import anyio
+    from casebook.adapters.mcp_server import build_server
+
+    async def tools():
+        return {x.name: x for x in await build_server(app_for_tools(), USER).list_tools()}
+
+    got = anyio.run(tools)
+    for name in ("open_thread", "declare"):
+        assert "explain first" in got[name].description and "quoted) last" in got[name].description, name
+
+
+def app_for_tools():
+    from tests.conftest import FakeLLM, FakeSearch, _build_app
+    return _build_app(FakeLLM(), FakeSearch())

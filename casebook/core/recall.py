@@ -35,6 +35,16 @@ def _line(text: str | None, n: int = LINE) -> str:
     return first if len(first) <= n else first[: n - 1] + "…"
 
 
+def _excerpt(text: str | None, n: int) -> str:
+    # FTS 발췌는 여러 줄이다 — 첫 줄만 자르면 맞은 낱말([…])이 빠진다. 한 줄로 펴고, 길면 맞은 곳 둘레를 남긴다.
+    flat = " ".join((text or "").split())
+    if len(flat) <= n:
+        return flat
+    at = max(0, flat.find("[") - n // 3)
+    cut = flat[at: at + n - 2]
+    return ("…" if at else "") + cut + "…"
+
+
 def _ref(e: dict[str, Any]) -> str | None:
     if e["kind"] == "note":
         return f"{e['case_id']}:{e['turn']}"
@@ -130,7 +140,7 @@ def find(db, user_id: int, query: str, limit: int = FIND_LIMIT, include_closed: 
         try:
             for x in search.search_evidence(db, user_id, query, min(room, 5)):
                 evidence.append({"ref": f"E{x['evidence_id']}", "case_id": x["case_id"], "at": x["created_at"],
-                                 "kind": "evidence", "excerpt": _line(x["excerpt"], 160)})
+                                 "kind": "evidence", "excerpt": _excerpt(x["excerpt"], 160)})
         except InputError:
             pass
     return {"query": query, "records": rows, "total": len(hits), "evidence": evidence,
