@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worktrail — 세션이 끝나도 작업 상태는 남습니다</title>
+<meta name="description" content="Worktrail은 AI 코딩 세션 사이에서 결정·제약·근거·열린 문제·다음 행동을 이어 줍니다. 새 세션은 지금도 유효한 작업 상태에서 바로 시작합니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Worktrail 소개 (랜딩). 값은 web/worktrail/index.html 의 :root 와 같은 한 벌을 쓴다 — 데모로 넘어가도 같은 제품으로 읽히게.
+     움직임은 빛과 투명도만 쓴다(흐르거나 뛰는 것 없음). 줄이기 설정이면 그것도 끈다. */
+  :root{
+    --g0:#0b0d11;--g1:#10141a;--g2:#151a21;--g3:#1b2129;--g4:#242c36;--g5:#343e4a;--g6:#5a6572;--g7:#8b96a3;--g8:#b9c2cc;--g9:#e8edf2;--g10:#f7f9fb;
+    --c-bg:var(--g0);--c-card:var(--g1);--c-raise:var(--g2);--c-text:var(--g9);--c-text-1:var(--g8);--c-text-2:var(--g7);
+    /* 흐린 글자만 화면 쪽(--g6 #5a6572)보다 한 단 밝게 쓴다: 바탕과 3.3:1 이라 12px 안내문이 AA 에 못 미친다(5.1:1 로 올린다).
+       처음 온 사람이 읽는 한 장이라 여기서는 밝기를 고른다 — 화면의 회색 사다리는 그대로 둔다. */
+    --c-text-3:#7a8494;
+    --c-accent:#89b4fa;--c-accent-2:#b4d0ff;--c-amber:#fab387;--c-green:#a6e3a1;
+    --ln:var(--g3);--ln-2:var(--g4);--ln-3:var(--g5);
+    --sel:rgba(232,237,242,.05);--sel-2:rgba(232,237,242,.09);--acc-tint:rgba(137,180,250,.09);--amber-tint:rgba(250,179,135,.12);--green-tint:rgba(166,227,161,.08);
+    --fs-body:15px;--fs-small:13.5px;--fs-meta:12px;--fs-mono:11px;
+    --lh:1.6;--font:'IBM Plex Sans',system-ui,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;
+    --r:12px;--r-s:7px;--r-pill:99px;
+    --sh-card:0 1px 0 rgba(255,255,255,.025) inset,0 1px 2px rgba(0,0,0,.35);
+    --t-fast:.14s;--t:.3s;--ease:cubic-bezier(.2,.7,.2,1);
+    --k-decision:#fab387;--k-constraint:#f38ba8;--k-finding:#cba6f7;--k-verified:#a6e3a1;--k-change:#89b4fa;--k-commit:#f9e2af;
+    --w:1120px;--gut:28px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--c-bg);color:var(--c-text);font-family:var(--font);font-size:var(--fs-body);line-height:var(--lh);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+  body{overflow-x:hidden;}
+  a{color:var(--c-accent);text-decoration:none;transition:color var(--t-fast);} a:hover{color:var(--c-accent-2);}
+  :focus-visible{outline:2px solid var(--c-accent);outline-offset:3px;border-radius:6px;}
+  ::selection{background:rgba(137,180,250,.28);}
+  button{font-family:inherit;}
+  code,.mono{font-family:var(--mono);}
+  code{font-size:.88em;color:var(--c-text);background:var(--sel-2);border-radius:4px;padding:1px 5px;overflow-wrap:anywhere;}
+  .skip{position:absolute;left:-9999px;top:8px;z-index:50;background:var(--c-raise);color:var(--c-text);padding:8px 12px;border-radius:var(--r-s);}
+  .skip:focus{left:12px;}
+  [hidden]{display:none !important;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+  .in{max-width:var(--w);margin:0 auto;padding:0 var(--gut);}
+
+  /* ── 위 띠 ── */
+  .top{position:sticky;top:0;z-index:20;border-bottom:1px solid var(--ln);background:rgba(16,20,26,.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);}
+  .top .in{height:56px;display:flex;align-items:center;gap:14px;}
+  .logo{display:flex;align-items:center;gap:10px;color:inherit;flex:none;}
+  .logo:hover{color:inherit;}
+  .logo .box{width:24px;height:24px;border:1.5px solid var(--c-green);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--c-green);box-shadow:0 0 0 3px rgba(166,227,161,.08);}
+  .logo .name{font-size:12px;letter-spacing:.16em;font-weight:600;color:var(--g10);}
+  .top nav{margin-left:auto;display:flex;gap:6px;align-items:center;}
+  .top nav a{font-size:var(--fs-meta);color:var(--c-text-2);padding:6px 10px;border-radius:var(--r-s);white-space:nowrap;}
+  .top nav a:hover{color:var(--c-text);background:var(--sel);}
+  .top nav a.cta{color:var(--c-accent);border:1px solid rgba(137,180,250,.45);background:var(--acc-tint);}
+  .top nav a.cta:hover{border-color:var(--c-accent-2);color:var(--c-accent-2);}
+
+  /* ── 공통 ── */
+  section{padding:88px 0;border-top:1px solid var(--ln);}
+  section.hero{border-top:none;padding:64px 0 72px;}
+  .eyebrow{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.12em;color:var(--c-text-2);text-transform:uppercase;}
+  h1,h2,h3{margin:0;color:var(--g10);text-wrap:balance;letter-spacing:-.015em;}
+  h1{font-size:clamp(30px,4.6vw,48px);line-height:1.18;font-weight:650;}
+  h2{font-size:clamp(23px,2.8vw,30px);line-height:1.3;font-weight:600;}
+  h3{font-size:16px;line-height:1.4;font-weight:600;}
+  .lead{margin:18px 0 0;font-size:clamp(15.5px,1.5vw,17.5px);color:var(--c-text-1);line-height:1.7;max-width:36em;text-wrap:pretty;}
+  .sub{margin:14px 0 0;color:var(--c-text-2);max-width:40em;text-wrap:pretty;}
+  .shead{max-width:720px;}
+  .shead .eyebrow{margin-bottom:12px;display:block;}
+  .card{background:var(--c-card);border:1px solid var(--ln);border-radius:var(--r);box-shadow:var(--sh-card);}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:500;padding:11px 18px;border-radius:var(--r-pill);border:1px solid var(--ln-3);color:var(--c-text);background:none;cursor:pointer;white-space:nowrap;
+    transition:border-color var(--t-fast),color var(--t-fast),background-color var(--t-fast),box-shadow var(--t);}
+  .btn:hover{border-color:var(--g7);color:var(--g10);background:var(--sel);}
+  .btn.primary{border-color:var(--c-accent);color:#0b0d11;background:var(--c-accent);}
+  .btn.primary:hover{background:var(--c-accent-2);border-color:var(--c-accent-2);box-shadow:0 0 0 4px rgba(137,180,250,.14);}
+  .btn.sm{font-size:var(--fs-meta);padding:6px 12px;}
+  .chip{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.04em;display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:var(--r-pill);border:1px solid var(--ln-2);color:var(--c-text-2);white-space:nowrap;}
+
+  /* ── 첫 화면 ── */
+  /* 왼쪽은 글, 오른쪽은 위젯. 좁아지면 글 → 위젯 → "아닌 것" 순으로 쌓인다(위젯이 아래로 밀리지 않게). */
+  .hero .grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);grid-template-areas:"copy widget" "note widget";
+    gap:28px 56px;align-items:start;padding-top:24px;}
+  .hero .grid > .copy{grid-area:copy;} .hero .grid > .sess{grid-area:widget;} .hero .grid > .notmem{grid-area:note;align-self:start;}
+  .hero .acts{margin-top:30px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;}
+  .hero .note{margin-top:14px;font-size:var(--fs-meta);color:var(--c-text-3);}
+  .notmem{margin-top:0;display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border:1px solid var(--ln);border-radius:var(--r);background:var(--c-card);max-width:36em;}
+  .notmem .x{flex:none;font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-amber);border:1px solid rgba(250,179,135,.4);border-radius:var(--r-pill);padding:1px 8px;margin-top:2px;}
+  .notmem p{margin:0;font-size:var(--fs-small);color:var(--c-text-1);line-height:1.65;}
+
+  /* ── 세션 경계 위젯 ── */
+  .sess{padding:18px 18px 16px;}
+  .sess .steps{display:flex;gap:6px;flex-wrap:wrap;}
+  .step{font-size:var(--fs-meta);padding:5px 11px;border-radius:var(--r-pill);border:1px solid var(--ln-2);color:var(--c-text-2);background:none;cursor:pointer;transition:border-color var(--t-fast),color var(--t-fast),background-color var(--t-fast);}
+  .step .n{font-family:var(--mono);color:var(--c-text-3);margin-right:6px;}
+  .step:hover{border-color:var(--ln-3);color:var(--c-text);}
+  .step[aria-pressed="true"]{border-color:var(--c-accent);color:var(--c-accent);background:var(--acc-tint);} .step[aria-pressed="true"] .n{color:var(--c-accent);}
+  .lane{margin-top:14px;border:1px solid var(--ln);border-radius:10px;background:var(--g0);padding:12px 14px 14px;position:relative;}
+  .lane .lh{display:flex;align-items:baseline;gap:8px;margin-bottom:10px;}
+  .lane .lh b{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--c-text-2);font-weight:500;}
+  .lane .lh .st{margin-left:auto;font-size:var(--fs-meta);color:var(--c-text-3);transition:color var(--t);text-align:right;}
+  .talk{display:flex;flex-direction:column;gap:7px;min-height:118px;transition:opacity var(--t) var(--ease);}
+  .msg{font-size:var(--fs-small);line-height:1.55;padding:7px 11px;border-radius:9px;max-width:92%;transition:opacity var(--t) var(--ease),color var(--t);}
+  .msg.me{align-self:flex-end;background:var(--c-raise);color:var(--c-text);}
+  .msg.ai{align-self:flex-start;background:var(--sel);color:var(--c-text-1);border:1px solid var(--ln);}
+  .msg .who{display:block;font-family:var(--mono);font-size:10.5px;color:var(--c-text-3);margin-bottom:2px;}
+  .msg.sys{align-self:stretch;max-width:none;background:none;border:1px dashed var(--ln-2);color:var(--c-text-3);font-size:var(--fs-meta);text-align:center;}
+  .msg.hook{align-self:stretch;max-width:none;border:1px solid rgba(166,227,161,.35);background:var(--green-tint);color:var(--c-text-1);font-family:var(--mono);font-size:11.5px;line-height:1.6;}
+  .msg.hook .who{color:var(--c-green);}
+  .state{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;}
+  .fld{border:1px solid var(--ln);border-radius:8px;padding:7px 10px;background:var(--c-card);opacity:.28;transition:opacity var(--t) var(--ease),border-color var(--t),box-shadow var(--t);}
+  .fld.full{grid-column:1 / -1;}
+  .fld .k{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--c-text-3);margin-bottom:1px;}
+  .fld .k i{font-style:normal;display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--c-text-3);}
+  .fld .v{font-size:12.5px;color:var(--c-text);line-height:1.45;overflow-wrap:anywhere;}
+  .fld.on{opacity:1;}
+  .glow .fld.on{border-color:rgba(166,227,161,.45);box-shadow:0 0 0 3px rgba(166,227,161,.06),0 0 18px rgba(166,227,161,.08);}
+  .fld[data-k="focus"] .k i{background:var(--c-text);} .fld[data-k="finding"] .k i{background:var(--k-finding);}
+  .fld[data-k="constraint"] .k i{background:var(--k-constraint);} .fld[data-k="open"] .k i{background:var(--c-amber);} .fld[data-k="next"] .k i{background:var(--c-accent);}
+  .ended .talk{opacity:.22;}
+  .ended .talk .msg{text-decoration:line-through;text-decoration-color:var(--ln-3);}
+  .sess .ctrl{margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .sess .ctrl .hint{font-size:var(--fs-meta);color:var(--c-text-3);}
+  .sess .alt{display:flex;gap:4px;margin-left:auto;padding:3px;border:1px solid var(--ln-2);border-radius:var(--r-pill);}
+  .sess .alt button{font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill);border:none;background:none;color:var(--c-text-2);cursor:pointer;}
+  .sess .alt button[aria-pressed="true"]{background:var(--sel-2);color:var(--c-text);}
+  .sess .src{margin-top:10px;font-size:11.5px;color:var(--c-text-3);}
+
+  /* ── 비교 ── */
+  .cmp{margin-top:40px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
+  .cmp .card{padding:22px 22px 20px;}
+  .cmp .tag{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--c-text-3);}
+  .cmp .wt .tag{color:var(--c-green);}
+  .cmp h3{margin-top:8px;}
+  .cmp ol{margin:16px 0 0;padding:0;list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:10px;}
+  .cmp li{counter-increment:s;display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;font-size:var(--fs-small);color:var(--c-text-1);line-height:1.6;}
+  .cmp li > span{min-width:0;}
+  .cmp li::before{content:counter(s);font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);border:1px solid var(--ln-2);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;}
+  .cmp .wt li::before{border-color:rgba(166,227,161,.4);color:var(--c-green);}
+  .cmp .end{margin-top:16px;padding-top:14px;border-top:1px solid var(--ln);font-size:var(--fs-small);color:var(--c-text-2);}
+  .cmp .wt .end{color:var(--c-text-1);}
+  /* ── 남는 것 / 남기지 않는 것 ── */
+  .keep{margin-top:40px;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px;align-items:start;}
+  .keep .card{padding:8px 22px;}
+  .keep .row{display:grid;grid-template-columns:128px minmax(0,1fr);gap:14px;padding:13px 0;border-top:1px solid var(--ln);}
+  .keep .row:first-of-type{border-top:none;}
+  .keep .row .k{font-size:var(--fs-small);font-weight:600;color:var(--c-text);display:flex;align-items:baseline;gap:8px;}
+  .keep .row .k i{flex:none;width:7px;height:7px;border-radius:50%;background:var(--c-text-3);transform:translateY(-1px);}
+  .keep .row .k small{display:block;font-family:var(--mono);font-weight:400;font-size:10.5px;color:var(--c-text-3);}
+  .keep .row p{margin:0;font-size:var(--fs-small);color:var(--c-text-1);line-height:1.6;}
+  .keep .row p q{color:var(--c-text-2);quotes:"“" "”";}
+  .keep .no{padding:20px 22px;}
+  .keep .no h3{font-size:15px;}
+  .keep .no ul{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px;}
+  .keep .no li{font-size:var(--fs-small);color:var(--c-text-1);line-height:1.6;padding-left:18px;position:relative;}
+  .keep .no li::before{content:"–";position:absolute;left:0;color:var(--c-text-3);}
+  .keep .no li b{color:var(--c-text);font-weight:600;}
+  .keep .rules{margin-top:18px;padding-top:16px;border-top:1px solid var(--ln);}
+  .keep .rules li::before{content:"✓";color:var(--c-green);}
+
+  /* ── 현황과 회고 ── */
+  .lens{margin-top:40px;}
+  .lens .tabs{display:flex;gap:8px;flex-wrap:wrap;}
+  .lens .tab{font-size:var(--fs-small);padding:8px 16px;border-radius:var(--r-pill);border:1px solid var(--ln-2);color:var(--c-text-2);background:none;cursor:pointer;transition:border-color var(--t-fast),color var(--t-fast),background-color var(--t-fast);}
+  .lens .tab small{font-family:var(--mono);font-size:10.5px;color:var(--c-text-3);margin-left:6px;}
+  .lens .tab:hover{border-color:var(--ln-3);color:var(--c-text);}
+  .lens .tab[aria-selected="true"]{border-color:var(--c-accent);color:var(--c-accent);background:var(--acc-tint);}
+  .lens .tab[aria-selected="true"] small{color:var(--c-accent);opacity:.75;}
+  .lens .pane{margin-top:16px;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px;align-items:start;}
+  .lens .pane[hidden]{display:none;}
+  .lens .shot{padding:16px 18px;}
+  .lens .shot .sh{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;}
+  .lens .shot .sh b{font-size:17px;font-weight:600;color:var(--g10);}
+  .lens .shot .sh span{font-size:var(--fs-meta);color:var(--c-text-3);}
+  .trow{display:grid;grid-template-columns:14px minmax(0,1fr);gap:10px;padding:10px 4px;border-top:1px solid var(--ln);}
+  .trow:first-of-type{border-top:none;}
+  .dot{width:10px;height:10px;border-radius:50%;margin-top:6px;border:2px solid var(--c-text-2);}
+  .dot.me{border-color:var(--c-amber);box-shadow:0 0 0 3px rgba(250,179,135,.16);}
+  .dot.agent{border:none;background:var(--c-accent);}
+  .dot.watch{border-color:var(--g5);}
+  .dot.unset{border-color:var(--g9);}
+  .trow .t{font-size:14px;font-weight:500;color:var(--c-text);line-height:1.45;}
+  .trow .m{font-size:var(--fs-meta);color:var(--c-text-2);margin-top:2px;line-height:1.5;}
+  .trow .m b{color:var(--c-text);font-weight:500;}
+  .legend{margin-top:10px;display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--c-text-3);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;} .legend .dot{margin-top:0;width:9px;height:9px;}
+  .concl{padding:12px 14px;border-left:2px solid var(--ln-2);margin:0 0 12px;}
+  .concl .l{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--c-text-3);text-transform:uppercase;}
+  .concl p{margin:4px 0 0;font-size:14px;color:var(--c-text);font-weight:500;}
+  .concl p + p{font-weight:400;font-size:var(--fs-small);color:var(--c-text-1);}
+  .flow{list-style:none;margin:0;padding:0;}
+  .flow li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:10px;padding:9px 0;border-top:1px solid var(--ln);font-size:var(--fs-small);}
+  .flow li .kw{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);padding-top:2px;}
+  .flow li .kw.d{color:var(--k-decision);} .flow li .kw.c{color:var(--k-constraint);} .flow li .kw.ok{color:var(--c-green);} .flow li .kw.op{color:var(--c-accent);}
+  .flow li .hd{color:var(--c-text);} .flow li .why{display:block;color:var(--c-text-2);font-size:12.5px;margin-top:2px;}
+  .lens .say h3{margin-top:4px;}
+  .lens .say p{margin:10px 0 0;font-size:var(--fs-small);color:var(--c-text-1);line-height:1.7;}
+  .lens .say .go{margin-top:18px;}
+
+  /* ── 설치 ── */
+  /* 단 번호 — 1 저장 위치 · 2 에이전트 */
+  .stepno{margin-top:40px;display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;color:var(--c-text);}
+  .stepno span{flex:none;width:24px;height:24px;border-radius:50%;border:1px solid var(--c-accent);color:var(--c-accent);background:var(--acc-tint);
+    font-family:var(--mono);font-size:var(--fs-mono);display:flex;align-items:center;justify-content:center;}
+  .store{margin-top:14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
+  .store .card{padding:22px;}
+  .store .sh{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .store .tagline{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.06em;color:var(--c-text-2);border:1px solid var(--ln-2);border-radius:var(--r-pill);padding:2px 9px;}
+  .store p{margin:10px 0 0;font-size:var(--fs-small);color:var(--c-text-1);line-height:1.65;}
+  .store ul{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px;}
+  .store li{font-size:var(--fs-small);color:var(--c-text-1);line-height:1.6;padding-left:20px;position:relative;}
+  .store li::before{position:absolute;left:0;font-family:var(--mono);font-size:12px;}
+  .store .yes li::before{content:"+";color:var(--c-green);}
+  .store .no li::before{content:"–";color:var(--c-amber);}
+  .store .no{margin-top:8px;}
+  .store .acts{margin-top:18px;}
+  .inst{margin-top:14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
+  .inst .way{margin-top:16px;padding-top:14px;border-top:1px solid var(--ln);}
+  .inst .way .where{display:inline-block;margin-bottom:6px;}
+  .inst .tip{margin-top:8px;font-size:var(--fs-meta);color:var(--c-text-2);line-height:1.6;}
+  .inst .note{margin-top:16px;padding:12px 14px;border-radius:var(--r-s);background:var(--sel);font-size:var(--fs-meta);color:var(--c-text-1);line-height:1.7;}
+  .inst .note q{quotes:"“" "”";color:var(--c-text);}
+  .inst .card{padding:22px;display:flex;flex-direction:column;}
+  .inst .where{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.08em;color:var(--c-accent);text-transform:uppercase;}
+  .inst h3{margin-top:8px;}
+  .inst p{margin:10px 0 0;font-size:var(--fs-small);color:var(--c-text-1);line-height:1.65;}
+  .inst .cmd{margin-top:14px;display:flex;align-items:stretch;border:1px solid var(--ln-2);border-radius:var(--r-s);background:var(--g0);}
+  .inst .cmd pre{margin:0;flex:1;min-width:0;padding:11px 13px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--c-text);white-space:pre-wrap;overflow-wrap:anywhere;}
+  .inst .cmd button{flex:none;border:none;border-left:1px solid var(--ln-2);background:none;color:var(--c-text-2);font-size:11.5px;padding:0 12px;cursor:pointer;border-radius:0 var(--r-s) var(--r-s) 0;min-width:58px;}
+  .inst .cmd button:hover{color:var(--c-text);background:var(--sel);}
+  .inst .cmd button.done{color:var(--c-green);}
+  .inst ul{margin:12px 0 0;padding:0 0 0 18px;font-size:var(--fs-meta);color:var(--c-text-2);line-height:1.7;}
+  .inst .acts{margin-top:auto;padding-top:18px;display:flex;gap:10px;flex-wrap:wrap;}
+  .also{margin-top:18px;padding:16px 22px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;}
+  .also div{font-size:var(--fs-meta);color:var(--c-text-2);line-height:1.65;}
+  .also q{quotes:"“" "”";color:var(--c-text);}
+  .also b{display:block;color:var(--c-text);font-size:var(--fs-small);font-weight:600;margin-bottom:2px;}
+
+  /* ── 끝 ── */
+  .final{text-align:center;}
+  .final .acts{margin-top:26px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+  footer{border-top:1px solid var(--ln);padding:28px 0 40px;font-size:var(--fs-meta);color:var(--c-text-3);}
+  footer .in{display:flex;gap:10px 22px;flex-wrap:wrap;align-items:baseline;}
+  footer a{color:var(--c-text-2);} footer a:hover{color:var(--c-text);}
+  footer .sp{flex:1;}
+
+  /* ── 폭 ── 1440 · 1000 · 390 에서 본다 */
+  @media (max-width:1040px){
+    .hero .grid{grid-template-columns:minmax(0,1fr);grid-template-areas:"copy" "widget" "note";gap:32px;padding-top:0;}
+    .lens .pane{grid-template-columns:minmax(0,1fr);}
+    .keep{grid-template-columns:minmax(0,1fr);}
+  }
+  @media (max-width:760px){
+    :root{--gut:16px;}
+    section{padding:64px 0;}
+    section.hero{padding:36px 0 56px;}
+    .cmp,.inst,.store{grid-template-columns:minmax(0,1fr);}
+    .also{grid-template-columns:minmax(0,1fr);}
+    .top nav a.hide-s{display:none;}
+    .keep .row{grid-template-columns:minmax(0,1fr);gap:4px;}
+    .sess{padding:14px 12px 12px;}
+    .state{grid-template-columns:minmax(0,1fr);}
+    .sess .alt{margin-left:0;}
+    .hero .acts .btn{flex:1 1 auto;justify-content:center;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{transition:none !important;animation:none !important;}
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+
+<header class="top">
+  <div class="in">
+    <a class="logo" href="#top" aria-label="Worktrail 소개 맨 위로"><span class="box" aria-hidden="true">Wt</span><span class="name">WORKTRAIL</span></a>
+    <nav aria-label="바로 가기">
+      <a class="hide-s" href="#diff">차이</a>
+      <a class="hide-s" href="#lens">현황과 회고</a>
+      <a href="#install">설치</a>
+      <a class="cta" href="../" data-go="demo">데모 보기</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <!-- ── 1. 첫 화면: 무엇이고, 세션이 끝나면 무엇이 남는가 ── -->
+  <section class="hero" id="top">
+    <div class="in grid">
+      <div class="copy">
+        <span class="eyebrow">AI 코딩 에이전트의 작업 기록</span>
+        <h1 style="margin-top:14px">세션이 끝나도<br>작업 상태는 남습니다</h1>
+        <p class="lead">Worktrail은 AI 세션 사이에서 <b>결정·제약·근거·열린 문제·다음 행동</b>을 이어 줍니다. 새 세션은 지난 대화를 다시 해석하지 않고, 지금도 유효한 작업 상태에서 바로 시작합니다.</p>
+        <div class="acts">
+          <a class="btn primary" href="../" data-go="demo">데모 열어 보기 <span aria-hidden="true">→</span></a>
+          <a class="btn" href="#install">설치하기</a>
+        </div>
+        <p class="note">가입 없이 보는 읽기 전용 데모입니다. 기록은 가상의 팀이 쓴 것입니다.</p>
+      </div>
+
+      <div class="notmem">
+        <span class="x">아닌 것</span>
+        <p>대화를 통째로 보관하거나 모든 것을 기억하는 AI 메모리가 아닙니다. 에이전트가 일하면서 남긴 것 가운데 다음 사람이 이어받아야 할 것만 따로 둡니다.</p>
+      </div>
+
+      <!-- 세션 경계 위젯: 대화는 세션과 함께 사라지고, 작업 상태는 다음 세션으로 넘어간다 -->
+      <div class="card sess" id="sess" aria-labelledby="sessTitle">
+        <h2 class="sr" id="sessTitle">세션이 바뀔 때 무엇이 남는지 직접 넘겨 보기</h2>
+        <div class="steps" role="group" aria-label="단계">
+          <button class="step" type="button" data-step="0" aria-pressed="true"><span class="n">1</span>세션에서 일한다</button>
+          <button class="step" type="button" data-step="1" aria-pressed="false"><span class="n">2</span>세션이 끝난다</button>
+          <button class="step" type="button" data-step="2" aria-pressed="false"><span class="n">3</span>새 세션을 연다</button>
+        </div>
+
+        <div class="lane" id="laneTalk">
+          <div class="lh"><b>대화</b><span class="st" id="talkSt">세션 1</span></div>
+          <div class="talk" id="talk"></div>
+        </div>
+        <div class="lane" id="laneState">
+          <div class="lh"><b>Worktrail 스레드</b><span class="st" id="stateSt">에이전트가 일하며 남긴다</span></div>
+          <div class="state" id="state">
+            <div class="fld full" data-k="focus"><span class="k"><i></i>초점</span><span class="v">재고가 음수로 내려간 주문 3건의 경로를 찾는다</span></div>
+            <div class="fld" data-k="finding"><span class="k"><i></i>발견 · 근거 2건</span><span class="v">읽고 쓰는 사이가 잠겨 있지 않다, 전형적인 경쟁 상태다</span></div>
+            <div class="fld" data-k="constraint"><span class="k"><i></i>제약 · 저장소 전체</span><span class="v">외부 결제 호출을 사용자 요청 안에서 기다리지 않는다</span></div>
+            <div class="fld" data-k="open"><span class="k"><i></i>열린 문제</span><span class="v">막는 방법 셋 중 무엇을 쓸지 안 정했다</span></div>
+            <div class="fld" data-k="next"><span class="k"><i></i>다음 · Claude 차례</span><span class="v">세일 트래픽을 재고 방식 셋과 맞춰 보고 하나를 고른다</span></div>
+          </div>
+        </div>
+
+        <div class="ctrl">
+          <button class="btn sm" type="button" id="sessNext">세션 끝내기</button>
+          <span class="hint" id="sessHint">버튼을 눌러 세션을 넘겨 보세요</span>
+          <div class="alt" id="alt" role="group" aria-label="새 세션을 무엇으로 시작하나" hidden>
+            <button type="button" data-alt="wt" aria-pressed="true">Worktrail로</button>
+            <button type="button" data-alt="none" aria-pressed="false">Worktrail 없이</button>
+          </div>
+        </div>
+        <p class="sr" aria-live="polite" id="sessLive"></p>
+        <p class="src">예시는 데모에 있는 가상 팀의 스레드 <a href="../#/threads/6">#6</a>에서 가져왔습니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 2. 차이: 새 세션의 첫 몇 분 ── -->
+  <section id="diff">
+    <div class="in">
+      <div class="shead">
+        <span class="eyebrow">새 세션의 첫 순간</span>
+        <h2>과거를 다시 읽는 대신, 멈춘 자리에서 이어 갑니다</h2>
+        <p class="sub">코드와 커밋에는 무엇을 바꿨는지만 남습니다. 왜 그렇게 정했는지, 무엇이 아직 안 풀렸는지, 다음이 누구 차례인지는 남지 않습니다.</p>
+      </div>
+      <div class="cmp">
+        <div class="card">
+          <span class="tag">보통의 AI 세션</span>
+          <h3>새 세션은 지난 세션을 모릅니다</h3>
+          <ol>
+            <li><span>코드, diff, 커밋 메시지를 다시 읽습니다.</span></li>
+            <li><span>지난번에 무엇을 정했고 왜 그랬는지 거기서 짐작합니다.</span></li>
+            <li><span>이미 버린 방법을 다시 꺼내거나, 끝난 일을 또 할 수 있습니다.</span></li>
+            <li><span>사람이 지난 대화를 요약해 다시 붙여 넣습니다.</span></li>
+          </ol>
+          <p class="end">세션이 바뀔 때마다 같은 해석을 처음부터 되풀이합니다.</p>
+        </div>
+        <div class="card wt">
+          <span class="tag">Worktrail로 이어 갈 때</span>
+          <h3>새 세션이 지금 유효한 상태를 먼저 받습니다</h3>
+          <ol>
+            <li><span>Claude Code는 세션을 시작할 때 이 작업폴더에서 무엇을 하던 중이었는지를 먼저 띄웁니다. 스레드의 초점, 안 풀린 것, 다음 행동.</span></li>
+            <li><span>거기서 이어 가려면 <code>resume</code> 한 번. 제약과 결정, 근거가 된 원문, 지금 git 위치까지 일곱 칸이 옵니다.</span></li>
+            <li><span>결정에는 이유와 누가 정했는지가, 결론에는 근거가 된 원문이 붙어 있습니다.</span></li>
+            <li><span>다음 행동에서 바로 시작하고, 새로 알게 된 것은 그 자리에 다시 남깁니다.</span></li>
+          </ol>
+          <p class="end">해석이 끝난 상태가 넘어오므로, 새 세션은 거기서 출발합니다.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── 3. 기억이 아니라 작업 상태 ── -->
+  <section id="keep">
+    <div class="in">
+      <div class="shead">
+        <span class="eyebrow">무엇이 남는가</span>
+        <h2>기억이 아니라, 지금 유효한 작업 상태</h2>
+        <p class="sub">일은 <b>스레드</b> 단위로 남습니다. 한 저장소에서 하나의 질문이나 변경을 끝까지 따라가는 단위입니다. 새 세션이 <code>resume</code>으로 받는 것은 아래의 일곱 칸입니다.</p>
+      </div>
+      <div class="keep">
+        <div class="card">
+          <div class="row"><div class="k"><i style="background:var(--c-text)"></i><span>초점<small>focus</small></span></div><p>이 스레드가 무엇을 위한 것이고, 무엇이 되면 끝나는지.</p></div>
+          <div class="row"><div class="k"><i style="background:var(--k-constraint)"></i><span>제약<small>constraints</small></span></div><p>앞으로 지켜야 할 선. 저장소 전체에 걸리는 것은 그 저장소의 모든 스레드에 같이 나옵니다. <q>외부 결제 호출을 사용자 요청 안에서 기다리지 않는다</q></p></div>
+          <div class="row"><div class="k"><i style="background:var(--k-decision)"></i><span>결정<small>decisions</small></span></div><p>따르기로 한 선택과 그 이유, 사람이 정했는지 에이전트가 정했는지. 옛 결정은 지워지지 않고 새 결정으로 대체됩니다. <q>결제 대행사는 페이레일로 간다 · 부분취소와 정산 주기가 갈랐다</q></p></div>
+          <div class="row"><div class="k"><i style="background:var(--c-amber)"></i><span>열린 문제<small>open</small></span></div><p>아직 안 풀린 질문과 막힌 것.</p></div>
+          <div class="row"><div class="k"><i style="background:var(--c-accent)"></i><span>다음 행동<small>next</small></span></div><p>다음에 할 일과 그 차례가 누구인지. 사람, 에이전트, 또는 지켜보기만 할 때. 에이전트는 단계마다 이것을 다시 말해야 합니다.</p></div>
+          <div class="row"><div class="k"><i style="background:var(--k-verified)"></i><span>근거<small>evidence</small></span></div><p>기계나 사람이 실제로 말한 것. 시험 결과, 에러, diff를 요약하지 않고 원문 그대로 두고 번호로 답니다.</p></div>
+          <div class="row"><div class="k"><i style="background:var(--k-commit)"></i><span>현재 위치<small>anchor</small></span></div><p>이 작업폴더의 브랜치·HEAD·바뀐 파일, 그리고 스레드에 붙은 커밋.</p></div>
+        </div>
+        <div class="card no">
+          <h3>남기지 않는 것</h3>
+          <ul>
+            <li><b>대화 전체.</b> 기록되는 것은 에이전트가 도구로 남긴 것과, 훅이 붙이는 커밋·작업폴더 위치뿐입니다.</li>
+            <li><b>에이전트의 추측.</b> 뒤집힐 수 있는 가설은 노트에 머물고, <code>resume</code>에는 나오지 않습니다.</li>
+            <li><b>코드 자체.</b> 코드는 git에 있습니다. Worktrail은 코드 주변의 맥락을 남깁니다.</li>
+          </ul>
+          <div class="rules">
+            <h3>규칙은 서버가 지킵니다</h3>
+            <ul>
+              <li>주제 없이는 스레드를 열 수 없습니다.</li>
+              <li>다음 행동과 그 차례를 적지 않으면 단계를 남길 수 없습니다.</li>
+              <li>모든 글의 첫 줄은 제목이고, 120칸을 넘으면 거절됩니다.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 4. 현황과 회고 ── -->
+  <section id="lens">
+    <div class="in">
+      <div class="shead">
+        <span class="eyebrow">두 개의 화면</span>
+        <h2>현황은 지금을, 회고는 거기까지 온 길을 보여 줍니다</h2>
+        <p class="sub">같은 기록을 두 방향에서 읽습니다. 아래는 데모에 있는 가상 팀의 주제 하나입니다.</p>
+      </div>
+      <div class="lens">
+        <div class="tabs" role="tablist" aria-label="화면">
+          <button class="tab" type="button" role="tab" id="tabNow" aria-controls="paneNow" aria-selected="true">현황<small>Status · Now</small></button>
+          <button class="tab" type="button" role="tab" id="tabRev" aria-controls="paneRev" aria-selected="false" tabindex="-1">회고<small>Review</small></button>
+        </div>
+
+        <div class="pane" id="paneNow" role="tabpanel" aria-labelledby="tabNow">
+          <div class="card shot">
+            <div class="sh"><b>현황</b><span>다음 손이 누구 것인지. 선언한 그대로.</span></div>
+            <div class="trow"><span class="dot me" aria-hidden="true"></span><div><div class="t">실결제 키로 첫 한 건을 태우기 전에 점검한다</div><div class="m"><b>내 차례</b> · 대표 승인과 취소 한도 답을 받고 실키를 켠다</div></div></div>
+            <div class="trow"><span class="dot agent" aria-hidden="true"></span><div><div class="t">대행사를 직접 부르는 남은 코드를 어댑터 뒤로 옮긴다</div><div class="m"><b>Codex 에게</b> · 남은 두 군데를 어댑터 뒤로 옮기고 계약 시험을 붙인다</div></div></div>
+            <div class="trow"><span class="dot unset" aria-hidden="true"></span><div><div class="t">부분취소한 주문의 환불액이 대행사 정산서와 1원씩 어긋난다</div><div class="m"><b>미정</b> · 마지막 발견: 차이는 전부 쿠폰 몫을 나눌 때의 절사와 반올림이다</div></div></div>
+            <div class="legend" aria-label="원 색의 뜻"><span><i class="dot me"></i>내 차례</span><span><i class="dot agent"></i>에이전트에게</span><span><i class="dot watch"></i>관찰 중</span><span><i class="dot unset"></i>미정</span></div>
+          </div>
+          <div class="say">
+            <span class="eyebrow">결제 대행사 교체 · 열린 스레드 3</span>
+            <h3>무엇이 열려 있고, 다음은 누구 차례인가</h3>
+            <p>열린 스레드마다 에이전트가 마지막으로 선언한 다음 행동과 그 차례가 한 줄로 보입니다. 사람이 움직일 것, 에이전트에게 넘긴 것, 아직 아무도 정하지 않은 것이 나뉩니다. 옆의 Now 띠에는 최근 기록이 방향(결정·제약·선언)과 흔적(노트·증거·커밋)으로 나뉘어 쌓입니다.</p>
+            <div class="go"><a class="btn sm" href="../#/threads">데모에서 현황 보기 <span aria-hidden="true">→</span></a></div>
+          </div>
+        </div>
+
+        <div class="pane" id="paneRev" role="tabpanel" aria-labelledby="tabRev" hidden>
+          <div class="card shot">
+            <div class="sh"><b>결제 대행사 교체</b><span>회고</span></div>
+            <div class="concl">
+              <span class="l">결론</span>
+              <p>페이레일로 옮겼고 실결제 전환만 남았다</p>
+              <p>부분취소를 API로 열어 주는 곳이 둘뿐이었고 정산이 D+2라 페이레일로 정했다. 샌드박스는 결제·부분취소·웹훅까지 통과했다.</p>
+            </div>
+            <ol class="flow">
+              <li><span class="kw c">제약</span><span><span class="hd">대행사를 부르는 코드는 어댑터 뒤에만 둔다</span><span class="why">이번이 두 번째 교체다</span></span></li>
+              <li><span class="kw d">결정</span><span><span class="hd">결제 대행사는 페이레일로 간다</span><span class="why">부분취소와 정산 주기가 갈랐다</span></span></li>
+              <li><span class="kw ok">종료</span><span><span class="hd">샌드박스에서 결제·부분취소·웹훅이 통과했다</span></span></li>
+              <li><span class="kw op">열림</span><span><span class="hd">실결제 키로 첫 한 건을 태우기 전에 점검한다</span></span></li>
+            </ol>
+          </div>
+          <div class="say">
+            <span class="eyebrow">결제 대행사 교체 · 스레드 5</span>
+            <h3>지금의 상태가 어떻게 만들어졌나</h3>
+            <p>주제마다 결론이 맨 위에 있고, 그 아래로 어떤 제약과 결정을 거쳐 여기까지 왔는지, 어떤 스레드가 닫히고 무엇이 남았는지가 보입니다. 결정을 누르면 그 이유와 근거가 된 원문으로 갑니다.</p>
+            <div class="go"><a class="btn sm" href="../#/review/1">데모에서 회고 보기 <span aria-hidden="true">→</span></a></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 5. 설치 ── 두 단: ① 기록을 어디에 둘지 ② 쓰는 에이전트에 어떻게 붙일지 -->
+  <section id="install">
+    <div class="in">
+      <div class="shead">
+        <span class="eyebrow">시작하기</span>
+        <h2>기록을 어디에 둘지 고르고, 쓰는 에이전트에 붙입니다</h2>
+        <p class="sub">맥·리눅스·WSL에서 동작합니다. 윈도우 네이티브는 아직 지원하지 않습니다.</p>
+      </div>
+
+      <div class="stepno"><span>1</span> 기록을 어디에 둘까요</div>
+      <div class="store">
+        <div class="card">
+          <div class="sh"><h3>이 컴퓨터에만</h3><span class="tagline">신청 없이 바로</span></div>
+          <p>기록이 이 컴퓨터의 sqlite 파일 하나(<code>~/.casebook/casebook.db</code>)에 남습니다. 설치가 끝나면 아무것도 밖으로 나가지 않습니다.</p>
+          <ul class="yes">
+            <li>회사 코드·비밀이 섞인 작업도 그대로 기록할 수 있습니다.</li>
+            <li>네트워크나 계정 없이 동작합니다.</li>
+          </ul>
+          <ul class="no">
+            <li>기계가 여러 대면 기록이 따로 놉니다. 백업은 직접 합니다.</li>
+            <li>claude.ai 커넥터로는 못 붙입니다.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="sh"><h3>호스팅 서버에</h3><span class="tagline">신청 필요</span></div>
+          <p>기록이 운영 서버에 남고, 설치 한 줄로 받은 URL이 열쇠가 됩니다. 구글 로그인과 데이터 안내문 동의를 거칩니다.</p>
+          <ul class="yes">
+            <li>맥·리눅스 여러 대, 에이전트를 섞어 써도 같은 기록을 봅니다.</li>
+            <li>claude.ai 커넥터로 붙습니다. 고친 것이 재설치 없이 닿습니다.</li>
+          </ul>
+          <ul class="no">
+            <li>한 서버 한 DB라 운영자는 기록을 볼 수 있습니다.</li>
+            <li>자리가 정해져 있어 승인을 기다릴 수 있습니다.</li>
+          </ul>
+          <div class="acts"><a class="btn sm" href="/join?from=landing" data-go="join">신청 페이지로 <span aria-hidden="true">→</span></a></div>
+        </div>
+      </div>
+
+      <div class="stepno"><span>2</span> 쓰는 에이전트에 붙입니다</div>
+      <div class="inst">
+        <div class="card">
+          <h3>Claude Code</h3>
+          <div class="way">
+            <span class="where">이 컴퓨터에만</span>
+            <p>플러그인 두 줄이면 MCP 등록과 세션 훅까지 끝납니다. 신청은 필요 없고, Python 3.11 이상 또는 uv가 있으면 됩니다.</p>
+            <div class="cmd"><pre id="cmdPlugin">/plugin marketplace add jasonethicseo/worktrail
+/plugin install worktrail@worktrail</pre><button type="button" data-copy="cmdPlugin" aria-label="플러그인 설치 명령 복사">복사</button></div>
+            <p class="tip">Claude Code 안에서 실행합니다. 새 버전을 자동으로 받으려면 auto-update를 켭니다. <a href="/go/plugin-ko" data-go="plugin">설치 안내 →</a></p>
+          </div>
+          <div class="way">
+            <span class="where">서버에</span>
+            <p>신청 화면에서 서버를 고르면 설치 한 줄을 받습니다. 그 줄이 클라이언트 설치, MCP 등록, 훅까지 한 번에 합니다.</p>
+            <div class="cmd"><pre>curl -fsSL &lt;받은 URL&gt;/install.sh | sh -s -- --server</pre></div>
+            <p class="tip">URL이 곧 열쇠입니다. 화면 공유나 채팅에 올리지 않습니다.</p>
+          </div>
+          <p class="note">세션을 시작하면 이 작업폴더의 열린 스레드가 저절로 뜹니다. 커밋도 저절로 붙습니다.</p>
+        </div>
+
+        <div class="card">
+          <h3>Codex CLI</h3>
+          <div class="way">
+            <span class="where">이 컴퓨터에만</span>
+            <p>플러그인이 없으므로 소스에서 깔고 직접 등록합니다. 신청은 필요 없습니다.</p>
+            <div class="cmd"><pre id="cmdSrc">git clone https://github.com/jasonethicseo/worktrail.git &amp;&amp; cd worktrail
+python3 -m venv .venv &amp;&amp; .venv/bin/pip install -e ".[mcp]"
+mkdir -p ~/.casebook &amp;&amp; echo local &gt; ~/.casebook/mode
+codex mcp add casebook -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy</pre><button type="button" data-copy="cmdSrc" aria-label="Codex 설치 명령 복사">복사</button></div>
+            <p class="tip">기록은 <code>~/.casebook/casebook.db</code>에 남습니다. 자리를 옮기려면 <code>CASEBOOK_DB</code>를 줍니다.</p>
+          </div>
+          <div class="way">
+            <span class="where">서버에</span>
+            <p>같은 설치 한 줄입니다. <code>codex</code>가 깔려 있으면 알아서 등록하고, 첫 연결이 끊기지 않게 Codex의 시작 대기를 30초로 올립니다.</p>
+            <div class="cmd"><pre>curl -fsSL &lt;받은 URL&gt;/install.sh | sh -s -- --server</pre></div>
+            <p class="tip">Claude Code와 Codex가 둘 다 있으면 한 줄로 둘 다 등록됩니다.</p>
+          </div>
+          <p class="note">Codex에는 세션 훅이 없습니다. 세션을 열고 한 번 <q>casebook 열린 스레드 보여줘</q>라고 하면 그 세션 내내 알아서 기록합니다. 그 한마디도 빼려면 <code>~/.codex/AGENTS.md</code>에 적어 둡니다. 터미널 커밋을 붙이려면 저장소마다 한 번 <code>sh tools/hooks/install_git_hook.sh</code>.</p>
+        </div>
+      </div>
+
+      <div class="card also">
+        <div><b>claude.ai · ChatGPT</b>설치 없이 커넥터로 같은 URL을 넣습니다. 호스팅 서버에서만 되고, git 정보(브랜치·커밋 연결)는 붙지 않습니다.</div>
+        <div><b>에이전트를 섞어 써도</b>같은 기록을 봅니다. 스레드 연결은 폴더마다 하나라, 같은 폴더에서 동시에 돌리지만 않으면 됩니다.</div>
+        <div><b>지울 때</b>로컬은 sqlite 파일 하나를 지우면 끝입니다. 서버는 신청 페이지에 적힌 대로 요청합니다.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="in">
+      <h2>실제 화면에서 확인해 보세요</h2>
+      <p class="sub" style="margin-left:auto;margin-right:auto">가상 팀의 4주치 기록과, 이 제품을 만들며 남긴 실제 기록 일부가 들어 있습니다. 가입 없이 열립니다.</p>
+      <div class="acts">
+        <a class="btn primary" href="../" data-go="demo">데모 열어 보기 <span aria-hidden="true">→</span></a>
+        <a class="btn" href="https://github.com/jasonethicseo/worktrail" target="_blank" rel="noopener">GitHub에서 소스 보기</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="in">
+    <span>Worktrail</span>
+    <span>라이선스 FSL-1.1-ALv2 (source-available)</span>
+    <span class="sp"></span>
+    <a href="https://github.com/jasonethicseo/worktrail" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/jasonethicseo/worktrail/issues" target="_blank" rel="noopener">피드백</a>
+    <a href="../en/">English demo</a>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  // ── 세션 경계 위젯 ── 단계 0 일하는 중 · 1 세션 끝 · 2 새 세션(Worktrail로 / 없이)
+  const TALK = {
+    work: [
+      ["me", "나", "재고가 음수로 내려간 주문 3건, 어디서 샜는지 찾아 줘"],
+      ["ai", "에이전트", "세 상품 모두 20시 타임세일 첫 3초에 주문이 겹쳐 들어왔습니다."],
+      ["ai", "에이전트", "재고를 읽고 빼는 사이에 잠금이 없습니다. 막는 방법이 셋인데, 세일 트래픽을 보고 골라야 합니다."],
+    ],
+    wt: [
+      ["hook", "세션 시작 · casebook", "#6 재고가 음수로 내려간 주문 3건의 경로를 찾는다\nopen: 막는 방법 셋 중 무엇을 쓸지 안 정했다\nnext: 세일 트래픽을 재고 방식 셋과 맞춰 보고 하나를 고른다"],
+      ["ai", "에이전트", "지난 세션의 다음 행동부터 합니다. 세일의 초당 요청 수와 상품별 집중도를 먼저 뽑겠습니다."],
+    ],
+    none: [
+      ["sys", "", "새 세션 · 지난 대화 없음"],
+      ["ai", "에이전트", "어디까지 했는지 모르니 코드와 커밋 기록부터 읽어 보겠습니다."],
+      ["sys", "", "이 스레드에는 아직 커밋이 없습니다. 무엇이 안 풀렸고 다음이 누구 차례인지는 코드에서 알 수 없습니다."],
+    ],
+  };
+  const LIVE = [
+    "세션 1. 에이전트가 일하면서 초점, 발견, 제약, 열린 문제, 다음 행동을 스레드에 남깁니다.",
+    "세션이 끝났습니다. 대화는 다음 세션으로 넘어가지 않고, 스레드의 작업 상태는 그대로 남아 있습니다.",
+    "새 세션입니다. Worktrail로 시작하면 남아 있던 작업 상태에서 바로 이어 갑니다.",
+  ];
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const msgs = (rows) => rows.map(([k, who, text]) =>
+    `<div class="msg ${k}">${who ? `<span class="who">${esc(who)}</span>` : ""}${esc(text).replace(/\n/g, "<br>")}</div>`).join("");
+
+  let step = 0, alt = "wt";
+  const sess = $("sess"), talk = $("talk"), laneTalk = $("laneTalk"), laneState = $("laneState");
+  const flds = [...document.querySelectorAll("#state .fld")];
+
+  function draw() {
+    document.querySelectorAll(".step").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.step) === step)));
+    laneTalk.classList.toggle("ended", step === 1);
+    laneState.classList.toggle("glow", step >= 1 && !(step === 2 && alt === "none"));
+    $("alt").hidden = step !== 2;
+    document.querySelectorAll("#alt button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.alt === alt)));
+    if (step === 0) {
+      talk.innerHTML = msgs(TALK.work);
+      $("talkSt").textContent = "세션 1";
+      $("stateSt").textContent = "에이전트가 일하며 남긴다";
+      flds.forEach((f) => f.classList.add("on"));
+      $("sessNext").textContent = "세션 끝내기";
+      $("sessHint").textContent = "버튼을 눌러 세션을 넘겨 보세요";
+    } else if (step === 1) {
+      talk.innerHTML = msgs(TALK.work);
+      $("talkSt").textContent = "세션 1 · 끝남 — 다음 세션으로 넘어가지 않는다";
+      $("stateSt").textContent = "그대로 남아 있다";
+      flds.forEach((f) => f.classList.add("on"));
+      $("sessNext").textContent = "새 세션 열기";
+      $("sessHint").textContent = "대화는 사라지고, 작업 상태는 남았습니다";
+    } else {
+      talk.innerHTML = msgs(TALK[alt]);
+      $("talkSt").textContent = "세션 2";
+      const on = alt === "wt";
+      $("stateSt").textContent = on ? "새 세션이 여기서 시작한다" : "쓰지 않으면 새 세션은 이 상태를 모른다";
+      flds.forEach((f) => f.classList.toggle("on", on));
+      $("sessNext").textContent = "처음부터 다시";
+      $("sessHint").textContent = on ? "Worktrail 없이 시작하면 어떻게 되는지도 눌러 보세요" : "Worktrail로 시작하면 어떻게 되는지도 눌러 보세요";
+    }
+    $("sessLive").textContent = step === 2 && alt === "none"
+      ? "새 세션입니다. Worktrail 없이 시작하면 에이전트는 코드와 커밋에서 지난 작업을 다시 짐작해야 합니다."
+      : LIVE[step];
+  }
+  document.querySelectorAll(".step").forEach((b) => b.addEventListener("click", () => { step = Number(b.dataset.step); draw(); }));
+  document.querySelectorAll("#alt button").forEach((b) => b.addEventListener("click", () => { alt = b.dataset.alt; draw(); }));
+  $("sessNext").addEventListener("click", () => { step = (step + 1) % 3; if (step === 0) alt = "wt"; draw(); });
+  draw();
+
+  // ── 현황 / 회고 탭 ── 화살표로도 옮긴다
+  const tabs = [$("tabNow"), $("tabRev")], panes = [$("paneNow"), $("paneRev")];
+  const pick = (i, focus) => {
+    tabs.forEach((t, j) => { t.setAttribute("aria-selected", String(i === j)); t.tabIndex = i === j ? 0 : -1; panes[j].hidden = i !== j; });
+    if (focus) tabs[i].focus();
+  };
+  tabs.forEach((t, i) => {
+    t.addEventListener("click", () => pick(i));
+    t.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); pick((i + 1) % 2, true); }
+    });
+  });
+
+  // ── 명령 복사 ──
+  document.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", async () => {
+    const text = $(b.dataset.copy).textContent;
+    try { await navigator.clipboard.writeText(text); b.textContent = "복사됨"; b.classList.add("done"); }
+    catch { const r = document.createRange(); r.selectNodeContents($(b.dataset.copy)); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "선택됨"; }
+    setTimeout(() => { b.textContent = "복사"; b.classList.remove("done"); }, 1600);
+  }));
+
+  // 데모로 가는 길은 어느 단추로 나갔는지 접속 기록에서 셀 수 있게 ?from=landing 을 붙인다(/join 과 같은 방식).
+  document.querySelectorAll('a[data-go="demo"]').forEach((a) => { a.href = "../?from=landing"; });
+  document.querySelectorAll('a[href^="../#"]').forEach((a) => { a.href = a.getAttribute("href").replace("../#", "../?from=landing#"); });
+})();
+</script>
+</body>
+</html>

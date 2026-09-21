@@ -41,6 +41,7 @@ from casebook.adapters.ui_server import CONFIG_TAG, split_remote  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PAGE = ROOT / "web/worktrail/index.html"
+LANDING = ROOT / "web/landing/index.html"      # 소개 — 한국어 데모 폴더의 intro/ 로 간다
 TIMEOUT = 60
 CASE_KEYS = ("case", "conversation", "evidence", "turns")   # http_api.get_case 가 내보내는 부분집합
 
@@ -245,6 +246,11 @@ def build(get: Getter, page: str, out: pathlib.Path, masks: list[str], topics: l
     # 영어 기록에 한국어 상단바가 얹히는 화면이 된다(레딧에서 올 사람이 보는 것이 정확히 이것이다).
     (tmp / "index.html").write_text(page.replace(CONFIG_TAG, '<script>window.CASEBOOK_CONFIG={SNAPSHOT:"data",LANG:"%s"};</script>' % lang, 1),
                                     encoding="utf-8")
+    # 소개(랜딩) — 처음 온 사람이 "이게 무엇이고 왜 필요한가" 부터 읽는 자리. /demo/intro/ 로 나가고
+    # 데모 띠가 그리로 잇는다. 한국어로 쓰여 있으므로 한국어 데모에만 둔다(영어판에는 놓지 않는다).
+    if lang == "ko" and LANDING.is_file():
+        (tmp / "intro").mkdir()
+        shutil.copyfile(LANDING, tmp / "intro" / "index.html")
     lines = [f"# 사람이 볼 것 — {time.strftime('%Y-%m-%d %H:%M')}", "",
              "이메일 (기계는 안 가린다. 가릴 것은 --mask 파일에 한 줄씩 적고 다시 돌린다):"]
     for e, where in sorted(emails.items(), key=lambda kv: -sum(kv[1].values())):

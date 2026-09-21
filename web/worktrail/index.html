@@ -129,7 +129,8 @@
   .hd.big{font-weight:600;color:var(--c-text);font-size:15px;}
   .meta{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-text-3);white-space:nowrap;flex:none;}
   .meta .u{color:var(--c-text);} .meta .rp{color:var(--c-text);} .meta .fail{color:var(--c-text);font-weight:500;} .meta .re{color:var(--c-text);}
-  .meta .nk{color:var(--c-text);}
+  .meta .nk,.it summary > .nk{display:inline-flex;align-items:center;justify-content:center;min-height:18px;padding:1px 7px;border:1px solid color-mix(in srgb,var(--kc,var(--c-text)) 48%,transparent);border-radius:var(--r-pill);background:color-mix(in srgb,var(--kc,var(--c-text)) 10%,transparent);color:var(--kc,var(--c-text));font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.04em;line-height:1;}
+  .it summary > .nk{box-sizing:border-box;width:34px;padding-inline:4px;flex:none;} html[lang="en"] .it summary > .nk{width:58px;}
   .full:not(.now){margin:8px 0 6px 19px;font-size:var(--fs-small);color:var(--c-text-1);white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;}
   .full .why{margin-top:8px;color:var(--c-text-2);font-size:12.5px;border-left:2px solid var(--ln-2);padding-left:10px;}
   .full .ids{margin-top:8px;font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-3);}
@@ -175,23 +176,33 @@
   .chips .chip:hover{border-color:var(--ln-3);color:var(--c-text);background:var(--c-raise);} .chips .chip.on{border-color:var(--c-accent);color:var(--c-accent);background:var(--acc-tint);} .chips .chip.on .n{color:var(--c-accent);opacity:.7;}
   .drawer{margin-top:2px;}
   .drawer:not(.all) .extra{display:none;}
-  .drawer .more,.nsec .more{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-accent);padding:10px 2px 2px;border-top:1px solid var(--ln);cursor:pointer;transition:color var(--t-fast);} .drawer .more:hover,.nsec .more:hover{color:var(--c-accent-2);}
+  .drawer .more{font-family:var(--mono);font-size:var(--fs-mono);color:var(--c-accent);padding:10px 2px 2px;border-top:1px solid var(--ln);cursor:pointer;transition:color var(--t-fast);} .drawer .more:hover{color:var(--c-accent-2);}
   .drawer.all .more.open{display:none;} .drawer:not(.all) .more.fold{display:none;}
-  /* 노트 서랍 — 갈래별 섹션 */
-  .nsec{margin-top:6px;} .nsec + .nsec{margin-top:16px;}
-  .nsh{display:flex;gap:8px;align-items:baseline;padding:4px 0 4px;border-bottom:1px solid var(--ln-2);}
-  .nsh .kw{font-family:var(--mono);font-size:var(--fs-mono);letter-spacing:.08em;color:var(--c-text);white-space:nowrap;text-transform:uppercase;} .nsh .kw.old{color:var(--c-text-3);} .nsh .n{font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-3);}
+  /* 노트 서랍 — 시간축이 기본, 예전 갈래별 보기도 같은 데이터에서 고른다 */
+  .note-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:9px 0 4px;}
+  .note-views,.note-filters{display:flex;gap:6px;flex-wrap:wrap;}
+  .note-controls .kchip{cursor:pointer;margin:0;user-select:none;} .note-controls .kchip:hover{color:var(--c-text);border-color:var(--ln-3);}
+  .note-controls .kchip.kc{color:var(--kc,var(--c-text-2));border-color:color-mix(in srgb,var(--kc) 42%,transparent);}
+  .note-controls .kchip.kc.on{color:var(--kc);border-color:var(--kc);background:color-mix(in srgb,var(--kc) 9%,transparent);}
+  .notes-list{margin-top:6px;}
+  .notes-list > .more{border-top:1px solid var(--ln);border-bottom:none;padding:10px 2px 2px;margin-top:2px;}
   .ntrow{padding:2px 0;border-top:1px solid var(--ln);} .ntrow:first-of-type{border-top:none;} .ntrow .it{border-top:none;padding:5px 0;}
+  .ntrow.hide,.nsec.hide{display:none;} .notes-drawer.filtered .more{display:none;}
+  .nsec{margin-top:6px;} .nsec + .nsec{margin-top:16px;}
+  .nsh{display:flex;gap:8px;align-items:center;padding:4px 0 6px;border-bottom:1px solid var(--ln-2);}
+  .nsh .kw{display:inline-flex;align-items:center;min-height:20px;padding:1px 8px;border:1px solid color-mix(in srgb,var(--kc,var(--c-text-3)) 48%,transparent);border-radius:var(--r-pill);background:color-mix(in srgb,var(--kc,var(--c-text)) 10%,transparent);font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--kc,var(--c-text-2));white-space:nowrap;text-transform:uppercase;}
+  .nsh .kw.old{color:var(--c-text-3);background:transparent;} .nsh .n{font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-3);}
   .nsec:not(.all) .xtra{display:none;} .nsec.all .more.open{display:none;} .nsec:not(.all) .more.fold{display:none;}
+  .notes-drawer.filtered .nsec .xtra{display:block;}
   .focusp{margin-top:16px;max-width:760px;font-size:var(--fs-body);color:var(--c-text-1);line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty;padding-left:14px;border-left:2px solid var(--ln-2);} .focusp .meta{display:block;margin-top:6px;}
   /* 움직임 — 서랍이 떠오르고, 더 보기로 나온 줄이 차례로 오고, 칩 색이 미끄러진다 */
   @keyframes wtRise{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}
   .drawer:not([hidden]){animation:wtRise var(--t) var(--ease) both;}
-  .drawer:not([hidden]) .nsec,.drawer:not([hidden]) .lrow:not(.extra),.drawer:not([hidden]) > .it,.drawer:not([hidden]) > .rr{animation:wtRise .28s var(--ease) both;}
-  .drawer:not([hidden]) .nsec:nth-child(3),.drawer:not([hidden]) .lrow:nth-child(3),.drawer:not([hidden]) > .rr:nth-child(3){animation-delay:.05s;}
-  .drawer:not([hidden]) .nsec:nth-child(4),.drawer:not([hidden]) .lrow:nth-child(4),.drawer:not([hidden]) > .rr:nth-child(4){animation-delay:.1s;}
-  .drawer:not([hidden]) .nsec:nth-child(n+5),.drawer:not([hidden]) .lrow:nth-child(n+5),.drawer:not([hidden]) > .rr:nth-child(n+5){animation-delay:.14s;}
-  .drawer.all .extra,.nsec.all .xtra{animation:wtRise .2s var(--ease) both;}
+  .drawer:not([hidden]) .ntrow,.drawer:not([hidden]) .lrow:not(.extra),.drawer:not([hidden]) > .it,.drawer:not([hidden]) > .rr{animation:wtRise .28s var(--ease) both;}
+  .drawer:not([hidden]) .ntrow:nth-child(3),.drawer:not([hidden]) .lrow:nth-child(3),.drawer:not([hidden]) > .rr:nth-child(3){animation-delay:.05s;}
+  .drawer:not([hidden]) .ntrow:nth-child(4),.drawer:not([hidden]) .lrow:nth-child(4),.drawer:not([hidden]) > .rr:nth-child(4){animation-delay:.1s;}
+  .drawer:not([hidden]) .ntrow:nth-child(n+5),.drawer:not([hidden]) .lrow:nth-child(n+5),.drawer:not([hidden]) > .rr:nth-child(n+5){animation-delay:.14s;}
+  .drawer.all .extra{animation:wtRise .2s var(--ease) both;}
   .drawer.all .extra:nth-of-type(n+5){animation-delay:.03s;} .drawer.all .extra:nth-of-type(n+6){animation-delay:.06s;} .drawer.all .extra:nth-of-type(n+7){animation-delay:.09s;} .drawer.all .extra:nth-of-type(n+8){animation-delay:.12s;} .drawer.all .extra:nth-of-type(n+10){animation-delay:.15s;}
   .chips .chip{transition:border-color var(--t-fast),color var(--t-fast),background-color var(--t-fast);} .lrow .why{animation:wtRise .16s var(--ease);} .it[open] > .full,.rr[open] > .full,details.sec[open] > pre{animation:wtRise .16s var(--ease);}
 
@@ -232,6 +243,8 @@
     transition:background var(--t-fast),border-color var(--t-fast);}
   .demo-note .cta a:hover{background:var(--sel-2);border-color:var(--c-accent-2);color:var(--c-accent-2);}
   .demo-note .cta .lead{font-size:var(--fs-meta);color:var(--c-text-2);}
+  /* 소개 페이지로 가는 길 — 데모를 처음 연 사람이 "이게 뭔지" 부터 읽을 자리. 한국어 데모에만 있다(랜딩이 한국어다). */
+  .demo-note .intro{flex:none;font-size:var(--fs-small);white-space:nowrap;}
   .tab{border:1px solid var(--ln-2);border-radius:var(--r-pill);padding:6px 14px;font-size:var(--fs-small);color:var(--c-text-2);cursor:pointer;background:none;transition:border-color var(--t-fast),color var(--t-fast);}
   .tab:hover{border-color:var(--ln-3);color:var(--c-text);} .tab.on{border-color:var(--c-accent);color:var(--c-accent);background:var(--acc-tint);}
   .tab .n{font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-2);margin-left:7px;}
@@ -629,6 +642,7 @@
 <div class="demo-note">
   <div class="in">
     <span class="what"><b>Worktrail</b> — AI 코딩 에이전트가 일하며 남긴 작업 기록입니다. 무엇을 정했고(결정), 무엇을 보고 정했는지(증거)가 따로 남아, 다음 세션이 코드에서 추측하지 않습니다.</span>
+    <a class="intro" id="demoIntro" href="intro/" hidden></a>
     <span class="fake">이 데모의 기록은 지어낸 것입니다 · 가상 팀의 커머스 백엔드 4주치</span>
     <span class="cta">
       <span class="lead" id="demoCtaLead"></span>
@@ -701,7 +715,7 @@
     "이 스레드 것과 충돌하면 화면이 고르지 않는다.": "If these clash with this thread's own, the screen does not pick one.",
     "목록 펼치기": "Show the list",
     "내 차례 · 미정 · 에이전트 · 관찰 · 최근순": "my turn · unset · agent · watching · most recent",
-    "최근 종료순": "most recently closed", "종류": "kind", "촘촘": "dense", "넉넉": "roomy", "오래된 순": "oldest first", "최신 순": "newest first",
+    "최근 종료순": "most recently closed", "종류": "kind", "시간순": "timeline", "종류별": "by kind", "촘촘": "dense", "넉넉": "roomy", "오래된 순": "oldest first", "최신 순": "newest first",
     "모두 보는 중": "showing all", "모두 보기": "show all", "보일 사건이 없다": "nothing to show",
     "결정·질문 없음": "no decisions or questions", "사건": "events", "외": "more",
     "주제별": "by topic", "전체 기록": "all records", "필터": "filters",
@@ -851,6 +865,10 @@
   const PHASE_KO = { mine: "내 차례", agent: "에이전트에게", watch: "관찰 중", unset: "미정", closed: "종료" };
   // 확장 60호 — 노트의 갈래(D14720): 에이전트가 붙인 것만 그 말로, 옛 노트는 "노트" 그대로
   const NOTE_KO = { change: "바꿈", verified: "확인", finding: "발견", thought: "생각" };
+  function noteTimeline(notes, limit = 6) {
+    const ordered = [...(notes || [])].sort((a, b) => (b.at || 0) - (a.at || 0) || (b.turn || 0) - (a.turn || 0));
+    return ordered.map((note, index) => ({ ...note, older: index >= limit }));
+  }
   const kindLabel = (e) => tr(e.kind === "closed" && e.later ? "결과" : e.kind === "note" && NOTE_KO[e.note_kind] ? NOTE_KO[e.note_kind] : (KIND_KO[e.kind] || e.kind));   // 확장 48호 — 닫은 뒤 붙인 결과는 "결과" 로
   const TOPIC_KO = { active: "진행", quiet: "휴면", done: "완료" };
   const OWNER_KO = { agent: "에이전트", codex: "Codex", claude: "Claude", gpt: "GPT" };
@@ -1135,7 +1153,8 @@
     if (o.at) bits.push(`<span title="${fmtAbs(o.at)}">${when(o.at)}</span>`);
     if (o.authority === "user") bits.push(`<span class="u">user</span>`);
     if (o.scope === "repo") bits.push(`<span class="rp">repo${o.from ? " #" + o.from : ""}</span>`);
-    if (o.tag) bits.push(`<span class="${o.tag.cls}">${o.tag.text}</span>`);
+    if (o.tag && !o.leadTag) bits.push(`<span class="${o.tag.cls}">${o.tag.text}</span>`);
+    const leadTag = o.tag && o.leadTag ? `<span class="${o.tag.cls}">${o.tag.text}</span>` : "";
     const meta = bits.length ? `<span class="meta">${bits.join(" · ")}</span>` : "";
     const idsHtml = (o.ids ? esc(o.ids) : "") + (o.ev ? evTail(o.ev.case, o.ev.ids, !!o.ids) : "");
     const hasMore = more || o.reason || idsHtml;
@@ -1146,7 +1165,7 @@
     const bodyText = o.body ? (nl > 0 ? raw.slice(nl + 1).trim() : (more ? raw.slice(head.length - (head.endsWith("…") ? 1 : 0)).trim() : "")) : "";
     const bodyHtml = bodyText ? `<span class="bd">${md(bodyText)}</span>` : "";
     const obsHtml = o.obs ? `<span class="obs"><span class="ol">${tr("관찰")}</span>${esc(o.obs)}</span>` : "";
-    return `<details class="it ${hasMore ? "" : "flat"} ${o.cls || ""} ${bodyHtml || obsHtml ? "rd" : ""}"${o.key ? ` data-key="${esc(o.key)}"` : ""}><summary><span class="hd ${o.big ? "big" : ""}">${md(head)}</span>${meta}${bodyHtml}${obsHtml}</summary>${full}</details>`;
+    return `<details class="it ${hasMore ? "" : "flat"} ${o.cls || ""} ${bodyHtml || obsHtml ? "rd" : ""}"${o.key ? ` data-key="${esc(o.key)}"` : ""}><summary>${leadTag}<span class="hd ${o.big ? "big" : ""}">${md(head)}</span>${meta}${bodyHtml}${obsHtml}</summary>${full}</details>`;
   }
 
   const items = (list, kind, here) => list.length
@@ -1260,21 +1279,34 @@
     //   사용자: 시안(cmem 뷰어)이 "어지러워서 안 읽고 넘어옴" — 한 화면에 큰 소리는 하나, 나머지는 눌러야 나온다.
     const LOG_FIRST = 3;
     const logRows = [...decisions, ...supDecisions].sort(byTime);
-    // 확장 60호 — 노트 서랍(D14720): 갈래 말 + 결론 첫 줄, 최근 3개, 나머지는 "더 보기". 옛 노트는 "노트". 사용자 2026-09-12 "기록이 어디 된 거임?"
+    // 노트 서랍: 시간순이 기본이지만, 예전 갈래별 보기도 같은 원장에서 즉시 고를 수 있다.
     const notes = s.notes || [];
     const kindCount = notes.reduce((m, e) => { const k = NOTE_KO[e.note_kind] || "노트"; m[k] = (m[k] || 0) + 1; return m; }, {});
     const noteKindCounts = Object.entries(kindCount).filter(([k]) => k !== "노트").map(([k, v]) => `${tr(k)} ${v}`).join(" · ");
     const NOTE_KIND_OF = Object.fromEntries(Object.entries(NOTE_KO).map(([k, v]) => [v, k]));   // 65호 — 갈래 말 → 갈래 (색 클래스용)
     const noteKindHtml = Object.entries(kindCount).filter(([k]) => k !== "노트").map(([k, v]) => `<span class="kc kc-n-${NOTE_KIND_OF[k]}">${tr(k)} ${v}</span>`).join(" · ");
-    const noteRow = (e, extra) => `<div class="ntrow ${extra ? "xtra" : ""}">${entry(e.text, { key: `N${e.turn}`, body: !extra, obs: !extra && e.observed ? e.observed : null, at: e.at, reason: e.observed ? tr("관찰: ") + e.observed : null, ids: `turn ${e.turn} · evidence #${e.evidence_id}${e.client ? " · " + e.client : ""}`, ev: { case: e.case_id, ids: e.evidence_ids } })}</div>`;
-    // 확장 61호 — 갈래별 섹션(D14738): 바꿈 · 확인 · 발견 · 생각 · 노트(옛 것) 순, 섹션마다 최근 3개 → 더 보기. 비어 있는 갈래는 안 보인다.
-    const NOTE_ORDER = ["change", "verified", "finding", "thought", null];
+    const NOTE_FIRST = 6;
+    const noteRows = noteTimeline(notes, NOTE_FIRST);
+    const olderNotes = Math.max(0, notes.length - NOTE_FIRST);
+    const noteFilterKeys = ["change", "verified", "finding", "thought", null].filter((k) => notes.some((e) => (NOTE_KO[e.note_kind] ? e.note_kind : null) === k));
+    const noteFilters = `<div class="note-filters"><span class="kchip on" data-nk="all">${tr("전체")} ${notes.length}</span>${noteFilterKeys.map((k) => {
+      const count = notes.filter((e) => (NOTE_KO[e.note_kind] ? e.note_kind : null) === k).length;
+      return `<span class="kchip ${k ? "kc kc-n-" + k : ""}" data-nk="${k || "old"}">${tr(k ? NOTE_KO[k] : "노트")} ${count}</span>`;
+    }).join("")}</div>`;
+    const noteControls = notes.length ? `<div class="note-controls"><div class="note-views"><span class="kchip on" data-nview="timeline">${tr("시간순")}</span><span class="kchip" data-nview="grouped">${tr("종류별")}</span></div>${noteFilters}</div>` : "";
+    const noteRow = (e, extraClass = "", readable = true) => {
+      const k = NOTE_KO[e.note_kind] ? e.note_kind : null;
+      return `<div class="ntrow ${extraClass}" data-nk="${k || "old"}">${entry(e.text, { key: `N${e.turn}`, body: readable, obs: readable && e.observed ? e.observed : null, at: e.at, tag: { cls: `nk ${k ? "kc-n-" + k : ""}`, text: tr(k ? NOTE_KO[k] : "노트") }, leadTag: true, reason: e.observed ? tr("관찰: ") + e.observed : null, ids: `turn ${e.turn} · evidence #${e.evidence_id}${e.client ? " · " + e.client : ""}`, ev: { case: e.case_id, ids: e.evidence_ids } })}</div>`;
+    };
+    const timelineHtml = `<div class="note-panel notes-list" data-nview="timeline">${noteRows.map((e) => noteRow(e, e.older ? "extra" : "", !e.older)).join("")}${olderNotes ? `<div class="more open">${LANG === "en" ? `Show ${olderNotes} earlier notes` : `이전 노트 ${olderNotes}개 보기`}</div><div class="more fold">${fewer(NOTE_FIRST)}</div>` : ""}</div>`;
+    const NOTE_ORDER = ["change", "verified", "finding", "thought", null], NOTE_GROUP_FIRST = 3;
+    const groupedHtml = `<div class="note-panel note-groups" data-nview="grouped" hidden>${NOTE_ORDER.map((k) => {
+      const rows = notes.filter((e) => (NOTE_KO[e.note_kind] ? e.note_kind : null) === k);
+      if (!rows.length) return "";
+      return `<div class="nsec" data-nk="${k || "old"}"><div class="nsh"><span class="kw ${k ? "kc kc-n-" + k : "old"}">${tr(k ? NOTE_KO[k] : "노트")}</span><span class="n">${rows.length}${k ? "" : " · " + tr("갈래 없는 옛 노트")}</span></div>${rows.map((e, i) => noteRow(e, i >= NOTE_GROUP_FIRST ? "xtra" : "", i < NOTE_GROUP_FIRST)).join("")}${rows.length > NOTE_GROUP_FIRST ? `<div class="more open">${more(rows.length - NOTE_GROUP_FIRST)}</div><div class="more fold">${fewer(NOTE_GROUP_FIRST)}</div>` : ""}</div>`;
+    }).join("")}</div>`;
     const notesHtml = notes.length
-      ? NOTE_ORDER.map((k) => {
-          const rows = notes.filter((e) => (NOTE_KO[e.note_kind] ? e.note_kind : null) === k);
-          if (!rows.length) return "";
-          return `<div class="nsec"><div class="nsh"><span class="kw ${k ? "kc kdot kc-n-" + k : "old"}">${tr(k ? NOTE_KO[k] : "노트")}</span><span class="n">${rows.length}${k ? "" : " · " + tr("갈래 없는 옛 노트")}</span></div>${rows.map((e, i) => noteRow(e, i >= LOG_FIRST)).join("")}${rows.length > LOG_FIRST ? `<div class="more open">${more(rows.length - LOG_FIRST)}</div><div class="more fold">${fewer(LOG_FIRST)}</div>` : ""}</div>`;
-        }).join("")
+      ? timelineHtml + groupedHtml
       : `<div class="empty">노트 없음</div>`;
     const openHtml = s.open ? entry(s.open.statement, { key: "open", at: s.open.declared_at, authority: s.open.authority, ids: `#${s.open.id}${s.open.supersedes ? " · 이전 #" + s.open.supersedes : ""}` }) : "";
     const moreByDay = Object.entries(logRows.slice(LOG_FIRST).reduce((m, x) => { const k = mmdd(x.recorded_at); m[k] = (m[k] || 0) + 1; return m; }, {})).map(([k, v]) => `${tr(k)} ${v}`).join(" · ");
@@ -1314,7 +1346,7 @@
           <div class="drawer sec" data-d="rules" hidden><div class="label">rules <span class="n">${nCon ? `${tr("이 스레드")} ${nCon}` : tr("이 스레드 것 없음")}</span></div><div class="many">${nCon ? items(constraints, "constraint", s.case_id) : ""}${repoBlock(repoConstraints, "constraint")}${supBlock(supConstraints, "constraint")}</div></div>
           ${nRo ? `<div class="drawer sec" data-d="ro" hidden><div class="label">${tr("배제")} <span class="n">${nRo}</span></div>${(s.ruled_out || []).map((x) => entry(x.hypothesis, { key: `R${x.ruled_out_id}`, at: x.recorded_at, scope: x.scope === "repo" ? "repo" : null, ids: `R${x.ruled_out_id}`, ev: { case: s.case_id, ids: x.evidence_ids } })).join("")}</div>` : ""}
           <div class="drawer sec" data-d="commits" hidden><div class="label">${tr("커밋")} <span class="n">${nCommit} · ${tr("이 스레드에 붙은 것")}</span></div>${commits}</div>
-          <div class="drawer sec" data-d="notes" hidden><div class="label">${tr("노트")} <span class="n">${notes.length}${noteKindCounts ? ` · ${noteKindCounts}` : ""}${kindCount["노트"] && noteKindCounts ? ` · ${tr("갈래 없음")} ${kindCount["노트"]}` : ""}</span><span class="scopehint">${evidenceN(s.evidence_count)} · <a href="#/threads/${s.case_id}/evidence">${tr("원문 전부 보기")} →</a></span></div>${notesHtml}</div>
+          <div class="drawer sec notes-drawer" data-d="notes" hidden><div class="label">${tr("노트")} <span class="n">${notes.length}${noteKindCounts ? ` · ${noteKindCounts}` : ""}${kindCount["노트"] && noteKindCounts ? ` · ${tr("갈래 없음")} ${kindCount["노트"]}` : ""}</span><span class="scopehint">${evidenceN(s.evidence_count)} · <a href="#/threads/${s.case_id}/evidence">${tr("원문 전부 보기")} →</a></span></div>${noteControls}${notesHtml}</div>
           ${s.open ? `<div class="drawer sec" data-d="open" hidden><div class="label">${tr("미결")} <span class="n">${tr("아직 풀리지 않은 것 — 선언")}</span></div>${openHtml}</div>` : ""}
           <div class="drawer sec" data-d="anchor" hidden><div class="label">anchor <span class="n">${tr("이 스레드가 붙은 자리")}</span></div><div class="anc">${esc(shortRepo(repoName)) || "—"} · ${folderHtml}</div></div>
         </div>
@@ -1328,7 +1360,26 @@
     chipEls.forEach((c) => c.addEventListener("click", () => openDrawer(c.classList.contains("on") ? null : c.dataset.d)));
     openDrawer(firstDrawer);
     const logEl = view.querySelector(".log");
-    view.querySelectorAll(".drawer .more").forEach((m) => m.addEventListener("click", () => (m.closest(".nsec") || m.closest(".drawer")).classList.toggle("all")));   // 60호 — 노트 서랍도 같은 더 보기
+    view.querySelectorAll(".drawer .more").forEach((m) => m.addEventListener("click", () => (m.closest(".nsec") || m.closest(".drawer")).classList.toggle("all")));
+    const notesEl = view.querySelector(".notes-drawer");
+    const noteState = { view: "timeline", kind: "all" };
+    const applyNoteView = (mode) => {
+      if (!notesEl) return;
+      noteState.view = mode;
+      notesEl.querySelectorAll(".note-panel").forEach((panel) => { panel.hidden = panel.dataset.nview !== mode; });
+      notesEl.querySelectorAll(".note-views .kchip").forEach((chip) => chip.classList.toggle("on", chip.dataset.nview === mode));
+    };
+    const applyNoteFilter = (kind) => {
+      if (!notesEl) return;
+      noteState.kind = kind;
+      notesEl.classList.toggle("filtered", kind !== "all");
+      notesEl.classList.toggle("all", kind !== "all");
+      notesEl.querySelectorAll(".ntrow").forEach((row) => row.classList.toggle("hide", kind !== "all" && row.dataset.nk !== kind));
+      notesEl.querySelectorAll(".nsec").forEach((sec) => sec.classList.toggle("hide", kind !== "all" && sec.dataset.nk !== kind));
+      notesEl.querySelectorAll(".note-filters .kchip").forEach((chip) => chip.classList.toggle("on", chip.dataset.nk === kind));
+    };
+    view.querySelectorAll(".note-views .kchip").forEach((chip) => chip.addEventListener("click", () => applyNoteView(chip.dataset.nview)));
+    view.querySelectorAll(".note-filters .kchip").forEach((chip) => chip.addEventListener("click", () => applyNoteFilter(chip.dataset.nk)));
     const logF = { who: "all", nosup: false };
     const applyLog = () => view.querySelectorAll(".lrow").forEach((r) => r.classList.toggle("hide", (logF.who !== "all" && r.dataset.who !== logF.who) || (logF.nosup && r.dataset.sup === "1")));
     view.querySelectorAll(".log .kchip").forEach((c) => c.addEventListener("click", () => {
@@ -2066,6 +2117,9 @@
       // 확장 141호 — 우리 서버를 한 번 거쳐 나간다(Caddy 가 302). 그래야 몇 명이 눌렀는지 접속 기록에 남는다.
       src.href = LANG === "en" ? "/go/plugin" : "/go/plugin-ko";
     }
+    // 소개(랜딩)는 한국어 데모 폴더에만 놓인다(tools/demo_snapshot.py 가 intro/ 로). 영어 화면으로 바꾸면 숨긴다.
+    const intro = $("demoIntro");
+    if (intro) { intro.hidden = !(SNAP && CFG.LANG === "ko" && LANG === "ko"); intro.textContent = "Worktrail 소개 보기 →"; }
     if (fake) fake.textContent = LANG === "en"
       ? "Every record here is made up · a fictional team's commerce backend, four weeks"
       : (CFG.LANG === "ko"

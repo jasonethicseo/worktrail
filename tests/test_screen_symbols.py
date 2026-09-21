@@ -66,6 +66,51 @@ def test_번역_함수_이름이_한_가지다():
     assert not re.search(r"[^\w$.]t\(\"[가-힣]", js), "t(\"한국어\") 꼴 호출이 남아 있다"
 
 
+def test_노트_타임라인은_최신부터_쌓고_오래된_것을_뒤로_둔다():
+    """새 노트는 위에 쌓고, 제한을 넘은 과거 노트만 처음에 숨긴다."""
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 없음")
+    js = _js()
+    start = js.index("function noteTimeline")
+    end = js.index("\n  }", start) + len("\n  }")
+    helper = js[start:end]
+    harness = helper + """
+const notes = [
+  { turn: 3, at: 30 },
+  { turn: 1, at: 10 },
+  { turn: 2, at: 20 }
+];
+console.log(JSON.stringify(noteTimeline(notes, 2).map((n) => [n.turn, n.older])));
+"""
+    out = subprocess.run([node, "-e", harness], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout) == [[3, False], [2, False], [1, True]]
+
+
+def test_노트는_시간순과_종류별_보기를_오갈_수_있다():
+    """기억 복원용 시간축과 예전 갈래별 화면을 같은 노트 원장에서 고른다."""
+    js = _js()
+    assert 'data-nview="timeline"' in js
+    assert 'data-nview="grouped"' in js
+    assert "const applyNoteView" in js
+    assert '.meta .nk,.it summary > .nk{display:inline-flex' in PAGE.read_text()
+
+
+def test_노트_종류_칩은_제목보다_먼저_읽힌다():
+    """노트만 종류→내용→시점 순서이고, 다른 entry 메타 배치는 그대로 둔다."""
+    page = PAGE.read_text()
+    assert "leadTag: true" in page
+    assert '<summary>${leadTag}<span class="hd ' in page
+    assert '.it summary > .nk{box-sizing:border-box;width:34px' in page
+
+
 def test_사전_열쇠가_망가지지_않았다():
     """일괄 치환이 사전의 열쇠 자체를 tr(\"…\") 로 바꿔 문법 오류를 낸 적이 있다."""
     js = _js()

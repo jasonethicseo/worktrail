@@ -32,6 +32,7 @@ tools/release.sh
 
 # 화면
 web/join/
+web/landing/
 web/worktrail/
 
 # Claude Code 플러그인 — 공개 저장소 루트가 곧 플러그인이자 마켓이다(#541)
