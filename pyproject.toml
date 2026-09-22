@@ -1,11 +1,13 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "casebook"
 version = "0.1.0"
 description = "Casebook Copilot — Xano 백엔드의 로컬 재현본. 재설계 없는 1:1 이식."
+license = "FSL-1.1-ALv2"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = ["fastapi>=0.139,<0.140", "uvicorn>=0.51,<0.52"]
 
