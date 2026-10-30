@@ -13,5 +13,7 @@ def test_안내문이_claude_code_상한_안이다():
 def test_안내문에_핵심_규칙이_남아_있다():
     # 잘라내며 잃으면 안 되는 문장들 — 캡처 규칙 · 해석/증거 분리 · handoff 조건 · durable state 경계 · 읽기 층 한 줄
     for must in ("there is no turn", "not evidence", "handoff only when the engineer asks",
-                 "what could overturn it", "scope where that holds", "retrieval, not conclusion"):
+                 "what could overturn it", "scope where that holds", "retrieval, not conclusion",
+                 # 훅 없는 호스트(Codex) 몫 (2026-10-30) — trial-5 에서 고쳐 쓰는 md 를 통째로 17번 넣어 원문 282KB 의 93%였다
+                 "No session-start hook", "settled nothing", "only the new part"):
         assert must in INSTRUCTIONS, must

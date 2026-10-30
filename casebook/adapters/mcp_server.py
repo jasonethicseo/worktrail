@@ -45,36 +45,37 @@ except ModuleNotFoundError:   # 코어 테스트는 mcp 없이 돈다; build_ser
     Context = Any  # type: ignore[misc,assignment]
 
 INSTRUCTIONS = """Worktrail keeps a durable, byte-exact record of engineering work so the next session or agent can
-pick it up without guessing from the code.
+pick it up without guessing.
+
+No session-start hook (e.g. Codex)? Call resume (or list_threads) first, before any other work.
 
 Unit of work: a thread — one question or change in one repository, followed to the end. Deciding and
-building are ONE thread (re-declare focus); open a new one only when the question changes. list_threads
-first. open_thread(focus, topic) starts and binds one; switch_thread / close_thread change it;
-declare(focus|open|next) keeps it current.
+building are ONE thread (re-declare focus); open a new one only when the question changes.
+open_thread / switch_thread / close_thread; declare(focus|open|next) keeps it current.
 
-When to record:
+When to record — before you end each reply, record only what it settled;
+skip a reply that settled nothing (not every reply).
 - A turn is when the machine told you something that changed what you would do next — a test result,
-  an error, a measurement, a diff. Record the raw output as evidence and your conclusion from it. If
-  nothing new was observed, there is no turn.
+  an error, a diff. Record the raw output as evidence and your conclusion. If nothing new was
+  observed, there is no turn.
 - Keep raw evidence sparse: what grounded a decision or is hard to reproduce; if git or a file holds
-  it, reference it.
-- Your conclusions are interpretation, not evidence — evidence is only what the machine or engineer
-  actually said.
+  it, reference it. A document you keep rewriting (Q&A notes, analysis, design .md) is not evidence:
+  reference its path; when the engineer adds to it, add_evidence only the new part, verbatim.
+- Your conclusions are interpretation, not evidence.
 
 add_evidence / add_evidence_file take raw material VERBATIM — never paraphrase or trim.
-note_turn(kind=change|verified|finding|thought) after each step: what was observed, what you concluded.
-handoff only when the engineer asks where things stand — never to refresh your own memory.
+note_turn(kind=change|verified|finding|thought): what you observed and concluded.
+handoff only when the engineer asks where things stand.
 First line of every statement = its title: ≤120 columns (CJK=2), no ' — ', no record numbers (#517,
-D15635, turn 80, commit hash) — numbers go in the body or evidence_ids, else refused.
-A next for the user is written to them, not about them.
+hash) — those go in the body. A next for the user is written to them.
 
-Durable state — the boundary is "what could overturn it": a hypothesis (the world can still contradict
-it) stays in note_turn, never in decide. A decision or constraint (only the engineer can change it) goes
-to decide/constrain with authority, and is superseded, not edited. rule_out needs the evidence that
-killed the hypothesis AND the scope where that holds.
+Durable state — the boundary is "what could overturn it": a hypothesis stays in note_turn, never in
+decide. A decision or constraint (only the engineer can change it) goes to decide/constrain with
+authority, superseded, not edited. rule_out needs the evidence that killed the hypothesis AND the
+scope where that holds.
 
-resume = the state now. Pull the past when needed: find(query) → trail(case_id) → inspect(ref).
-Notes there are interpretation; a hit is retrieval, not conclusion."""
+resume = the state now. The past: find(query) → trail(case_id) → inspect(ref);
+a hit is retrieval, not conclusion."""
 
 def _first_line(text: str | None, limit: int = 100) -> str:
     """기록의 첫 줄(= 제목). 규칙이 서기 전의 옛 기록은 길어서 자른다."""
@@ -729,7 +730,7 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
         return T(ctx).open_case(title)
 
     # ── 스레드 층 (확장 15호) ──
-    @server.tool(name="list_threads", description="This worktree's current thread and the threads of its repository, one line each (open first, most recent activity first): title (the focus's first line), turns, updated_at, and for open threads the declared next's first line with its owner. Closed threads are only counted (closed.count, closed.needs_result) unless include_closed=true. needs_result means the engineer closed it from the screen without a result line; when they ask you to tidy up, call list_threads(include_closed=true), read each thread marked needs_result and fill it with close_thread(case_id, result). For one thread's full state use resume(case_id). Call it first in a session; pass worktree (absolute path) when you are not in the server's cwd. From a chat client (no repository) it also lists open work across all repositories.")
+    @server.tool(name="list_threads", description="This worktree's current thread and the threads of its repository, one line each (open first, most recent activity first): title (the focus's first line), turns, updated_at, and for open threads the declared next's first line with its owner. Closed threads are only counted (closed.count, closed.needs_result) unless include_closed=true. needs_result means the engineer closed it from the screen without a result line; when they ask you to tidy up, call list_threads(include_closed=true), read each thread marked needs_result and fill it with close_thread(case_id, result). For one thread's full state use resume(case_id). Call it (or resume) first in a session, before any other work — always when the host has no session-start hook (e.g. Codex); pass worktree (absolute path) when you are not in the server's cwd. From a chat client (no repository) it also lists open work across all repositories.")
     def list_threads(ctx: Context, worktree: str | None = None, facts: dict | None = None, include_closed: bool = False) -> dict:
         return T(ctx).list_threads(worktree, facts, include_closed)
 
@@ -778,7 +779,7 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
         with _request_context(request_id_from(ctx)):
             return _guard(T(ctx).add_evidence)(case_id, text, client or client_from_ctx(ctx))
 
-    @server.tool(name="add_evidence_file", description="Store a file's contents as evidence, read directly by the server (no need to repeat the text). Use for log files, command output saved to a file, configs. Absolute or ~ path. Not available over the remote door (chat clients) — use add_evidence.")
+    @server.tool(name="add_evidence_file", description="Store a file's contents as evidence, read directly by the server (no need to repeat the text). Use for log files, command output saved to a file, configs. A document you keep rewriting (Q&A notes, analysis, design .md) is not evidence: reference its path instead, and when the engineer adds to it, add_evidence only the new part, verbatim — never store the whole file again. Absolute or ~ path. Not available over the remote door (chat clients) — use add_evidence.")
     def add_evidence_file(case_id: int, path: str, ctx: Context) -> str:
         return _guard(T(ctx).add_evidence_file)(case_id, path)
 
@@ -821,7 +822,7 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     def rule_out(case_id: int, hypothesis: str, scope: str, evidence_ids: list[int], ctx: Context) -> str:
         return _guard(T(ctx).rule_out)(case_id, hypothesis, scope, evidence_ids)
 
-    @server.tool(name="resume", description="Pick a thread up in a new session. Durable state as it stands now, seven fields: focus · anchor (live git of this worktree: branch, HEAD, dirty) · constraints · decisions (with reason and authority) · open (unresolved) · next (actions) · evidence_refs — plus repo_state (repo-scope constraints/decisions shared by every thread of the repository, titles and numbers only — inspect(ref) for the full text; if one conflicts with the thread's own, both are shown, nothing is resolved for you). mode='fresh' omits decisions and ruled-outs. Never includes how it got here: pull that with trail(case_id) or find(query) when you need it.")
+    @server.tool(name="resume", description="Pick a thread up in a new session. When the host has no session-start hook (e.g. Codex), call it (or list_threads) first, before any other work. Durable state as it stands now, seven fields: focus · anchor (live git of this worktree: branch, HEAD, dirty) · constraints · decisions (with reason and authority) · open (unresolved) · next (actions) · evidence_refs — plus repo_state (repo-scope constraints/decisions shared by every thread of the repository, titles and numbers only — inspect(ref) for the full text; if one conflicts with the thread's own, both are shown, nothing is resolved for you). mode='fresh' omits decisions and ruled-outs. Never includes how it got here: pull that with trail(case_id) or find(query) when you need it.")
     def resume(case_id: int, ctx: Context, mode: str = "continuity", worktree: str | None = None, facts: dict | None = None) -> dict:
         return _guard(T(ctx).resume)(case_id, mode, worktree, facts)
 
