@@ -42,6 +42,9 @@ from casebook.adapters.ui_server import CONFIG_TAG, split_remote  # noqa: E402
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PAGE = ROOT / "web/worktrail/index.html"
 LANDING = ROOT / "web/landing/index.html"      # 소개 — 한국어 데모 폴더의 intro/ 로 간다
+FILM = ROOT / "web/landing/film"               # 소개 영상 — intro/film/ 로 간다
+DOCS = ROOT / "web/landing/docs/index.html"    # 사용 문서 — intro/docs/ 로 간다
+FILM_FILES = ("worktrail-restore.mp4", "restore-poster.jpg", "worktrail-live.mp4", "live-poster.jpg")
 TIMEOUT = 60
 CASE_KEYS = ("case", "conversation", "evidence", "turns")   # http_api.get_case 가 내보내는 부분집합
 
@@ -251,6 +254,15 @@ def build(get: Getter, page: str, out: pathlib.Path, masks: list[str], topics: l
     if lang == "ko" and LANDING.is_file():
         (tmp / "intro").mkdir()
         shutil.copyfile(LANDING, tmp / "intro" / "index.html")
+        # 소개 영상 — 구운 결과(mp4·포스터)만 싣는다. 원본 필름과 굽는 도구는 저장소에만 둔다.
+        (tmp / "intro" / "film").mkdir()
+        for name in FILM_FILES:
+            if (FILM / name).is_file():
+                shutil.copyfile(FILM / name, tmp / "intro" / "film" / name)
+        # 사용 문서 — 소개 옆 문서(여러 쪽을 담은 한 파일). 소개가 "어떻게 쓰나" 로 넘기는 자리라 같은 폴더 아래에 둔다.
+        if DOCS.is_file():
+            (tmp / "intro" / "docs").mkdir()
+            shutil.copyfile(DOCS, tmp / "intro" / "docs" / "index.html")
     lines = [f"# 사람이 볼 것 — {time.strftime('%Y-%m-%d %H:%M')}", "",
              "이메일 (기계는 안 가린다. 가릴 것은 --mask 파일에 한 줄씩 적고 다시 돌린다):"]
     for e, where in sorted(emails.items(), key=lambda kv: -sum(kv[1].values())):

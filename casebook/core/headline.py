@@ -39,7 +39,11 @@ TAG_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("turn N", re.compile(r"(?:\bturn|턴)\s+\d+\b", re.IGNORECASE)),          # turn 80 · 턴 80
     # 7ce092d · 3e968bbcead2 · 40자 전체. 숫자만인 것(시각·수량)과 그 밖의 길이(EC2 id 17자)는 해시가 아니다.
     ("commit hash", re.compile(r"\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)(?:[0-9a-f]{7,12}|[0-9a-f]{40})\b")),
+    # 확장 162호 — "확장" 없이 번호만 부른 것. 두 자리 이상만: "피실험자 1호" 는 사람이 지은 이름이다.
+    ("N호", re.compile(r"(?<!\d)\d{2,}(?:\s*[·~,]\s*\d+)*\s*호")),               # 58호 · 106호·107호 · 127~131호
+    ("스레드 N", re.compile(r"(?:스레드|\bthread)\s+\d+(?!\d)(?!\s*[~\-–개])", re.IGNORECASE)),  # 스레드 541 (스레드 20~30개는 개수)
 )
+
 # owner 가 user 인 next 의 머리말 — 사람에 대해 쓴 줄. 기계적으로 잡히는 것만.
 SUBJECT_PREFIXES = ("사용자가", "사용자는", "사용자께서", "the user", "the engineer")
 
@@ -52,6 +56,16 @@ def tags_in(first: str) -> list[str]:
             if m.group(0) not in found:
                 found.append(m.group(0))
     return found
+
+
+def first_paragraph(text: str | None) -> str:
+    """본문의 첫 문단 — 화면의 접힌 카드가 제목 아래에 보이는 자리. 빈 줄까지.
+
+    확장 162호 (D18501, 2026-09-30): 사람이 읽는 자리는 제목과 이 문단이다. 번호는 여기도 두지 않는다 — 사용자가
+    짚힌 말 180개에 막힘을 표시한 실측에서 번호가 가장 자주 막혔다(44개 중 33). 코드 이름도 절반쯤 막혔지만 막지
+    않는다: 사람 말로 잘 쓴 데모 기록에서는 API 필드·환경변수 이름이 요점이었고, 둘을 가를 기계적 단서가 없었다.
+    두 번째 문단부터는 다음 에이전트가 참고하는 자리라 자유다."""
+    return re.split(r"\n\s*\n", body_of(text), maxsplit=1)[0].strip()
 
 
 def width(text: str) -> int:
@@ -102,18 +116,22 @@ def check(text: str | None, what: str) -> str:
     tags = tags_in(first)                     # 확장 123호 — 번호 꼬리표는 본문이나 evidence_ids 로
     if tags:
         problems.append("record numbers in the title: " + ", ".join(tags)); why.append("tags")
+    lead_tags = tags_in(first_paragraph(s))   # 확장 162호 — 제목 아래 첫 문단도 화면이 접힌 채로 보인다
+    if lead_tags:
+        problems.append("record numbers in the first paragraph: " + ", ".join(lead_tags)); why.append("tags-lead")
     if problems:
         _record_refusal(what, first, w, why)
-        hint = (" A person reads that line on the screen: record numbers (#517, D15635, 확장 122호, "
-                "turn 80, commit hashes) go in the body after a blank line, or into evidence_ids."
-                if tags else "")
+        hint = (" A person reads the title and the paragraph under it on the screen: record numbers (#517, D15635, "
+                "58호, turn 80, commit hashes) go in a later paragraph after another blank line, or into evidence_ids."
+                if tags or lead_tags else "")
         raise InputError(
             f"{what}: the first line is a title. At most {WIDTH_LIMIT} columns "
             f"(CJK characters count as 2), do not join clauses with ' — ', and no record numbers. "
             f"Now: {', '.join(problems)}.{hint} Write one title line, then a blank line, "
             f"then the rest as the body. Example:\n"
             f"The API door still accepted the old token\n\n"
-            f"Same token: MCP door 401, /app/status 200. Evidence #2234, commit 7ce092d.")
+            f"The same token was refused by the tool door but still opened the status page.\n\n"
+            f"MCP door 401, /app/status 200. Evidence #2234, commit 7ce092d.")
     return s
 
 

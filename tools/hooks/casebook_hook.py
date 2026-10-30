@@ -5,6 +5,8 @@
     python tools/hooks/casebook_hook.py post-compact    # SessionStart(compact): 활성 케이스 + "요약에만 남은 것을 지금 기록하라"
     python tools/hooks/casebook_hook.py post-commit     # PostToolUse(Bash, async) + git post-commit: HEAD 를 현재 스레드의 change 로 (멱등)
     python tools/hooks/casebook_hook.py checkpoint WHY  # PreCompact · SessionEnd: 현재 스레드에 branch/HEAD/dirty 관찰을 남긴다
+    python tools/hooks/casebook_hook.py prompt [codex]  # UserPromptSubmit: 사람이 친 원문을 spool 에 쓰고 source_ref 를 알린다
+    python tools/hooks/casebook_hook.py upload          # one-shot 업로더 — prompt·session-start 가 띄운다(확장 157호)
 
 확장 29호: 본문 렌더링은 casebook/core/hookctx.py 에 있다(원격 `hook` 도구와 공유). 모드가 server 면
 sqlite 를 열지 않고 원격 문을 부른다 — git 사실만 여기서 읽어 실어 보낸다. 모드 판정은 core/clientmode.py.
@@ -90,6 +92,11 @@ def _remote(url: str, event: str, wt: str, why: str, reason: str) -> dict:
     """git 사실은 여기(맥)서 읽어 실어 보낸다 — 서버는 git 을 모른다. 10초 안에 답이 없으면 실패로(훅 상한 15초)."""
     from casebook.core import threads
     facts = threads.local_facts(wt)
+    return _remote_tool(url, "hook", {"event": event, "facts": facts, "why": why, "reason": reason})
+
+
+def _remote_tool(url: str, tool: str, args: dict, read_timeout: int = 10) -> dict:
+    """원격 문의 숨은 도구 하나를 부른다 — hook(훅 이벤트)과 record_utterances(원문 업로더)가 쓴다."""
     import anyio
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
@@ -109,15 +116,15 @@ def _remote(url: str, event: str, wt: str, why: str, reason: str) -> dict:
             client = create_mcp_http_client(auth=auth)
         try:
             async with streamable_http_client(to, http_client=client) as (r, w):
-                return await _call(r, w, event, facts, why, reason)
+                return await _call(r, w)
         finally:
             if client is not None:
                 await client.aclose()
 
-    async def _call(r, w, event, facts, why, reason):
-        async with ClientSession(r, w, read_timeout_seconds=10) as sess:
+    async def _call(r, w):
+        async with ClientSession(r, w, read_timeout_seconds=read_timeout) as sess:
             await sess.initialize()
-            res = await sess.call_tool("hook", {"event": event, "facts": facts, "why": why, "reason": reason})
+            res = await sess.call_tool(tool, args)
             text = res.content[0].text if res.content else "{}"
             if text.startswith("casebook error:"):
                 raise RuntimeError(text)
@@ -140,6 +147,42 @@ def _log_session_start(reason: str) -> None:
         pass
 
 
+def _lang() -> str:
+    try:
+        from casebook.core.clientmode import LANG_FILE, _read_file
+        return "ko" if _read_file(LANG_FILE).lower().startswith("ko") else "en"
+    except Exception:  # noqa: BLE001
+        return "en"
+
+
+def _prompt() -> dict:
+    """확장 157호 — UserPromptSubmit. 네트워크를 타지 않는다: spool 에 쓰고 ref 를 돌려준 뒤 업로더를 띄운다."""
+    from casebook.adapters import capture
+    host = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] in capture.HOSTS.values() else capture.DEFAULT_HOST
+    out = capture.capture_prompt(HOOK_INPUT, _lang(), host=host)
+    capture.spawn_upload(str(pathlib.Path(__file__).resolve()))
+    return out
+
+
+def _upload() -> dict:
+    """one-shot 업로더(D18009). 저장 위치는 사람이 고른 모드를 따른다(D18010): server 면 원격 문, local 이면 이 맥의 DB."""
+    from casebook.adapters import capture
+    _mode, url = _resolve_mode()
+    if url:
+        def send(items):
+            out = _remote_tool(url, "record_utterances", {"items": items}, read_timeout=30)
+            if not isinstance(out, dict) or "stored" not in out:
+                raise RuntimeError(f"unexpected answer: {out!r}")
+    else:
+        from casebook.core import utterances
+        db_path, email = _config()
+        db, uid, _v = _open(db_path, email)
+
+        def send(items):
+            utterances.record(db, uid, items)
+    return capture.upload_once(send)
+
+
 def main() -> None:
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     try:
@@ -147,6 +190,19 @@ def main() -> None:
         HOOK_INPUT.update(json.loads(raw) if raw.strip() else {})
     except Exception:  # noqa: BLE001
         pass
+    if cmd in ("prompt", "upload"):
+        try:
+            out = _prompt() if cmd == "prompt" else _upload()
+        except Exception as exc:  # noqa: BLE001 — 원문 수집 실패가 입력을 막으면 안 된다
+            out = {} if cmd == "upload" else {"systemMessage": f"casebook hook (prompt) skipped: {exc}"}
+        print(json.dumps(out if cmd == "prompt" else {}, ensure_ascii=False))
+        return
+    if cmd == "session-start":
+        try:                     # 지난 세션에서 못 올린 원문을 다시 보낸다 — 기다리지 않는다
+            from casebook.adapters import capture
+            capture.spawn_upload(str(pathlib.Path(__file__).resolve()))
+        except Exception:  # noqa: BLE001
+            pass
     try:
         if cmd not in ("session-start", "post-compact", "post-commit", "checkpoint"):
             raise KeyError(cmd)

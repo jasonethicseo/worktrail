@@ -237,6 +237,13 @@
   .also b{display:block;color:var(--c-text);font-size:var(--fs-small);font-weight:600;margin-bottom:2px;}
 
   /* ── 끝 ── */
+  /* ── 영상 ── 원본은 film/index.html, tools/film_render.mjs 가 mp4 로 굽는다 */
+  .film .frame{margin-top:28px;border-radius:var(--r);overflow:hidden;border:1px solid var(--ln-2);background:#000;box-shadow:var(--sh-card);}
+  .film video{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#000;}
+  .film .src{margin-top:10px;font-size:var(--fs-meta);color:var(--c-text-3);}
+  .film .more{margin-top:22px;}
+  .film .more summary{cursor:pointer;font-size:var(--fs-small);color:var(--c-text-2);}
+  .film .more .frame{margin-top:14px;}
   .final{text-align:center;}
   .final .acts{margin-top:26px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
   footer{border-top:1px solid var(--ln);padding:28px 0 40px;font-size:var(--fs-meta);color:var(--c-text-3);}
@@ -275,9 +282,11 @@
   <div class="in">
     <a class="logo" href="#top" aria-label="Worktrail 소개 맨 위로"><span class="box" aria-hidden="true">Wt</span><span class="name">WORKTRAIL</span></a>
     <nav aria-label="바로 가기">
+      <a class="hide-s" href="#film">영상</a>
       <a class="hide-s" href="#diff">차이</a>
       <a class="hide-s" href="#lens">현황과 회고</a>
       <a href="#install">설치</a>
+      <a class="hide-s" href="docs/">문서</a>
       <a class="cta" href="../" data-go="demo">데모 보기</a>
     </nav>
   </div>
@@ -338,6 +347,30 @@
         <p class="sr" aria-live="polite" id="sessLive"></p>
         <p class="src">예시는 데모에 있는 가상 팀의 스레드 <a href="../#/threads/6">#6</a>에서 가져왔습니다.</p>
       </div>
+    </div>
+  </section>
+
+  <!-- ── 영상: 1분 16초 이어받기편 + 약 2분 실사용편(실제 녹화) (문구는 사용자가 확정할 자리) ── -->
+  <section class="film" id="film">
+    <div class="in">
+      <div class="shead">
+        <span class="eyebrow">영상 · 1분 16초</span>
+        <h2>Worktrail 이 일하는 모습</h2>
+      </div>
+      <div class="frame">
+        <video controls preload="none" playsinline poster="film/restore-poster.jpg" aria-label="Worktrail 이어받기 영상">
+          <source src="film/worktrail-restore.mp4" type="video/mp4">
+        </video>
+      </div>
+      <p class="src">영상 속 저장소와 기록은 데모의 가상 팀 것입니다. 터미널의 도구 응답과 오른쪽 화면은 그 데모 위에서 실제로 돌린 것입니다.</p>
+      <details class="more">
+        <summary>실제로 써 본 화면 · 약 2분 · 실제 녹화, 기다림만 빨리 감음</summary>
+        <div class="frame">
+          <video controls preload="none" playsinline poster="film/live-poster.jpg" aria-label="Worktrail 실사용 영상">
+            <source src="film/worktrail-live.mp4" type="video/mp4">
+          </video>
+        </div>
+      </details>
     </div>
   </section>
 
@@ -477,7 +510,7 @@
       <div class="shead">
         <span class="eyebrow">시작하기</span>
         <h2>기록을 어디에 둘지 고르고, 쓰는 에이전트에 붙입니다</h2>
-        <p class="sub">맥·리눅스·WSL에서 동작합니다. 윈도우 네이티브는 아직 지원하지 않습니다.</p>
+        <p class="sub">맥·리눅스·WSL에서 동작합니다. 윈도우에서는 신청 화면이 주는 지시문을 코딩 에이전트에게 붙여 넣으면 에이전트가 설치합니다.</p>
       </div>
 
       <div class="stepno"><span>1</span> 기록을 어디에 둘까요</div>
@@ -555,6 +588,7 @@ codex mcp add casebook -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy</
         <div><b>에이전트를 섞어 써도</b>같은 기록을 봅니다. 스레드 연결은 폴더마다 하나라, 같은 폴더에서 동시에 돌리지만 않으면 됩니다.</div>
         <div><b>지울 때</b>로컬은 sqlite 파일 하나를 지우면 끝입니다. 서버는 신청 페이지에 적힌 대로 요청합니다.</div>
       </div>
+      <p class="sub">설치한 뒤 어떻게 쓰는지는 <a href="docs/">사용 문서</a>에 있습니다.</p>
     </div>
   </section>
 
@@ -575,6 +609,7 @@ codex mcp add casebook -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy</
     <span>Worktrail</span>
     <span>라이선스 FSL-1.1-ALv2 (source-available)</span>
     <span class="sp"></span>
+    <a href="docs/">문서</a>
     <a href="https://github.com/jasonethicseo/worktrail" target="_blank" rel="noopener">GitHub</a>
     <a href="https://github.com/jasonethicseo/worktrail/issues" target="_blank" rel="noopener">피드백</a>
     <a href="../en/">English demo</a>

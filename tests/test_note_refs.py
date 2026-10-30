@@ -32,9 +32,9 @@ def test_근거는_evidence_ids_로_남고_회고가_읽는다(wt, tmp_path):
     cid = t.open_thread("근거 링크", _git_repo(tmp_path / "r"), topic="검증")["case_id"]
     e1 = _eid(t.add_evidence(cid, "$ curl /app/status\nHTTP 200"))
     e2 = _eid(t.add_evidence(cid, "$ curl /mcp\nHTTP 401"))
-    out = t.note_turn(cid, "두 문을 쳤다", "API 문만 열려 있다", kind="finding", next=NEXT, owner="user", evidence_ids=[e1, e2])
+    out = t.note_turn(cid, "두 문을 쳤다", "API 문만 열려 있다", kind="finding", next=NEXT, owner="user", evidence_ids=[e1, e2], observed_from="machine")
     assert f"Cites evidence #{e1}, #{e2}." in out
-    t.note_turn(cid, "다시 봤다", "근거 없는 노트", kind="thought", next=NEXT, owner="user")
+    t.note_turn(cid, "다시 봤다", "근거 없는 노트", kind="thought", next=NEXT, owner="user", observed_from="machine")
     wt.run_workers()
     threads.ensure_change(wt.db)
     payloads = [e["payload"] for e in wt.db.query("ledger", where={"case_id": cid}, order="id") if e["event_type"] == "answer_created"]
@@ -52,7 +52,7 @@ def test_남의_증거와_없는_증거는_거절하고_턴을_남기지_않는�
     foreign = _eid(theirs.add_evidence(other, "남의 관찰"))
     n = wt.db.count("turn", where={"case_id": cid})
     with pytest.raises(NotFoundError, match="evidence not found"):
-        mine.note_turn(cid, "관찰", "결론", kind="finding", next=NEXT, owner="user", evidence_ids=[foreign])
+        mine.note_turn(cid, "관찰", "결론", kind="finding", next=NEXT, owner="user", evidence_ids=[foreign], observed_from="machine")
     with pytest.raises(NotFoundError, match="evidence not found"):
-        mine.note_turn(cid, "관찰", "결론", kind="finding", next=NEXT, owner="user", evidence_ids=[999999])
+        mine.note_turn(cid, "관찰", "결론", kind="finding", next=NEXT, owner="user", evidence_ids=[999999], observed_from="machine")
     assert wt.db.count("turn", where={"case_id": cid}) == n

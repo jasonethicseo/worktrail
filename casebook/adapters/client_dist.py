@@ -40,8 +40,10 @@ CLIENT_FILES = (
     "casebook/adapters/ui_server.py",
     "casebook/adapters/backfill.py",
     "casebook/adapters/device_login.py",   # 확장 89호 — bin/casebook-login 이 부르는 것
+    "casebook/adapters/capture.py",        # 확장 157호 — 원문 훅(prompt)·업로더·프록시의 capture 표시
     "tools/hooks/casebook_hook.py",
     "tools/hooks/install_claude_hooks.sh",
+    "tools/hooks/install_codex_hooks.sh",   # 확장 157호 — Codex 의 UserPromptSubmit(원문 수집)
     "tools/hooks/install_git_hook.sh",
     # 확장 112호 (D15638) — 받은 사람이 무엇을 해도 되는지 알 수 있어야 한다.
     # 전에는 묶음에도 저장소에도 없어 법적 기본값(모든 권리 유보)에 말없이 기대고 있었다.
@@ -144,6 +146,8 @@ done
 command -v claude >/dev/null 2>&1 && claude mcp get casebook >/dev/null 2>&1 && { echo "  claude mcp: casebook"; FOUND=yes; }
 command -v codex  >/dev/null 2>&1 && grep -q '\[mcp_servers.casebook\]' "$HOME/.codex/config.toml" 2>/dev/null && { echo "  codex mcp: casebook"; FOUND=yes; }
 grep -q casebook_hook.py "$HOME/.claude/settings.json" 2>/dev/null && { echo "  ~/.claude/settings.json 의 casebook 훅"; FOUND=yes; }
+grep -q casebook_hook.py "$HOME/.codex/hooks.json" 2>/dev/null && { echo "  ~/.codex/hooks.json 의 casebook 훅"; FOUND=yes; }
+[ -d "$H/capture" ]     && { echo "  $H/capture"; FOUND=yes; }
 [ "$FOUND" = yes ] || { echo "  -"; echo "$T_NONE"; exit 0; }
 
 echo ""
@@ -158,30 +162,32 @@ command -v claude >/dev/null 2>&1 && claude mcp remove casebook -s user >/dev/nu
 command -v codex  >/dev/null 2>&1 && codex mcp remove casebook >/dev/null 2>&1 || true
 
 # 훅은 우리 것만 걷어낸다 — 남의 훅이 같은 파일에 있다. 손대기 전에 백업을 둔다.
-python3 - "$HOME/.claude/settings.json" <<'PYEOF' || true
+# 확장 157호 — Codex 의 hooks.json 도 같은 모양이라 같은 방법으로 걷어낸다.
+python3 - "$HOME/.claude/settings.json" "$HOME/.codex/hooks.json" <<'PYEOF' || true
 import json, pathlib, shutil, sys, time
-t = pathlib.Path(sys.argv[1])
-if not (t.is_file() and t.read_text().strip()):
-    raise SystemExit(0)
-try:
-    data = json.loads(t.read_text())
-except json.JSONDecodeError:
-    print("settings.json 을 읽을 수 없어 훅은 그대로 둔다", file=sys.stderr); raise SystemExit(0)
-hooks = data.get("hooks") or {}
 def mine(e):
     return any("casebook_hook.py" in (h.get("command") or "") for h in e.get("hooks", []))
-hit = 0
-for ev in list(hooks):
-    keep = [e for e in hooks[ev] if not mine(e)]
-    hit += len(hooks[ev]) - len(keep)
-    if keep: hooks[ev] = keep
-    else: del hooks[ev]
-if not hit:
-    raise SystemExit(0)
-shutil.copy2(t, t.with_suffix(f".json.bak-{time.strftime('%Y%m%d-%H%M%S')}"))
-data["hooks"] = hooks
-t.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-print(f"훅 {hit} 걷어냄 (백업 남김)")
+for arg in sys.argv[1:]:
+    t = pathlib.Path(arg)
+    if not (t.is_file() and t.read_text().strip()):
+        continue
+    try:
+        data = json.loads(t.read_text())
+    except json.JSONDecodeError:
+        print(f"{t.name} 을 읽을 수 없어 훅은 그대로 둔다", file=sys.stderr); continue
+    hooks = data.get("hooks") or {}
+    hit = 0
+    for ev in list(hooks):
+        keep = [e for e in hooks[ev] if not mine(e)]
+        hit += len(hooks[ev]) - len(keep)
+        if keep: hooks[ev] = keep
+        else: del hooks[ev]
+    if not hit:
+        continue
+    shutil.copy2(t, t.with_suffix(f".json.bak-{time.strftime('%Y%m%d-%H%M%S')}"))
+    data["hooks"] = hooks
+    t.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    print(f"{t}: 훅 {hit} 걷어냄 (백업 남김)")
 PYEOF
 
 [ "$RECORDS" = yes ] && rm -f "$H/casebook.db" "$H/casebook.db-wal" "$H/casebook.db-shm"
@@ -190,6 +196,8 @@ rm -f "$H/mode" "$H/lang" "$H/update-url" "$H/remote-url" "$H/oauth.json"
 # 아래 rmdir 이 실패해 "지웠다" 고 말하고 폴더가 남는다.
 rm -f "$H/oauth.json.lock" "$H"/.oauth.json.*.tmp
 rm -rf "$H/client.old"
+# 확장 157호 — 원문 수집의 표지와 spool. 아직 못 올린 원문이 남아 있을 수 있다(위 목록에 보였다).
+rm -rf "$H/capture"
 # 마지막이다 — 이 스크립트가 그 안에 있다.
 rm -rf "$H/client"
 rmdir "$H" 2>/dev/null || true
@@ -426,7 +434,7 @@ and 3 replace the client, and the records are untouched.
 # 훅 명세는 베끼지 않고 install_claude_hooks.sh --print-spec 에서 읽는다. 손으로 옮기면 한쪽만
 # 고쳐졌을 때 조용히 갈린다 — 만든 사람 맥과 설치본이 갈리지 않게 하는 것이 #495 의 규율이다.
 def hook_spec() -> list[dict[str, Any]]:
-    """훅 다섯의 명세. 설치기가 쓰는 그 값 그대로 — 두 곳에 적지 않는다."""
+    """훅 여섯의 명세. 설치기가 쓰는 그 값 그대로 — 두 곳에 적지 않는다."""
     import subprocess
     sh = source_root() / "tools" / "hooks" / "install_claude_hooks.sh"
     out = subprocess.run(["sh", str(sh), "--print-spec"], capture_output=True, text=True, timeout=10)
@@ -445,7 +453,7 @@ def plugin_hooks() -> dict[str, Any]:
     """
     hooks: dict[str, list[dict[str, Any]]] = {}
     for h in hook_spec():
-        one: dict[str, Any] = {"type": "command", "command": f"{PLUGIN_HOOK} {h['arg']}", "timeout": 15}
+        one: dict[str, Any] = {"type": "command", "command": f"{PLUGIN_HOOK} {h['arg']}", "timeout": h.get("timeout") or 15}
         if h.get("status"):
             one["statusMessage"] = h["status"]
         if h.get("async"):
@@ -462,7 +470,7 @@ def windows_prompt(url: str) -> str:
     hooks = []
     for h in hook_spec():
         one: dict[str, Any] = {"type": "command", "command": "<PY> <DIR>\\tools\\hooks\\casebook_hook.py " + h["arg"],
-                               "timeout": 15}
+                               "timeout": h.get("timeout") or 15}
         if h.get("status"):
             one["statusMessage"] = h["status"]
         if h.get("async"):
@@ -605,6 +613,7 @@ if [ "${{L:-en}}" = ko ]; then
   M_UPDURL="갱신 주소만 따로 둔다 (~/.casebook/update-url) — casebook-update 를 부를 때만 쓴다"
   M_CLAUDE="Claude Code 등록"; M_HOOKS="Claude Code 훅 설치"; M_NOCLAUDE="Claude Code 없음 — 건너뜀"
   M_CODEX="Codex 등록"; M_CODEXWAIT="Codex 시작 대기 30초"; M_NOCODEX="Codex 없음 — 건너뜀"
+  M_CODEXHOOK="Codex 훅 설치 (초안 문구 — 사용자가 쓴다: Codex 에서 한 번 검토·신뢰해야 돈다)"
   M_DONE_C="됐다. 아무 저장소에서 claude 를 열면 첫 화면에 casebook 이 뜬다."
   M_DONE_CX="codex 에서는 훅이 없으니 시작할 때 한 번: \"casebook 열린 스레드 보여줘\""
   M_DONE_X="됐다. codex 에는 세션 훅이 없으니 시작할 때 한 번: \"casebook 열린 스레드 보여줘\""
@@ -639,6 +648,7 @@ else
   M_UPDURL="Update address kept separately (~/.casebook/update-url) — used only when you run casebook-update"
   M_CLAUDE="Registered with Claude Code"; M_HOOKS="Claude Code hooks installed"; M_NOCLAUDE="Claude Code not found — skipped"
   M_CODEX="Registered with Codex"; M_CODEXWAIT="Codex startup timeout set to 30s"; M_NOCODEX="Codex not found — skipped"
+  M_CODEXHOOK="Codex hook installed (draft wording — the user writes this: review and trust it once in Codex before it runs)"
   M_DONE_C="Done. Open claude in any repository and Worktrail shows up on the first screen."
   M_DONE_CX="Codex has no session hook, so say this once when you start: \"show my open Worktrail threads\""
   M_DONE_X="Done. Codex has no session hook, so say this once when you start: \"show my open Worktrail threads\""
@@ -853,6 +863,8 @@ shutil.copy2(p, p.parent / ("config.toml.bak-" + time.strftime("%Y%m%d-%H%M%S"))
 lines.insert(i + 1, "startup_timeout_sec = 30")
 p.write_text("\n".join(lines) + "\n")
 TOMLPY
+  # 확장 157호 — 사람이 친 원문을 턴마다 남기는 훅. Codex 는 사람이 신뢰한 훅만 돌리므로 그 사실을 알린다.
+  sh "$DIR/tools/hooks/install_codex_hooks.sh" >/dev/null 2>&1 && say "$M_CODEXHOOK"
   HAVE_CODEX=yes
 else
   say "$M_NOCODEX"

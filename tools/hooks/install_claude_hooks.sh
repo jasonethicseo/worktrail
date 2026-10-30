@@ -3,13 +3,14 @@
 #   sh tools/hooks/install_claude_hooks.sh
 #   sh tools/hooks/install_claude_hooks.sh --print-spec   # 넣는 훅 목록만 JSON 으로
 #
-# 다섯을 넣는다. 이 목록이 이 저장소의 .claude/settings.json 과 같아야 한다 —
+# 여섯을 넣는다. 이 목록이 이 저장소의 .claude/settings.json 과 같아야 한다 —
 # 만든 사람 맥과 설치본이 갈리면 테스터가 겪는 것이 내가 겪는 것과 달라진다(#495).
 #   SessionStart(startup|resume|clear|fork)  열린 스레드를 보여 준다
 #   SessionStart(compact)                    압축 직후 "요약에만 남은 것을 먼저 기록하라"
 #   PreCompact                               압축 직전 체크포인트(anchor 갱신)
 #   SessionEnd                               세션을 닫을 때 체크포인트
 #   PostToolUse(Bash)                        HEAD 가 움직였으면 커밋을 붙인다(async — Bash 를 막지 않는다)
+#   UserPromptSubmit                         사람이 친 원문을 맥에 남기고 source_ref 를 알린다(네트워크 없음, 상한 5초)
 # 저장소마다 거는 git post-commit 훅(install_git_hook.sh)은 터미널에서 손으로 친 커밋용이라 별개다.
 # 기존 설정은 병합한다(덮어쓰지 않는다). 같은 훅이 이미 있으면 갈아 끼운다 — 여러 번 돌려도 안전하다.
 set -e
@@ -19,7 +20,8 @@ SPEC='[
  {"event":"SessionStart","matcher":"compact","arg":"post-compact","status":"casebook: record what the summary holds"},
  {"event":"PreCompact","matcher":null,"arg":"checkpoint pre-compact","status":null},
  {"event":"SessionEnd","matcher":null,"arg":"checkpoint session-end","status":null},
- {"event":"PostToolUse","matcher":"Bash","arg":"post-commit","status":null,"async":true}
+ {"event":"PostToolUse","matcher":"Bash","arg":"post-commit","status":null,"async":true},
+ {"event":"UserPromptSubmit","matcher":null,"arg":"prompt","status":null,"timeout":5}
 ]'
 
 if [ "$1" = "--print-spec" ]; then printf '%s\n' "$SPEC"; exit 0; fi
@@ -54,7 +56,7 @@ for ev in {s["event"] for s in spec}:                      # 이전 casebook 훅
     hooks[ev] = [e for e in hooks.get(ev, []) if not mine(e)]
 
 for s in spec:
-    one = {"type": "command", "command": f"{hook} {s['arg']}", "timeout": 15}
+    one = {"type": "command", "command": f"{hook} {s['arg']}", "timeout": s.get("timeout") or 15}
     if s.get("status"):
         one["statusMessage"] = s["status"]
     if s.get("async"):

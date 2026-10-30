@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worktrail 실사용 영상</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Nanum+Gothic+Coding:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<style>
+  /* Worktrail 실사용편의 원본. 재연이 아니라 녹화다 — 왼쪽은 에이전트가 낸 터미널 바이트(live/a.cast · b.cast,
+     tools/film_pty_rec.py)를 xterm.js 로 다시 그린 것이고, 오른쪽은 같은 시각의 로컬 Worktrail 화면 캡처(live/ui,
+     tools/film_ui_rec.mjs)다. 편집은 구간을 고르고 빨리 감는 것(SEGMENTS)과, 화면 속 로그인 이름을 덮는 것(MASK)뿐이다.
+     live/ 는 저장소에 싣지 않는다 — 다시 찍으려면 tools/film_live_stage.py 부터. */
+  :root{
+    --g0:#0b0d11;--g1:#10141a;--g2:#151a21;--g3:#1b2129;--g4:#242c36;--g5:#343e4a;--g6:#5a6572;--g7:#8b96a3;--g8:#b9c2cc;--g9:#e8edf2;
+    --sky:#89b4fa;--sky-2:#b4d0ff;--peach:#fab387;--green:#a6e3a1;--yellow:#f9e2af;
+    --font:'IBM Plex Sans','Apple SD Gothic Neo','Pretendard',system-ui,sans-serif;
+    --mono:'IBM Plex Mono','Apple SD Gothic Neo',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#000;color:var(--g9);font-family:var(--font);overflow:hidden}
+  #wrap{position:fixed;inset:0;display:grid;place-items:center}
+  #stage{position:relative;width:1920px;height:1080px;background:var(--g0);overflow:hidden;transform-origin:center center;flex:none}
+  #stage::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(1400px 800px at 55% 40%,rgba(137,180,250,.05),transparent 70%)}
+  .fade{opacity:0}
+  .chap{position:absolute;left:40px;top:34px;padding:8px 14px;border-radius:10px;background:rgba(11,13,17,.88);font-family:var(--mono);font-size:20px;letter-spacing:.1em;color:var(--g7);z-index:5}
+  .chap b{font-weight:600;margin-right:14px}
+  .chap.a b{color:var(--peach)} .chap.h b{color:var(--yellow)} .chap.b b{color:var(--sky)}
+  .rec{position:absolute;right:40px;top:40px;font-family:var(--mono);font-size:16px;color:var(--g7);letter-spacing:.08em;z-index:5}
+  .rec i{display:inline-block;width:9px;height:9px;border-radius:50%;background:#f38ba8;margin-right:9px;vertical-align:1px}
+
+  .term{position:absolute;left:40px;top:120px;width:900px;height:800px;background:#0f1319;border:1px solid var(--g4);border-radius:14px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+  .term .bar{height:42px;display:flex;align-items:center;gap:9px;padding:0 16px;border-bottom:1px solid var(--g3);background:var(--g2)}
+  .term .bar i{width:12px;height:12px;border-radius:50%;background:var(--g5)}
+  .term .bar span{margin-left:10px;font-family:var(--mono);font-size:15px;color:var(--g7)}
+  .term .bar em{margin-left:auto;font-style:normal;font-family:var(--mono);font-size:13px;color:var(--g6)}
+  .term .xt{position:absolute;left:18px;top:56px}
+  .ff{position:absolute;right:14px;bottom:12px;font-family:var(--mono);font-size:15px;padding:4px 11px;border-radius:99px;background:rgba(137,180,250,.14);color:var(--sky-2);opacity:0}
+
+  #uiBox{position:absolute;left:0;top:0;width:1280px;height:860px;transform-origin:0 0;border-radius:12px;overflow:hidden;border:1px solid var(--g4);box-shadow:0 30px 80px rgba(0,0,0,.5);background:#0b0d11}
+  #uiImg{display:block;width:1280px;height:860px}
+  .mask{position:absolute;display:none;background:rgb(11,13,17);color:rgb(185,194,204);font:14px/18.5px 'IBM Plex Mono',ui-monospace,monospace;white-space:pre}
+  #cursor{position:absolute;left:0;top:0;width:26px;height:26px;pointer-events:none;opacity:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));z-index:6}
+  #clk{position:absolute;left:0;top:0;width:36px;height:36px;border-radius:50%;border:2px solid var(--yellow);opacity:0;pointer-events:none;box-shadow:0 0 18px rgba(249,226,175,.5);z-index:6}
+
+  .cap{position:absolute;left:970px;right:40px;top:960px;text-align:center;pointer-events:none;z-index:5}
+  .cap.left{left:40px;right:auto;text-align:left;top:966px}
+  .cap h2{display:inline-block;font-size:36px;font-weight:700;line-height:1.25;padding:12px 26px;border-radius:14px;background:rgba(11,13,17,.85)}
+  .card{position:absolute;inset:0;display:grid;place-items:center;text-align:center;background:var(--g0);z-index:8}
+  .card .big{font-size:76px;font-weight:700;letter-spacing:-.03em}
+  .card .sub{margin-top:20px;font-size:26px;color:var(--g8);line-height:1.5}
+  .logo{display:inline-flex;align-items:center;gap:26px}
+  .logo .mk{width:112px;height:112px;border-radius:28px;border:3px solid var(--green);display:grid;place-items:center;font-family:var(--mono);font-size:46px;font-weight:600;color:var(--green);
+    --g:0;box-shadow:0 0 calc(var(--g)*80px) rgba(166,227,161,calc(var(--g)*.55))}
+  .logo .nm{font-family:var(--mono);font-size:68px;font-weight:600;letter-spacing:.2em}
+  .end h1{margin-top:52px;font-size:58px;font-weight:700;letter-spacing:-.02em}
+  .end p{margin-top:20px;font-size:26px;color:var(--g8)}
+  .pill{display:inline-block;margin-top:40px;font-family:var(--mono);font-size:24px;padding:13px 30px;border-radius:99px;border:1px solid rgba(137,180,250,.55);color:var(--sky-2);background:var(--g1)}
+
+  #ctl{position:fixed;left:0;right:0;bottom:0;display:flex;align-items:center;gap:14px;padding:12px 18px;background:linear-gradient(transparent,rgba(0,0,0,.75));font:13px/1 var(--mono);color:var(--g8);opacity:0;transition:opacity .25s}
+  #wrap:hover + #ctl,#ctl:hover{opacity:1}
+  #ctl button{background:none;border:1px solid var(--g5);color:var(--g9);border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer}
+  #bar{flex:1;height:6px;border-radius:3px;background:var(--g4);position:relative;cursor:pointer}
+  #bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--sky)}
+  .capture #ctl{display:none}
+</style>
+</head>
+<body>
+<div id="wrap"><div id="stage">
+  <div id="uiBox"><img id="uiImg" alt=""><div class="mask" id="mask"></div></div>
+  <div class="term fade" id="termA"><div class="bar"><i></i><i></i><i></i><span>~/work/backend — claude</span><em>Claude Code</em></div><div class="xt" id="xtA"></div><div class="ff" id="ffA"></div></div>
+  <div class="term fade" id="termB"><div class="bar"><i></i><i></i><i></i><span>~/work/backend — codex</span><em>Codex CLI</em></div><div class="xt" id="xtB"></div><div class="ff" id="ffB"></div></div>
+  <div class="chap a fade" id="chA"><b>세션 A</b>Claude Code</div>
+  <div class="chap h fade" id="chH"><b>사람</b>Worktrail 화면에서 확인</div>
+  <div class="chap b fade" id="chB"><b>세션 B</b>Codex · 새 대화</div>
+  <div class="rec fade" id="rec"><i></i><span data-copy="rec"></span></div>
+  <div class="cap fade" id="capA"><h2 data-copy="capA"></h2></div>
+  <div class="cap left fade" id="capH"><h2 data-copy="capH"></h2></div>
+  <div class="cap fade" id="capB"><h2 data-copy="capB"></h2></div>
+  <div id="clk"></div><svg id="cursor" viewBox="0 0 26 26"><path d="M3 2 L3 21 L8.2 16.4 L11.6 24 L15 22.5 L11.7 15.2 L18.6 15.2 Z" fill="#f4f6f8" stroke="#0b0d11" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  <div class="card fade" id="open"><div><div class="big" data-copy="open"></div><div class="sub" data-copy="open_sub"></div></div></div>
+  <div class="card fade" id="mid1"><div><div class="big" data-copy="mid1"></div><div class="sub" data-copy="mid1_sub"></div></div></div>
+  <div class="card fade" id="mid2"><div><div class="big" data-copy="mid2"></div><div class="sub" data-copy="mid2_sub"></div></div></div>
+  <div class="card end fade" id="end"><div>
+    <div class="logo"><div class="mk" id="mk">Wt</div><div class="nm">WORKTRAIL</div></div>
+    <h1 data-copy="end"></h1><p data-copy="end_sub"></p><div><span class="pill" data-copy="end_pill"></span></div>
+  </div></div>
+</div></div>
+<div id="ctl"><button id="pp">❚❚</button><div id="bar"><i></i></div><span id="tc">0:00</span></div>
+
+<script type="module">
+// ── 사람이 읽는 문장 (초안) ─────────────────────────────────────────────
+const COPY = {
+  rec:      "실제 녹화 · 기다림만 빨리 감음",
+  open:     "실제로 써 본 화면",
+  open_sub: "Claude Code 와 Codex 가 데모 저장소의 버그를 실제로 고칩니다.<br>오른쪽은 같은 순간의 Worktrail 화면입니다.",
+  capA:     "에이전트가 조사하며 직접 남깁니다",
+  mid1:     "세션이 끝났다",
+  mid1_sub: "사람은 대화를 다시 읽지 않고 화면을 엽니다",
+  capH:     "무엇을 찾았고, 무엇을 골라야 하는지",
+  mid2:     "새 세션, 다른 에이전트",
+  mid2_sub: "사람은 한마디만 합니다",
+  capB:     "Codex 가 기록에서 이어받아 고칩니다",
+  end:      "세션이 바뀌어도, 일은 이어집니다",
+  end_sub:  "Claude Code · Codex · claude.ai 가 같은 기록을 읽고 씁니다",
+  end_pill: "github.com/jasonethicseo/worktrail",
+};
+for (const el of document.querySelectorAll("[data-copy]")) el.innerHTML = COPY[el.dataset.copy] ?? "";
+
+// ── 재료 ─────────────────────────────────────────────────────────────────
+const load = async (p) => (await fetch(p)).text();
+const parseCast = (txt) => { const [h, ...r] = txt.trim().split("\n"); return { head: JSON.parse(h), ev: r.map((l) => JSON.parse(l)) }; };
+const CAST = { a: parseCast(await load("live/a.cast")), b: parseCast(await load("live/b.cast")) };
+const UI = JSON.parse(await load("live/ui.json")).frames;
+const T0 = { a: CAST.a.head.timestamp, b: CAST.b.head.timestamp, h: 0 };
+
+// ── 편집: 구간과 속도 (시각은 a·b 는 그 캐스트의 초, h 는 벽시계 epoch 초) ─────────────
+const H0 = 1790771000;                             // 두 번째 녹화(2026-09-30 21:26~21:34)의 벽시계 기준
+const PLAN = [
+  { card: "open", len: 3.6 },
+  { src: "a", from: 6.0, to: 8.0, x: 1 },
+  { src: "a", from: 8.0, to: 20.6, x: 2.5 },        // 사람이 친다
+  { src: "a", from: 20.6, to: 78.0, x: 4 },          // 조사: 쿼리·시험·코드 읽기·Worktrail 기록
+  { src: "a", from: 78.0, to: 95.8, x: 2 },          // 답이 흘러나온다
+  { src: "a", from: 95.8, to: 103.5, x: 1 },         // 읽는다
+  { src: "a", from: 126.0, to: 128.3, x: 1 },        // /exit
+  { card: "mid1", len: 2.6 },
+  { src: "h", from: H0 + 331.2, to: H0 + 356.0, x: 1.15 },
+  { card: "mid2", len: 2.6 },
+  { src: "b", from: 6.0, to: 9.0, x: 1 },
+  { src: "b", from: 9.0, to: 11.0, x: 1 },           // "A로 가자"
+  { src: "b", from: 11.0, to: 95.0, x: 4 },          // resume · trail · inspect · 결정 · 고침 · 시험 · 기록
+  { src: "b", from: 95.0, to: 103.0, x: 1.5 },
+  { src: "b", from: 103.0, to: 110.5, x: 1 },
+  { src: "b", from: 126.0, to: 127.4, x: 1 },        // /quit
+  { card: "end", len: 7.5 },
+];
+let acc = 0;
+for (const s of PLAN) { s.t0 = acc; acc += s.card ? s.len : (s.to - s.from) / s.x; s.t1 = acc; }
+const DUR = +acc.toFixed(2);
+const segAt = (t) => PLAN.find((s) => t >= s.t0 && t < s.t1) || PLAN[PLAN.length - 1];
+// 그 순간의 벽시계 epoch — 카드 동안은 바로 앞 구간의 끝에 머문다
+function epochAt(t) {
+  let last = null;
+  for (const s of PLAN) {
+    if (s.card) { if (t < s.t1 && t >= s.t0) break; continue; }
+    const base = s.src === "h" ? 0 : T0[s.src];
+    if (t < s.t0) break;
+    last = base + (t >= s.t1 ? s.to : s.from + (t - s.t0) * s.x);
+    if (t < s.t1) break;
+  }
+  return last ?? (T0.a + PLAN[1].from);
+}
+const castTime = (who, t) => {           // 그 캐스트를 어디까지 보여 줄까(그 세션 구간 밖이면 마지막 보인 곳)
+  let v = who === "a" ? 0 : -1;
+  for (const s of PLAN) {
+    if (s.src !== who) continue;
+    if (t < s.t0) break;
+    v = t >= s.t1 ? s.to : s.from + (t - s.t0) * s.x;
+  }
+  return v;
+};
+const firstOf = (src) => PLAN.find((s) => s.src === src), lastOf = (src) => [...PLAN].reverse().find((s) => s.src === src);
+const cardOf = (id) => PLAN.find((s) => s.card === id);
+
+// ── 터미널 ───────────────────────────────────────────────────────────────
+await document.fonts.load("16px 'Nanum Gothic Coding'"); await document.fonts.load("bold 16px 'Nanum Gothic Coding'"); await document.fonts.load("16px 'Nanum Gothic Coding'", "가");
+await document.fonts.ready;
+const THEME = { background: "#0f1319", foreground: "#d6dde6", cursor: "#d6dde6", selectionBackground: "#243044",
+  black: "#1b2129", red: "#f38ba8", green: "#a6e3a1", yellow: "#f9e2af", blue: "#89b4fa", magenta: "#cba6f7", cyan: "#94e2d5", white: "#b9c2cc",
+  brightBlack: "#5a6572", brightRed: "#f38ba8", brightGreen: "#a6e3a1", brightYellow: "#f9e2af", brightBlue: "#b4d0ff", brightMagenta: "#cba6f7", brightCyan: "#94e2d5", brightWhite: "#e8edf2" };
+function mkTerm(el, cast) {
+  const term = new Terminal({ cols: cast.head.width, rows: cast.head.height, fontFamily: "'Nanum Gothic Coding', monospace",     // 한글이 정확히 두 칸 — 자간이 벌어지지 않는다
+    fontSize: 16, lineHeight: 1.15, theme: THEME, scrollback: 10000, allowProposedApi: true, disableStdin: true, cursorBlink: false });
+  term.open(el);
+  return { term, cast, i: 0, shown: -1 };
+}
+const TA = mkTerm(document.getElementById("xtA"), CAST.a), TB = mkTerm(document.getElementById("xtB"), CAST.b);
+const write = (term, s) => new Promise((r) => term.write(s, r));
+async function feed(T, upTo) {
+  if (upTo < T.shown) { T.term.reset(); T.i = 0; }
+  let chunk = "";
+  while (T.i < T.cast.ev.length && T.cast.ev[T.i][0] <= upTo) { const e = T.cast.ev[T.i++]; if (e[1] === "o") chunk += e[2]; }
+  if (chunk) await write(T.term, chunk);
+  T.shown = upTo;
+}
+
+// ── 화면 캡처 ────────────────────────────────────────────────────────────
+const uiImg = document.getElementById("uiImg"), uiBox = document.getElementById("uiBox");
+let uiShown = null;
+async function showUI(ep) {
+  let lo = 0, hi = UI.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (UI[m].t <= ep) lo = m; else hi = m - 1; }
+  const f = UI[lo].f;
+  if (f !== uiShown) { uiImg.src = "live/ui/" + f; uiShown = f; await uiImg.decode().catch(() => {}); }
+  // 증거 원문 속 로그인 이름 — 그 줄이 떠 있는 동안만 같은 글꼴의 다른 이름으로 덮는다(tools/film_live_assets.py 참고)
+  const m = document.getElementById("mask");
+  const on = ep >= H0 + 348.2 && ep <= H0 + 356.28;
+  m.style.display = on ? "block" : "none";
+  if (on) { Object.assign(m.style, { left: "802.8px", top: "659px", width: "92.4px", height: "18.5px" }); m.textContent = "onstore-dev"; }
+}
+
+// ── 카메라·손·켜고 끄기 ───────────────────────────────────────────────────
+const clamp = (x) => x < 0 ? 0 : x > 1 ? 1 : x;
+const ease = (x) => 1 - Math.pow(1 - x, 3);
+const inout = (x) => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const SPLIT = { x: 968, y: 120, s: 0.7265 }, ZOOM = { x: 180, y: 70, s: 1.22 };
+const hS = firstOf("h"), bS = firstOf("b");
+function cam(t) {
+  const a = hS.t0 - 1.4, b = hS.t0 + .2, c = hS.t1 - .2, d = hS.t1 + 1.6;
+  const f = t < a ? 0 : t < b ? inout((t - a) / (b - a)) : t < c ? 1 : t < d ? 1 - inout((t - c) / (d - c)) : 0;
+  return { x: SPLIT.x + (ZOOM.x - SPLIT.x) * f, y: SPLIT.y + (ZOOM.y - SPLIT.y) * f, s: SPLIT.s + (ZOOM.s - SPLIT.s) * f };
+}
+const vis = (id, a, b, fade = .35) => { document.getElementById(id).style.opacity = Math.min(ease(clamp((ta - a) / fade)), b == null ? 1 : ease(clamp((b - ta) / fade))).toFixed(3); };
+let ta = 0;
+// 손 — 녹화 때 누른 자리(화면 좌표, 녹화기가 누르기 직전에 잰 사각형)와 시각
+const HAND = [
+  { ep: H0 + 331.6, p: [700, 600] }, { ep: H0 + 333.2, p: [300, 312] }, { ep: H0 + 333.76, p: [300, 312], click: true },
+  { ep: H0 + 335.5, p: [980, 380] }, { ep: H0 + 340.9, p: [980, 380] }, { ep: H0 + 341.6, p: [800, 583] }, { ep: H0 + 341.94, p: [800, 583], click: true },
+  { ep: H0 + 346.5, p: [860, 690] }, { ep: H0 + 347.8, p: [925, 726] }, { ep: H0 + 348.16, p: [925, 726], click: true },
+  { ep: H0 + 350.0, p: [1150, 520] }, { ep: H0 + 356.0, p: [1150, 520] },
+];
+function hand(t, c) {
+  const cur = document.getElementById("cursor"), clk = document.getElementById("clk");
+  const inH = t >= hS.t0 + .3 && t < hS.t1 - .1;
+  cur.style.opacity = inH ? 1 : 0; clk.style.opacity = 0;
+  if (!inH) return;
+  const ep = epochAt(t);
+  let k = 0; while (k < HAND.length - 1 && HAND[k + 1].ep <= ep) k++;
+  const A = HAND[k], B = HAND[k + 1] || A;
+  const f = B === A ? 0 : inout(clamp((ep - A.ep) / (B.ep - A.ep)));
+  const x = A.p[0] + (B.p[0] - A.p[0]) * f, y = A.p[1] + (B.p[1] - A.p[1]) * f;
+  const sx = c.x + x * c.s, sy = c.y + y * c.s;
+  cur.style.transform = `translate(${sx.toFixed(1)}px,${sy.toFixed(1)}px)`;
+  const ck = HAND.filter((h) => h.click).map((h) => ep - h.ep).find((d) => d >= 0 && d < .5);
+  if (ck != null) { clk.style.opacity = (1 - ck / .5).toFixed(3); clk.style.transform = `translate(${(sx - 18).toFixed(1)}px,${(sy - 18).toFixed(1)}px) scale(${(.6 + ck * 1.4).toFixed(3)})`; }
+}
+
+async function render(t) {
+  ta = t;
+  const aS = firstOf("a"), aE = lastOf("a"), bE = lastOf("b"), o = cardOf("open"), m1 = cardOf("mid1"), m2 = cardOf("mid2"), en = cardOf("end");
+  vis("open", -1, o.t1); vis("mid1", m1.t0, m1.t1); vis("mid2", m2.t0, m2.t1); vis("end", en.t0);
+  vis("termA", aS.t0 - .3, hS.t0 - 1.2); vis("chA", aS.t0, aE.t1);
+  vis("chH", hS.t0 + .2, hS.t1 - .2); vis("termB", bS.t0 - .3, en.t0); vis("chB", bS.t0, bE.t1);
+  vis("rec", aS.t0, en.t0);
+  vis("capA", aS.t0 + 9, aS.t0 + 22); vis("capH", hS.t0 + 3, hS.t1 - 1.5); vis("capB", bS.t0 + 8, bS.t0 + 24);
+  const seg = segAt(t);
+  for (const [id, who] of [["ffA", "a"], ["ffB", "b"]]) {
+    const on = seg.src === who && seg.x > 1.4;
+    const el = document.getElementById(id); el.style.opacity = on ? 1 : 0; if (on) el.textContent = `▶▶ ×${seg.x}`;
+  }
+  await feed(TA, castTime("a", t));
+  if (t >= bS.t0 - .4) await feed(TB, castTime("b", t)); else if (TB.shown >= 0) { TB.term.reset(); TB.i = 0; TB.shown = -1; }
+  await showUI(epochAt(t));
+  const c = cam(t);
+  uiBox.style.transform = `translate(${c.x.toFixed(2)}px,${c.y.toFixed(2)}px) scale(${c.s.toFixed(5)})`;
+  hand(t, c);
+  const g = t - en.t0 - .3; document.getElementById("mk").style.setProperty("--g", (g < 0 ? 0 : Math.exp(-g / 1.4) * clamp(g / .15)).toFixed(3));
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+}
+
+// ── 소리 ─────────────────────────────────────────────────────────────────
+window.__SCORE = (() => {
+  const cues = [];
+  const toFilm = (who, ct) => { for (const s of PLAN) if (s.src === who && ct >= s.from && ct < s.to) return s.t0 + (ct - s.from) / s.x; return null; };
+  for (const who of ["a", "b"]) for (const e of CAST[who].ev) {
+    if (e[1] !== "i" || e[2].startsWith("\u001b")) continue;
+    const ft = toFilm(who, e[0]); if (ft != null && [...e[2]].some((ch) => ch.trim())) cues.push({ t: ft, k: "key" });
+  }
+  for (const h of HAND) if (h.click) { const s = hS; cues.push({ t: s.t0 + (h.ep - s.from) / s.x, k: "tick", g: 1.4 }); }
+  const en = cardOf("end");
+  cues.push({ t: en.t0 - 1.2, k: "riser", len: 1.2 }, { t: en.t0, k: "impact" });
+  const m1 = cardOf("mid1").t0, m2 = cardOf("mid2").t0;
+  const pads = [
+    { t0: 0, t1: 14, notes: [45, 52, 57, 60], g: .6 }, { t0: 14, t1: m1, notes: [41, 48, 53, 57], g: .6 },
+    { t0: m1, t1: m2, notes: [48, 55, 60, 64], g: .7 }, { t0: m2, t1: m2 + 18, notes: [43, 50, 55, 59], g: .7 },
+    { t0: m2 + 18, t1: en.t0, notes: [41, 48, 53, 57, 64], g: .75 }, { t0: en.t0, t1: DUR - .5, notes: [36, 48, 55, 59, 62, 64], g: .9 },
+  ];
+  return { pads, beats: [], cues: cues.sort((a, b) => a.t - b.t) };
+})();
+
+// ── 굽는 창 / 보는 창 ────────────────────────────────────────────────────
+const params = new URLSearchParams(location.search);
+const CAPTURE = params.has("capture");
+const stage = document.getElementById("stage");
+const fit = () => { stage.style.transform = CAPTURE ? "none" : `scale(${Math.min(innerWidth / 1920, innerHeight / 1080)})`; };
+addEventListener("resize", fit); fit();
+window.__DUR = DUR;
+let busy = Promise.resolve();
+window.__seek = (t) => (busy = busy.then(() => render(t)).then(() => true));
+if (CAPTURE) { document.documentElement.classList.add("capture"); await window.__seek(Number(params.get("t") || 0)); }
+else {
+  let t = Number(params.get("t") || 0), playing = true, last = performance.now(), inflight = false;
+  const pp = document.getElementById("pp"), tc = document.getElementById("tc"), bar = document.getElementById("bar"), fill = bar.firstElementChild;
+  pp.onclick = () => { playing = !playing; pp.textContent = playing ? "❚❚" : "▶"; last = performance.now(); };
+  bar.onclick = (e) => { const r = bar.getBoundingClientRect(); t = clamp((e.clientX - r.left) / r.width) * DUR; };
+  (function loop(now) {
+    if (playing) { t = Math.min(DUR, t + (now - last) / 1000); }
+    last = now;
+    if (!inflight) { inflight = true; window.__seek(t).finally(() => { inflight = false; }); }
+    fill.style.width = `${(t / DUR) * 100}%`; tc.textContent = `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")} / ${Math.floor(DUR / 60)}:${String(Math.floor(DUR % 60)).padStart(2, "0")}`;
+    requestAnimationFrame(loop);
+  })(performance.now());
+}
+</script>
+</body>
+</html>

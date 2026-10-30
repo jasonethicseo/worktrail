@@ -30,7 +30,7 @@ def _demo(tmp_path, lang: str) -> pathlib.Path:
     wt.signup("사람", "d@x.test", "pw")
     t = Tools(wt, 1)
     cid = t.open_thread("소개 페이지가 데모와 같이 나가는지 본다", _git_repo(tmp_path / f"r-{lang}"), topic="검증")["case_id"]
-    t.note_turn(cid, "$ ls", "폴더가 섰다", kind="finding", next="소개가 들어갔는지 본다", owner="user")
+    t.note_turn(cid, "$ ls", "폴더가 섰다", kind="finding", next="소개가 들어갔는지 본다", owner="user", observed_from="machine")
     out = tmp_path / f"site-{lang}"
     ds.build(ds.db_getter(str(db), "d@x.test"), PAGE, out, [], lang=lang)
     return out
@@ -100,3 +100,41 @@ def test_한_장이_혼자_선다():
     assert "<script src=" not in LANDING and 'rel="stylesheet"' in LANDING
     assert "../app/config.js" not in LANDING
     assert LANDING.count("<script>") == 1
+
+
+FILM = (ROOT / "web/landing/film/index.html").read_text(encoding="utf-8")
+PROMO = (ROOT / "web/landing/film/promo.html").read_text(encoding="utf-8")   # 홍보편 — 같은 기록, 같은 거절문
+
+
+def test_소개_영상은_소개와_같이_나간다(tmp_path):
+    # 소개가 부르는 영상과 포스터는 데모 폴더의 intro/film/ 에 구운 결과 그대로 들어간다(원본 필름은 싣지 않는다).
+    assert 'src="film/worktrail-restore.mp4"' in LANDING and 'poster="film/restore-poster.jpg"' in LANDING
+    assert 'src="film/worktrail-live.mp4"' in LANDING and 'poster="film/live-poster.jpg"' in LANDING
+    film = _demo(tmp_path, "ko") / "intro/film"
+    for name in ("worktrail-restore.mp4", "restore-poster.jpg", "worktrail-live.mp4", "live-poster.jpg"):
+        assert (film / name).read_bytes() == (ROOT / "web/landing/film" / name).read_bytes(), name
+    for name in ("index.html", "promo.html", "restore.html", "restore", "live.html", "live", "worktrail-intro.mp4"):
+        assert not (film / name).exists(), name
+
+
+def test_영상이_보여_주는_기록은_데모에_있는_것이다():
+    # 소개와 같은 규율 — 영상의 터미널·스레드 카드에 뜨는 기록 문장은 데모 시드가 실제로 쌓는 것이다.
+    for 인용 in ("재고가 음수로 내려간 주문 3건의 경로를 찾는다",
+                "20시 타임세일 첫 3초에 같은 상품이 겹쳐 들어왔다",
+                "읽고 쓰는 사이가 잠겨 있지 않다, 전형적인 경쟁 상태다",
+                "막는 방법 셋 중 무엇을 쓸지 안 정했다",
+                "세일 트래픽을 재고 방식 셋과 맞춰 보고 하나를 고른다",
+                "외부 결제 호출을 사용자 요청 안에서 기다리지 않는다"):
+        assert 인용 in FILM and 인용 in PROMO and 인용 in SEED, 인용
+
+
+def test_영상의_거절문은_서버가_실제로_내는_말이다():
+    from casebook.core.errors import InputError
+    from casebook.core.headline import check
+    try:
+        check("재고 경쟁 상태 원인 확인 — 증거 #41, 커밋 7ce092d 참고", "conclusion")
+    except InputError as e:
+        shown = str(e).split(" A person reads", 1)[0]          # 영상은 앞부분만 싣고 … 로 줄인다
+    else:
+        raise AssertionError("refusal expected")
+    assert "Error: " + shown + " …" in FILM and "Error: " + shown + " …" in PROMO

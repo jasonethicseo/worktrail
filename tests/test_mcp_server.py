@@ -23,7 +23,7 @@ def test_open_list_add_note_handoff(tools):
     out = t.add_evidence(cid, "  raw\tlog  ")
     assert out.startswith("Evidence #") and "byte-exact" in out and llm.calls == []
 
-    out = t.note_turn(cid, "pg_stat_activity: 380 idle in transaction", "pool exhausted by open transactions", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    out = t.note_turn(cid, "pg_stat_activity: 380 idle in transaction", "pool exhausted by open transactions", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
     assert "Turn 2 recorded" in out
     assert llm.calls == []                                  # 확장 39호 — 기록은 모델을 부르지 않는다
 
@@ -38,7 +38,8 @@ def test_open_list_add_note_handoff(tools):
     if investigation_available():                    # 레코드는 조사 도구의 것 — 공개 트리에는 없다(확장 130호)
         assert "# fake record" in doc
     assert "## Brief" not in doc
-    assert "## Declared state" in doc and "다음 할 일" in doc
+    assert "## Now" in doc and "다음 할 일" in doc                         # 라벨은 케이스 제목(영어)의 언어
+    assert ("## Done so far" in doc) != investigation_available()          # 레코드가 본문이면 '지금'만 덧붙인다
     assert [r for (r, _, _) in llm.calls] == (["record"] if investigation_available() else [])   # 기록자는 안 돌고, 레코드 한 번만(조사 도구가 있을 때)
 
     # 도구는 브리프를 되돌려주지 않는다 — handoff 만 사람 앞으로 낸다
@@ -49,14 +50,14 @@ def test_handoff_꼬리는_선언된_상태다(tools, tmp_path):
     """확장 39호 — 모델이 만든 요약이 아니라 스레드가 선언한 것으로 답한다."""
     t, app, llm = tools
     cid = t.open_thread("풀 고갈을 확인한다", str(tmp_path), topic="테스트")["case_id"]
-    t.note_turn(cid, "pg_stat_activity: 380 idle in transaction", "열린 트랜잭션이 풀을 잡고 있다", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    t.note_turn(cid, "pg_stat_activity: 380 idle in transaction", "열린 트랜잭션이 풀을 잡고 있다", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
     t.declare(cid, "open", "커넥션이 어디서 새는지 아직 모른다")
     t.declare(cid, "next", "pg_stat_activity 를 다시 뜬다", owner="user")
     doc = t.handoff(cid, engineer_asked=True)
-    assert "## Declared state" in doc
-    assert "- focus: 풀 고갈을 확인한다" in doc
-    assert "- open: 커넥션이 어디서 새는지 아직 모른다" in doc
-    assert "- next: pg_stat_activity 를 다시 뜬다  (차례: user)" in doc
+    assert "## 지금" in doc
+    assert "**focus** · 풀 고갈을 확인한다" in doc
+    assert "**open** · 커넥션이 어디서 새는지 아직 모른다" in doc
+    assert "**next** (차례: user) · pg_stat_activity 를 다시 뜬다" in doc
 
 
 def test_남의_케이스는_404_문구로_막힌다(tools):
@@ -74,7 +75,7 @@ def test_모델이_죽어_있어도_note_turn_은_된다(tools):
     t, app, llm = tools
     cid = t.open_case("c")["case_id"]
     llm.fail_next.update({"recorder", "troubleshoot"})
-    out = t.note_turn(cid, "obs", "concl", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    out = t.note_turn(cid, "obs", "concl", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
     assert "Turn 1 recorded" in out
     assert app.get_case(1, cid)["conversation"][-1]["content"] == "concl"
 
@@ -100,10 +101,10 @@ def test_build_server_registers_twelve_tools(tools):
     import asyncio
     server = build_server(app, 1)
     names = sorted(x.name for x in asyncio.run(server.list_tools()))
-    assert names == ["add_evidence", "add_evidence_file", "assign_topic", "close_thread", "constrain", "decide", "declare", "define", "find", "handoff",
+    assert names == ["add_evidence", "add_evidence_file", "add_utterance", "assign_topic", "close_thread", "constrain", "decide", "declare", "define", "find", "handoff",
                      "hook", "import_prior", "inspect", "list_cases", "list_threads", "list_topics", "merge_topic", "note_turn", "open_case",
-                     "open_thread", "overview", "rate_handoff", "resume", "rule_out", "search_evidence", "search_prior", "switch_thread", "trail"]
-    # 확장 15·16호 스레드 4개 + declare · 24호 assign_topic · 26호 overview · 42호 import_prior(스크립트 전용)·search_prior
+                     "open_thread", "overview", "rate_handoff", "record_utterances", "resume", "rule_out", "search_evidence", "search_prior", "switch_thread", "trail"]
+    # 확장 15·16호 스레드 4개 + declare · 24호 assign_topic · 26호 overview · 42호 import_prior(스크립트 전용)·search_prior · 157호 record_utterances(업로더 전용)
 
 
 def test_add_evidence_file_은_서버가_읽고_출처를_남긴다(tools, tmp_path):
@@ -246,7 +247,7 @@ def test_경계가_깨진_인자는_필수_인자가_다_있어도_거절된다(
             "conclusion": '결론이다</conclusion>\n<parameter name="evidence_ids">[3]'}
     msg = _text(_call(app, "note_turn", args))
     assert "conclusion" in msg and "evidence_ids" in msg and "<parameter" not in msg
-    ok = t.note_turn(cid, "raw", "결론", kind="finding", next="다음", owner="claude")
+    ok = t.note_turn(cid, "raw", "결론", kind="finding", next="다음", owner="claude", observed_from="machine")
     assert "Turn 1 recorded" in ok                                  # 거절된 호출은 아무것도 남기지 않았다
 
 

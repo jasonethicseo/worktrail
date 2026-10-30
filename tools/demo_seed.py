@@ -163,10 +163,11 @@ def seed(db_path: str, work: pathlib.Path, lang: str = "ko", real: bool = True,
             Clock.set(step["t"])
             if "turn" in step:
                 s = step["turn"]
-                out = wt.external_turn(uid, cid, s["ev"], f"{key}-{step['t']}", note=s["note"],
-                                       note_kind=s.get("kind", "finding"), source={"via": "mcp"})
-                if out.get("evidence_id"):
-                    evs.append(out["evidence_id"])
+                # 확장 159호 — 노트의 관찰은 증거가 아니다. 기계 출력은 증거로 먼저 넣고 노트가 그것을 가리킨다.
+                ev = wt.external_turn(uid, cid, s["ev"], f"{key}-{step['t']}-ev", note=None, source={"via": "mcp"})
+                evs.append(ev["evidence_id"])
+                wt.external_turn(uid, cid, s["ev"], f"{key}-{step['t']}", note=s["note"],
+                                 note_kind=s.get("kind", "finding"), source={"via": "mcp"}, refs=[ev["evidence_id"]])
                 wt.run_workers()
             elif "decide" in step:
                 s = step["decide"]

@@ -7,6 +7,7 @@
 Worktrail 은 MCP 서버와 작은 로컬 창이다. Claude Code 나 Codex 가 저장소에서 일하는 동안 그 일을 **스레드**로 남긴다. 이 스레드가 무엇을 위한 것인지, 무엇을 정했고 왜 그렇게 정했는지, 아직 안 풀린 것은 무엇인지, 다음은 무엇인지. 다음 세션, 다른 에이전트, 혹은 다른 사람이건 상관 없이, diff 를 다시 읽는 대신 그 기록에서 이어받는다.
 
 - **데모** (읽기 전용, 가상 팀의 기록): https://casebook-api.syncflo.cloud/demo/ · [영어판](https://casebook-api.syncflo.cloud/demo/en/)
+- **사용 문서**: https://casebook-api.syncflo.cloud/demo/intro/docs/
 - **사용 신청** (호스팅 서버): https://casebook-api.syncflo.cloud/join — 구글 로그인, 5자리, 선착순
 - **피드백**: [GitHub Issues](https://github.com/jasonethicseo/worktrail/issues)
 
@@ -27,7 +28,7 @@ Worktrail 은 MCP 서버와 작은 로컬 창이다. Claude Code 나 Codex 가 �
 - **Codex CLI** — `codex mcp add` 로 등록. 시작할 때 한 번 "casebook 열린 스레드 보여줘", "casebook 사용해서 기록 남기며 작업해줘".
 - **claude.ai** — 커넥터로, OAuth 로그인 (호스팅 서버만).
 
-**맥·리눅스·WSL** 에서 된다. 윈도우 네이티브는 아직 아니다. 설치기와 실행기가 `sh` 다.
+**맥·리눅스·WSL** 에서 된다. 윈도우에서는 호스팅 서버로 쓴다. 신청 화면이 주는 지시문(`windows.md`)을 코딩 에이전트에 붙여 넣으면 에이전트가 설치한다. 기록을 이 컴퓨터에만 두는 방식은 설치기와 실행기가 `sh` 라서 WSL 에서만 된다.
 
 ## 설치
 
@@ -61,12 +62,12 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[mcp]"
 mkdir -p ~/.casebook && echo local > ~/.casebook/mode      # 서버 없이 로컬 sqlite 파일에 기록
 
 # Claude Code
-claude mcp add casebook -s user \
-  -e CASEBOOK_DB=$PWD/casebook.db -e CASEBOOK_MCP_EMAIL=you@example.com \
-  -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy
+claude mcp add casebook -s user -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy
 sh tools/hooks/install_claude_hooks.sh          # 선택: 세션 시작·post-commit 훅
 
-# Codex CLI 도 같다: `codex mcp add casebook --env CASEBOOK_DB=... --env CASEBOOK_MCP_EMAIL=... -- ...`
+# Codex CLI
+codex mcp add casebook -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy
+sh tools/hooks/install_codex_hooks.sh           # 프롬프트 훅: 내 말을 원문 그대로 남긴다. Codex 가 처음 한 번 신뢰를 묻는다
 
 .venv/bin/python -m casebook.adapters.ui_server  # 창
 ```

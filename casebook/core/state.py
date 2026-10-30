@@ -111,7 +111,7 @@ def _check_supersedes(db, case: dict, supersedes: int | None, event_type: str, s
 def record_decision(db, user_id: int, case: dict, statement: str, reason: str | None,
                     evidence_ids: list[int] | None, authority: str, supersedes: int | None,
                     scope: str = "thread", siblings: set[int] | None = None,
-                    client: str | None = None) -> dict:
+                    client: str | None = None, source_refs: list[str] | None = None) -> dict:
     if not (statement or "").strip():
         raise InputError("statement is empty")
     if authority not in AUTHORITIES:
@@ -125,14 +125,17 @@ def record_decision(db, user_id: int, case: dict, statement: str, reason: str | 
         "payload": {"statement": statement, "reason": reason or "", "evidence_ids": ids,
                     "authority": authority, "supersedes": sup, "scope": scope,
                     # 확장 40호 — 어느 클라이언트가 남겼는가. 못 받으면 넣지 않는다(미상이라고 꾸미지 않는다).
-                    **({"client": client} if client else {})},
+                    **({"client": client} if client else {}),
+                    # 확장 157호 — 이 결정이 나온 사용자 발화(utterances.py). 없으면 칸 자체가 없다.
+                    **({"source_refs": source_refs} if source_refs else {})},
     })
     return {"decision_id": e["id"], "supersedes": sup, "scope": scope}
 
 
 def record_constraint(db, user_id: int, case: dict, statement: str, reason: str | None,
                       authority: str, supersedes: int | None,
-                      scope: str = "thread", siblings: set[int] | None = None) -> dict:
+                      scope: str = "thread", siblings: set[int] | None = None,
+                      source_refs: list[str] | None = None) -> dict:
     if not (statement or "").strip():
         raise InputError("statement is empty")
     if authority not in AUTHORITIES:
@@ -143,7 +146,7 @@ def record_constraint(db, user_id: int, case: dict, statement: str, reason: str 
     e = db.add("ledger", {
         "case_id": case["id"], "turn_id": None, "event_type": "constraint_recorded",
         "payload": {"statement": statement, "reason": reason or "", "authority": authority,
-                    "supersedes": sup, "scope": scope},
+                    "supersedes": sup, "scope": scope, **({"source_refs": source_refs} if source_refs else {})},
     })
     return {"constraint_id": e["id"], "supersedes": sup, "scope": scope}
 
@@ -197,6 +200,8 @@ def _item(e: dict, kind: str) -> dict[str, Any]:
            "recorded_at": e["created_at"]}
     if kind == "decision":
         out["evidence_ids"] = p.get("evidence_ids", [])
+    if p.get("source_refs"):
+        out["source_refs"] = p["source_refs"]
     return out
 
 
@@ -222,9 +227,12 @@ def resume(db, case: dict, mode: str = "continuity", siblings: set[int] | None =
 
     evidences = db.query("evidence", where={"case_id": case_id}, order="id")
     seq_of = {t["id"]: t["sequence"] for t in turns}
+    # 확장 159호 — 옛 노트의 관찰은 에이전트 글이다(search.WRITTEN_BY_AGENT). 노트가 붙은 external 턴의 증거가 그것이다.
+    noted = {t["id"] for t in turns if t["turn_kind"] == "external" and t["assistant_message_id"]}
     index = [{"evidence_id": e["id"], "turn": seq_of.get(e["turn_id"]), "kind": e["kind"],
               "created_at": e["created_at"],
-              "head": (e["content"] or "").strip().splitlines()[0][:120] if (e["content"] or "").strip() else ""}
+              "head": (e["content"] or "").strip().splitlines()[0][:120] if (e["content"] or "").strip() else "",
+              **({"written_by": "agent"} if e["turn_id"] in noted else {})}
              for e in evidences]
     total = len(index)
     index = index[-50:]  # 색인은 최근 50건까지 — 나머지는 inspect/search 로
@@ -270,7 +278,8 @@ def resume(db, case: dict, mode: str = "continuity", siblings: set[int] | None =
     return out
 
 
-def declare(db, case: dict, kind: str, statement: str, authority: str = "agent", owner: str | None = None) -> dict:
+def declare(db, case: dict, kind: str, statement: str, authority: str = "agent", owner: str | None = None,
+            source_refs: list[str] | None = None) -> dict:
     """kind ∈ focus|open|next. 직전 현재값이 있으면 그것을 supersede 한다(사슬이 provenance).
     owner(확장 31호)는 next 에만 — 누구 차례인지. 없으면 단계는 활동 시각만으로 도출된다."""
     if kind not in DECLARATIONS:
@@ -304,7 +313,8 @@ def declare(db, case: dict, kind: str, statement: str, authority: str = "agent",
     # 타임라인이 읽히지 않는다. 대가는 "마지막으로 다시 확인한 시각"을 안 남기는 것이다.
     if kind == "next" and active:
         last = active[-1]["payload"]
-        if last.get("statement", "").strip() == statement and last.get("owner") == owner:
+        if (last.get("statement", "").strip() == statement and last.get("owner") == owner
+                and (last.get("source_refs") or []) == (source_refs or [])):
             return {"declaration_id": prev, "kind": kind, "supersedes": last.get("supersedes"),
                     "owner": owner, "unchanged": True}
     payload = {"statement": statement, "authority": authority, "supersedes": prev}
@@ -312,6 +322,8 @@ def declare(db, case: dict, kind: str, statement: str, authority: str = "agent",
         payload["owner"] = owner
     if confirmed:
         payload["confirmed"] = True
+    if source_refs:
+        payload["source_refs"] = source_refs
     e = db.add("ledger", {"case_id": case["id"], "turn_id": None, "event_type": DECLARATIONS[kind], "payload": payload})
     return {"declaration_id": e["id"], "kind": kind, "supersedes": prev, "owner": owner,
             "unchanged": False, "confirmed": confirmed}
@@ -340,10 +352,13 @@ def turns_since_focus(db, case_id: int) -> dict:
     focus = current_declaration(db, case_id, "focus")
     # 시각이 아니라 원장 순서로 센다 — 같은 밀리초에 선언과 턴이 나란히 생기면 시각으로는 앞뒤를 못 가른다.
     # 입력 턴과 옛 external 턴은 user_message 를 하나씩 낸다. #540 부터 external 턴은 message 를 쓰지 않으므로
-    # 그 턴은 canonical_evidence_created 로 센다 — user_message_id 가 비어 있는 external 턴만이라 두 번 세지 않는다.
+    # 그 턴은 생길 때 한 번 내는 turn_status_changed(from 없음 → pending)로 센다 — user_message_id 가 비어 있는 external
+    # 턴만이라 두 번 세지 않는다. 확장 159호 — 전에는 canonical_evidence_created 로 셌는데, 노트의 관찰이 증거 표를 떠나
+    # 노트 턴은 그 이벤트를 내지 않는다. 두 이벤트는 external 턴마다 한 거래에서 함께 났으므로 옛 스레드의 수는 같다.
     after = focus["id"] if focus else 0
     row = db.conn.execute(
         "SELECT COUNT(*) FROM ledger l LEFT JOIN turn t ON t.id = l.turn_id WHERE l.case_id = ? AND l.id > ? AND "
-        "(l.event_type = 'user_message' OR (l.event_type = 'canonical_evidence_created' AND t.turn_kind = 'external' "
-        "AND t.user_message_id IS NULL))", (case_id, after)).fetchone()
+        "(l.event_type = 'user_message' OR (l.event_type = 'turn_status_changed' AND t.turn_kind = 'external' "
+        "AND t.user_message_id IS NULL AND json_extract(l.payload, '$.from') IS NULL "
+        "AND json_extract(l.payload, '$.to') = 'pending'))", (case_id, after)).fetchone()
     return {"turns": row[0], "focus": focus}

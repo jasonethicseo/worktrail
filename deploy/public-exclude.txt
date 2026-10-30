@@ -61,3 +61,6 @@ tests/test_ledger_events.py
 tests/test_measurement.py
 tests/test_prompt_ext.py
 tests/test_web_option.py
+# 영상 재료 도구(tools/film_*)를 부르는 시험 — 도구는 공개 트리에 없다 (2026-10-30)
+tests/test_film_live.py
+tests/test_film_restore.py

@@ -27,7 +27,7 @@ def _setup(app, tmp_path):
     for i in range(30):
         app.constrain(USER, a, f"repo rule {i}\n\n" + "long body " * 40, authority="user", scope="repo")
     t.note_turn(a, "EXPLAIN shows a full scan on offset 90000", "offset pagination is slow past page 900",
-                kind="finding", next="Decide between cursor and keyset", owner="user")
+                kind="finding", next="Decide between cursor and keyset", owner="user", observed_from="machine")
     return t, a, b, old, new
 
 
@@ -99,11 +99,11 @@ def test_inspect_는_번호_하나를_전문으로(app, tmp_path):
     assert n["status"] == "in force" and n["supersedes"]["ref"] == f"D{old}"
     assert n["statement"].endswith("offset skipped rows under concurrent writes")
     turn = t.inspect(ref=f"{a}:1")
-    assert turn["observed"]["content"] == "EXPLAIN shows a full scan on offset 90000"
+    assert turn["observed"] == {"content": "EXPLAIN shows a full scan on offset 90000", "written_by": "agent"}   # 159호 — 노트의 일부
     assert turn["conclusion"] == "offset pagination is slow past page 900" and turn["interpretation"] is True
-    ev = turn["observed"]["evidence_id"]
-    assert t.inspect(ref=f"E{ev}")["content"] == "EXPLAIN shows a full scan on offset 90000"
-    assert t.inspect(evidence_id=ev)["content"] == "EXPLAIN shows a full scan on offset 90000"    # 옛 호출
+    ev = int(t.add_evidence(a, "Seq Scan on orders  (cost=0.00..1834.00)").split("#", 1)[1].split()[0])
+    assert t.inspect(ref=f"E{ev}")["content"] == "Seq Scan on orders  (cost=0.00..1834.00)"
+    assert t.inspect(evidence_id=ev)["content"] == "Seq Scan on orders  (cost=0.00..1834.00)"    # 옛 호출
     nx = t.inspect(ref=next(e["ref"] for e in t.trail(a)["events"] if e["kind"] == "next"))
     assert nx["kind"] == "next" and nx["owner"] == "user"
     with pytest.raises(InputError):

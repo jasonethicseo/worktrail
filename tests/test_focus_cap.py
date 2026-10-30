@@ -29,7 +29,7 @@ def wt():
 
 def _fill(t: Tools, cid: int, n: int) -> None:
     for i in range(n):
-        t.note_turn(cid, f"관찰 {i}", f"결론 {i}", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+        t.note_turn(cid, f"관찰 {i}", f"결론 {i}", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
 
 
 def test_문턱은_15_이고_16번째는_거절된다(wt, tmp_path):
@@ -38,21 +38,23 @@ def test_문턱은_15_이고_16번째는_거절된다(wt, tmp_path):
     _fill(t, cid, CAP)                                   # 15 는 들어간다 — 건강한 스레드(4~20턴)는 안 건드린다
     assert wt.db.count("turn", where={"case_id": cid}) == CAP
     with pytest.raises(ApiError, match=rf"thread {cid} has {CAP} turns since its focus was declared") as e:
-        t.note_turn(cid, "관찰 16", "결론 16", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+        t.note_turn(cid, "관찰 16", "결론 16", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
     msg = str(e.value)
     assert "the cap is 15" in msg and "D11098" in msg
     assert 'declare(case_id, "focus"' in msg and "open_thread(focus, topic)" in msg   # (2) 두 길
     assert "Nothing was recorded" in msg
     assert wt.db.count("turn", where={"case_id": cid}) == CAP                          # (1) 거절은 기록하지 않는다
-    assert wt.db.count("evidence", where={"case_id": cid}) == CAP
+    assert wt.db.count("message", where={"case_id": cid, "role": "observation"}) == CAP   # 159호 — 관찰은 노트의 일부
 
 
 def test_우회_인자는_없다():
     """(2) 30호의 교훈 — 도망길이 있으면 그리로 간다. note_turn 의 인자는 종전 넷 + kind(60호, 갈래)
     + next·owner(110호, D15573 — 턴마다 다시 말한다) + evidence_ids(123호, D15872 — 근거는 글이 아니라
-    번호로)다. 우회 인자는 하나도 없다."""
+    번호로)다. 157호가 source_refs·observed_from(사람 말이면 그 원문)과 capture(원문을 남기는 클라이언트라는 표시 —
+    프록시가 채우고 로컬 문은 스스로 판정한다)를 더했다. 어느 것도 턴 상한을 비켜 가지 않는다. 우회 인자는 하나도 없다."""
     assert list(inspect.signature(Tools.note_turn).parameters) == [
-        "self", "case_id", "observed", "conclusion", "kind", "next", "owner", "client", "evidence_ids"]
+        "self", "case_id", "observed", "conclusion", "kind", "next", "owner", "client", "evidence_ids",
+        "source_refs", "observed_from", "capture"]
 
 
 def test_focus_를_다시_선언하면_다시_센다(wt, tmp_path):
@@ -60,16 +62,16 @@ def test_focus_를_다시_선언하면_다시_센다(wt, tmp_path):
     cid = t.open_thread("풀 고갈을 확인한다", _git_repo(tmp_path / "r"), topic="검증")["case_id"]
     _fill(t, cid, CAP)
     with pytest.raises(ApiError):
-        t.note_turn(cid, "관찰", "결론", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
-    t.declare(cid, "focus", "풀 고갈을 확인한다 (아직 같은 일이다)")   # (3) 확인은 append-only 선언으로 남는다
+        t.note_turn(cid, "관찰", "결론", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
+    t.declare(cid, "focus", "풀 고갈을 확인한다 (아직 같은 일이다)", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")   # (3) 확인은 append-only 선언으로 남는다
     assert state.turns_since_focus(wt.db, cid)["turns"] == 0
-    assert "Turn 16 recorded" in t.note_turn(cid, "관찰 16", "결론 16", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    assert "Turn 16 recorded" in t.note_turn(cid, "관찰 16", "결론 16", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
     _fill(t, cid, CAP - 1)                               # 다시 15 까지
     with pytest.raises(ApiError, match=rf"thread {cid} has {CAP} turns since its focus was declared"):
-        t.note_turn(cid, "관찰", "결론", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+        t.note_turn(cid, "관찰", "결론", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
     # 다른 주제면 새 스레드 — 그쪽은 0 부터다
     other = t.open_thread("설치 모드 선택", _git_repo(tmp_path / "r2"), topic="검증")["case_id"]
-    assert "Turn 1 recorded" in t.note_turn(other, "관찰", "결론", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    assert "Turn 1 recorded" in t.note_turn(other, "관찰", "결론", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
 
 
 def test_증거_턴도_센다(wt, tmp_path):
@@ -80,7 +82,7 @@ def test_증거_턴도_센다(wt, tmp_path):
         t.add_evidence(cid, f"$ cmd {i}\nout")
     assert state.turns_since_focus(wt.db, cid)["turns"] == CAP
     with pytest.raises(ApiError, match="the cap is 15"):
-        t.note_turn(cid, "관찰", "결론", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+        t.note_turn(cid, "관찰", "결론", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
 
 
 def test_focus_없는_케이스는_전부_센다(wt):
@@ -89,9 +91,9 @@ def test_focus_없는_케이스는_전부_센다(wt):
     cid = t.open_case("옛 사건")["case_id"]
     _fill(t, cid, CAP)
     with pytest.raises(ApiError, match=rf"thread {cid} has {CAP} turns and no focus has ever been declared"):
-        t.note_turn(cid, "관찰", "결론", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
-    t.declare(cid, "focus", "옛 사건을 이어서 본다")
-    assert "Turn 16 recorded" in t.note_turn(cid, "관찰 16", "결론 16", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+        t.note_turn(cid, "관찰", "결론", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
+    t.declare(cid, "focus", "옛 사건을 이어서 본다", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    assert "Turn 16 recorded" in t.note_turn(cid, "관찰 16", "결론 16", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
 
 
 # ── 확장 110호 (D15573) — 턴마다 next 를 다시 말한다 ────────────────────────
@@ -103,9 +105,9 @@ def test_next_없이는_턴을_기록하지_못한다(wt, tmp_path):
     t = Tools(wt, 1)
     cid = t.open_thread("강제를 본다", _git_repo(tmp_path / "r"), topic="검증")["case_id"]
     with pytest.raises(InputError, match="note_turn needs next"):
-        t.note_turn(cid, "관찰", "결론", kind="finding")
+        t.note_turn(cid, "관찰", "결론", kind="finding", observed_from="machine")
     with pytest.raises(InputError, match="needs an owner"):
-        t.note_turn(cid, "관찰", "결론", kind="finding", next="다음 할 일\n\n본문")
+        t.note_turn(cid, "관찰", "결론", kind="finding", next="다음 할 일\n\n본문", observed_from="machine")
     assert wt.db.count("turn", where={"case_id": cid}) == 0          # 거절된 턴은 쌓이지 않는다
 
 
@@ -117,20 +119,20 @@ def test_같은_next_는_새_줄을_쓰지_않는다(wt, tmp_path):
     same = "판정을 기다린다\n\n같은 줄이 세 번 들어온다."
     n = lambda: wt.db.count("ledger", where={"case_id": cid, "event_type": "next_declared"})
     before = n()
-    out1 = t.note_turn(cid, "관찰 1", "결론 1", kind="finding", next=same, owner="user")
+    out1 = t.note_turn(cid, "관찰 1", "결론 1", kind="finding", next=same, owner="user", observed_from="machine")
     assert "next #" in out1 and "declared" in out1
     after_first = n()
     assert after_first == before + 1
 
-    out2 = t.note_turn(cid, "관찰 2", "결론 2", kind="finding", next=same, owner="user")
+    out2 = t.note_turn(cid, "관찰 2", "결론 2", kind="finding", next=same, owner="user", observed_from="machine")
     assert "unchanged" in out2
     assert n() == after_first                                        # 같은 글 — 새 줄이 없다
 
-    out3 = t.note_turn(cid, "관찰 3", "결론 3", kind="finding", next=same, owner="claude")
+    out3 = t.note_turn(cid, "관찰 3", "결론 3", kind="finding", next=same, owner="claude", observed_from="machine")
     assert "declared" in out3 and n() == after_first + 1              # 차례가 바뀌면 새 줄이다
 
     out4 = t.note_turn(cid, "관찰 4", "결론 4", kind="finding",
-                       next="이제 다른 일이다\n\n글이 바뀌었다.", owner="claude")
+                       next="이제 다른 일이다\n\n글이 바뀌었다.", owner="claude", observed_from="machine")
     assert "declared" in out4 and n() == after_first + 2
     assert wt.db.count("turn", where={"case_id": cid}) == 4          # 턴은 넷 다 쌓였다
 
@@ -140,9 +142,10 @@ def test_next_는_그_턴_뒤에_선다(wt, tmp_path):
     턴을 먼저 쌓고 그 다음에 선언한다."""
     t = Tools(wt, 1)
     cid = t.open_thread("순서를 본다", _git_repo(tmp_path / "r"), topic="검증")["case_id"]
-    t.note_turn(cid, "관찰", "결론", kind="finding", next="다음\n\n본문", owner="user")
+    t.note_turn(cid, "관찰", "결론", kind="finding", next="다음\n\n본문", owner="user", observed_from="machine")
     rows = wt.db.query("ledger", where={"case_id": cid}, order="id")
-    note = max(e["id"] for e in rows if e["event_type"] == "canonical_evidence_created")
+    note = max(e["id"] for e in rows if e["event_type"] == "turn_status_changed" and e["payload"].get("from") is None
+               and e["payload"].get("to") == "pending")                        # 턴이 생긴 자리(159호 전에는 증거 이벤트)
     nxt = max(e["id"] for e in rows if e["event_type"] == "next_declared")
     assert nxt > note
 
@@ -165,7 +168,7 @@ def test_같은_말로_다시_선언하면_확인이다(wt, tmp_path):
     assert rows[-1]["payload"].get("confirmed") is True
     assert rows[0]["payload"].get("confirmed") is not True     # 처음 것은 확인이 아니다
 
-    t.declare(cid, "focus", "이제 다른 일이다\n\n방향이 바뀌었다.")
+    t.declare(cid, "focus", "이제 다른 일이다\n\n방향이 바뀌었다.", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
     rows = wt.db.query("ledger", where={"case_id": cid, "event_type": "focus_declared"}, order="id")
     assert rows[-1]["payload"].get("confirmed") is not True    # 글이 바뀌면 변경이다
 
@@ -177,11 +180,11 @@ def test_확인은_상한을_다시_세게_한다(wt, tmp_path):
     same = "상한을 본다\n\n같은 글로 확인한다."
     cid = t.open_thread(same, _git_repo(tmp_path / "r"), topic="검증")["case_id"]
     for i in range(Tools.FOCUS_TURN_CAP):
-        t.note_turn(cid, f"관찰 {i}", f"결론 {i}", kind="finding", next="다음\n\n본문", owner="user")
+        t.note_turn(cid, f"관찰 {i}", f"결론 {i}", kind="finding", next="다음\n\n본문", owner="user", observed_from="machine")
     with pytest.raises(ApiError, match="the cap is"):
-        t.note_turn(cid, "관찰 넘침", "결론", kind="finding", next="다음\n\n본문", owner="user")
+        t.note_turn(cid, "관찰 넘침", "결론", kind="finding", next="다음\n\n본문", owner="user", observed_from="machine")
     t.declare(cid, "focus", same)                              # 글자 그대로 확인
-    out = t.note_turn(cid, "관찰 다시", "결론", kind="finding", next="다음\n\n본문", owner="user")
+    out = t.note_turn(cid, "관찰 다시", "결론", kind="finding", next="다음\n\n본문", owner="user", observed_from="machine")
     assert "recorded in case" in out
 
 
@@ -192,11 +195,11 @@ def test_확인은_회고에_초점_줄을_만들지_않는다(wt, tmp_path):
     t = Tools(wt, 1)
     same = "회고를 본다\n\n같은 글로 확인한다."
     cid = t.open_thread(same, _git_repo(tmp_path / "r"), topic="검증")["case_id"]
-    t.note_turn(cid, "관찰", "결론", kind="finding", next="다음\n\n본문", owner="user")
+    t.note_turn(cid, "관찰", "결론", kind="finding", next="다음\n\n본문", owner="user", observed_from="machine")
     t.declare(cid, "focus", same)                              # 확인
     focus_events = lambda: [e for e in review.events_for_cases(wt.db, 1, [cid]).get(cid, []) if e["kind"] == "focus"]
     assert focus_events() == [], "확인이 회고에 초점 줄로 나온다"
-    t.declare(cid, "focus", "방향이 바뀌었다\n\n이제 다른 일이다.")
+    t.declare(cid, "focus", "방향이 바뀌었다\n\n이제 다른 일이다.", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
     assert len(focus_events()) == 1, "진짜 변경은 나와야 한다"
 
 

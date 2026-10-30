@@ -150,7 +150,7 @@ def test_http_문_토큰이_사용자를_정한다():
         async def mine(s):
             tools = (await s.list_tools()).tools
             names = sorted(t.name for t in tools)
-            assert "note_turn" in names and "add_evidence_file" in names and len(names) == 28   # 55호 define, 153호 find·trail
+            assert "note_turn" in names and "add_evidence_file" in names and len(names) == 30   # 55호 define, 153호 find·trail, 157호 record_utterances·add_utterance
             for t in tools:                                             # (7) ctx 는 스키마에 없다
                 assert "ctx" not in (t.input_schema.get("properties") or {})
             refused = _text(await s.call_tool("open_thread", {"focus": "주제 없이", "topic": ""}))
@@ -158,7 +158,7 @@ def test_http_문_토큰이_사용자를_정한다():
             opened = json.loads(_text(await s.call_tool("open_thread", {"focus": "채팅에서 연 스레드", "topic": "대회 준비"})))
             assert opened["repo"] == "chat" and opened["worktree"] == "chat" and opened["topic"]["name"] == "대회 준비"
             cid = opened["case_id"]
-            out = _text(await s.call_tool("note_turn", {"case_id": cid, "observed": "o", "conclusion": "c", "kind": "finding", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user"}))
+            out = _text(await s.call_tool("note_turn", {"case_id": cid, "observed": "o", "conclusion": "c", "kind": "finding", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user", "observed_from": "machine"}))
             assert "Turn 1 recorded" in out
             out = _text(await s.call_tool("add_evidence_file", {"case_id": cid, "path": "/etc/hosts"}))
             assert "remote door" in out
@@ -325,16 +325,18 @@ def test_프록시는_facts_를_채우고_hook_을_숨긴다(tmp_path):
             from casebook.adapters.mcp_server import INSTRUCTIONS
             assert p.instructions == INSTRUCTIONS
             names = [t.name for t in p.host_tools()]
-            assert "hook" not in names and "import_prior" not in names and len(names) == 26   # 호스트가 보는 것은 26개 (hook·import_prior 는 스크립트 전용; 55호 define)
+            assert "hook" not in names and "import_prior" not in names and len(names) == 27   # 호스트가 보는 것은 27개 (hook·import_prior·record_utterances 는 스크립트 전용; 55호 define, 157호 add_utterance)
+            assert "record_utterances" not in names                                           # 157호 — 업로더 전용
             for t in p.host_tools():
                 assert "facts" not in t.input_schema.get("properties", {})
+                assert "capture" not in t.input_schema.get("properties", {})                  # 157호 — 프록시가 채운다
             assert "facts" in {t.name: t for t in p.tools}["open_thread"].input_schema["properties"]   # 원격에는 있다
             res = await p.call("open_thread", {"focus": "프록시로 연 스레드", "topic": "테스트"})
             o = json.loads(res.content[0].text)
             assert o["repo"] == "github.com/acme/widgets" and o["worktree"] == wt                 # 프록시가 facts 를 채웠다
             res = await p.call("resume", {"case_id": o["case_id"]})
             assert json.loads(res.content[0].text)["anchor"]["provided"] is True
-            res = await p.call("note_turn", {"case_id": o["case_id"], "observed": "o", "conclusion": "c", "kind": "finding", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user"})   # facts 없는 도구는 그대로
+            res = await p.call("note_turn", {"case_id": o["case_id"], "observed": "o", "conclusion": "c", "kind": "finding", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user", "observed_from": "machine"})   # facts 없는 도구는 그대로
             assert "Turn 1 recorded" in res.content[0].text
             await p.close()
             # 끊긴 뒤 호출 → 다시 붙어서 성공

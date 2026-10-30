@@ -1,4 +1,4 @@
-"""설치본이 거는 훅이 다섯 그대로여야 한다 (#495).
+"""설치본이 거는 훅이 여섯 그대로여야 한다 (#495). 157호가 UserPromptSubmit(원문 수집)을 더했다.
 
 2026-09-10 까지 이 저장소의 .claude/settings.json 은 훅 5개, 설치본은 2개였다. 그래서
 피실험자는 압축·세션종료 체크포인트도, 에이전트가 만든 커밋 연결도 받지 못했는데 만든
@@ -17,13 +17,14 @@ import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "tools/hooks/install_claude_hooks.sh"
-# 걸어야 하는 다섯. (이벤트, matcher, 훅 인자)
+# 걸어야 하는 여섯. (이벤트, matcher, 훅 인자)
 EXPECTED = {
     ("SessionStart", "startup|resume|clear|fork", "session-start"),   # 열린 스레드를 보여 준다
     ("SessionStart", "compact", "post-compact"),                       # 압축 직후 먼저 기록하라
     ("PreCompact", "", "checkpoint pre-compact"),                      # 압축 직전 anchor 갱신
     ("SessionEnd", "", "checkpoint session-end"),                      # 닫을 때 anchor 갱신
     ("PostToolUse", "Bash", "post-commit"),                            # HEAD 가 움직였으면 커밋 연결
+    ("UserPromptSubmit", "", "prompt"),                                # 사람이 친 원문을 남기고 source_ref 를 알린다
 }
 
 
@@ -49,7 +50,7 @@ def _from_installer() -> set[tuple[str, str, str]]:
     return {(s["event"], s["matcher"] or "", s["arg"]) for s in spec}
 
 
-def test_설치본이_다섯을_그대로_건다():
+def test_설치본이_여섯을_그대로_건다():
     ships = _from_installer()
     missing = sorted(EXPECTED - ships)
     extra = sorted(ships - EXPECTED)

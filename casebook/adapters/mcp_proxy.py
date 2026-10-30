@@ -28,7 +28,10 @@ from contextlib import asynccontextmanager
 from casebook.core.clientmode import ModeError, remote_url, resolve, say   # 모드는 clientmode 가 정한다
 
 FACTS_TOOLS = ("list_threads", "open_thread", "switch_thread", "resume")
-HIDDEN_TOOLS = ("hook", "import_prior")   # 훅·백필 스크립트 전용 — 호스트 모델에게 보이지 않는다
+HIDDEN_TOOLS = ("hook", "import_prior", "record_utterances")   # 훅·백필·원문 업로더 전용 — 호스트 모델에게 보이지 않는다
+# 확장 157호 — 원문을 턴마다 남기는 클라이언트에서 온 기록이라는 표시(capture)를 싣는 도구들. 서버는 이 표시가 있을 때만
+# 사람 권한 기록에 source_refs 를 요구한다(D18011 · D18018). 맥의 capture 는 프록시만 볼 수 있다.
+CAPTURE_TOOLS = ("decide", "constrain", "note_turn", "declare", "add_utterance")
 IDEMPOTENT_TOOLS = ("add_evidence", "note_turn")
 REQUEST_ID_META = "casebook/request_id"   # mcp_server.REQUEST_ID_META 와 같은 값 — 서버 모듈을 불러오지 않으려고 따로 둔다
 TOOL_TIMEOUT = 90.0                       # 확장 103호 — 한 번의 시도에 주는 시간
@@ -69,9 +72,10 @@ def host_schema(tool: Any) -> dict[str, Any]:
     props.pop("facts", None)
     props.pop("client", None)      # 확장 40호 — 프록시가 채운다. 호스트가 스스로 대는 칸이 아니다.
     props.pop("request_id", None)  # 재시도 열쇠는 프록시가 한 호출에 한 번 만든다.
+    props.pop("capture", None)     # 확장 157호 — 프록시가 맥의 capture 를 보고 채운다.
     schema["properties"] = props
     if "required" in schema:
-        schema["required"] = [r for r in schema["required"] if r not in ("facts", "client", "request_id")]
+        schema["required"] = [r for r in schema["required"] if r not in ("facts", "client", "request_id", "capture")]
     return schema
 
 
@@ -244,7 +248,20 @@ class Proxy:
     def with_client(self, name: str, args: dict[str, Any], client: str | None) -> dict[str, Any]:
         if client and name in CLIENT_TOOLS:
             args["client"] = client
+        if name in CAPTURE_TOOLS:
+            args.pop("capture", None)               # 호스트 모델이 대는 칸이 아니다
+            from casebook.adapters import capture
+            if capture.client_active(client) and self._remote_takes(name, "capture"):
+                args["capture"] = True
         return args
+
+    def _remote_takes(self, tool: str, param: str) -> bool:
+        """원격 도구가 그 칸을 아는가. 플러그인이 서버보다 먼저 갱신되면 옛 서버는 capture 를 모른다 — 모르는 칸을
+        실어 보내 기록이 통째로 거절되느니 표시를 빼고 보낸다. 목록을 아직 못 받았으면(시험·첫 연결 전) 안다고 본다."""
+        for t in self.tools:
+            if t.name == tool:
+                return param in ((t.input_schema or {}).get("properties") or {})
+        return not self.tools
 
     def with_facts(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         if name in FACTS_TOOLS:
@@ -307,7 +324,7 @@ class Proxy:
 # 확장 40호 (2026-09-08) — 기록에 어느 클라이언트가 남겼는지를 붙인다. 프록시만 진짜 호스트를 본다:
 # 원격 문이 보는 것은 프록시이므로, 여기서 들은 이름을 기록 도구 셋에 실어 보낸다.
 # 실측: Claude Code "claude-code" (2.1.261) · Codex "codex-mcp-client" (0.147.0).
-CLIENT_TOOLS = ("note_turn", "add_evidence", "decide")
+CLIENT_TOOLS = ("note_turn", "add_evidence", "decide", "add_utterance")
 
 
 def client_name(ctx: Any) -> str | None:

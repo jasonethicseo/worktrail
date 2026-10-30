@@ -34,7 +34,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 
-from casebook.core import access, auth, headline, hookctx, oauth, prior, reads, recall, state, threads
+from casebook.core import access, auth, headline, hookctx, oauth, prior, reads, recall, state, threads, utterances
+from casebook.core import handoff as handoff_doc
 from casebook.core.worktrail import Worktrail
 from casebook.core.db import SqliteDB
 from casebook.core.errors import AccessDeniedError, ApiError, InputError
@@ -67,7 +68,7 @@ add_evidence / add_evidence_file take raw material VERBATIM — never paraphrase
 note_turn(kind=change|verified|finding|thought): what you observed and concluded.
 handoff only when the engineer asks where things stand.
 First line of every statement = its title: ≤120 columns (CJK=2), no ' — ', no record numbers (#517,
-hash) — those go in the body. A next for the user is written to them.
+hash) in it or the paragraph under it. A next for the user is written to them.
 
 Durable state — the boundary is "what could overturn it": a hypothesis stays in note_turn, never in
 decide. A decision or constraint (only the engineer can change it) goes to decide/constrain with
@@ -322,11 +323,25 @@ class Tools:
     def overview(self) -> list[dict[str, Any]]:
         return self.cb.overview(self.uid)
 
-    def declare(self, case_id: int, kind: str, statement: str, authority: str = "agent", owner: str | None = None) -> str:
-        r = self.cb.declare(self.uid, case_id, kind, statement, authority, owner)
+    def declare(self, case_id: int, kind: str, statement: str, authority: str = "agent", owner: str | None = None,
+                source_refs: list[str] | None = None, capture: bool = False, next: str | None = None) -> str:
+        # 확장 160호 (D18197) — 다른 말로 다시 선언하는 focus 는 방향이 바뀐 것이라 next 를 같이 받는다. owner 는 그
+        # next 의 차례다(focus 자신에게는 차례가 없다). 같은 말이면 확인이라 받지 않는다.
+        if kind == "focus":
+            self.cb._assert_case_owner(self.uid, case_id)       # 남의 스레드의 focus 와 견주지 않는다
+        changes = kind == "focus" and (state.current(self.cb.db, case_id, "focus") or "").strip() != (statement or "").strip()
+        if changes or (kind == "focus" and next is not None):
+            self._check_next(next, owner, "declare(kind=\"focus\") with new words", self.NEXT_WHY["focus"])
+        elif next is not None and kind != "next":
+            raise InputError("next goes with a focus — for open, declare next on its own")
+        # 확장 157호 (D18018) — focus 는 사람 말을 출처로 인용할 때 원문을 가리킨다. authority=user 가 그 표시다.
+        refs = self._sources(source_refs, kind == "focus" and authority == "user", "a focus with authority=user", capture)
+        r = self.cb.declare(self.uid, case_id, kind, statement, authority, None if kind == "focus" else owner,
+                            source_refs=refs)
         sup = f", supersedes #{r['supersedes']}" if r["supersedes"] else ""
         who = f", owner: {r['owner']}" if r.get("owner") else ""
-        return f"{kind} #{r['declaration_id']} declared for thread {case_id} (authority: {authority}{who}{sup})."
+        tail = self._declare_next(case_id, next, owner) if kind == "focus" and next is not None else ""
+        return f"{kind} #{r['declaration_id']} declared for thread {case_id} (authority: {authority}{who}{sup}).{tail}"
 
     def assign_topic(self, name: str, case_ids: list[int], summary: str = "", repos: list[str] | None = None,
                      conclusion: str = "") -> str:
@@ -441,6 +456,55 @@ class Tools:
                        "declare(case_id, \"focus\", <the focus, restated>) and then record the turn; if the subject has "
                        "changed, open_thread(focus, topic) for the new one. Nothing was recorded.")
 
+    # 확장 157호 — 사용자 발화 원문과 기록의 연결 (스레드 595). 규칙은 어느 도구에서 오든 같다: 사람 권한 결정·제약·
+    # focus 와 사람 말에서 나온 노트는 그 원문을 가리킨다. 다른 것은 ref 가 어디서 오느냐뿐이다 —
+    #   capture=True  원문을 훅으로 스스로 남기는 호스트(Claude Code·Codex). 프롬프트에 'casebook source_ref' 줄이 온다.
+    #                 업로더가 뒤에서 올리므로 아직 없는 ref 도 받는다(D17990). 프록시가 채우고, 로컬 문은 스스로 판정한다.
+    #   capture=False 훅이 없는 채팅 클라이언트. 모델이 add_utterance 로 원문을 붙여 받은 ref 여야 하고, 없는 ref 는 거절한다.
+    OBSERVED_FROM = ("machine", "user")
+
+    def _sources(self, source_refs: list[str] | None, required: bool, what: str, capture: bool) -> list[str]:
+        refs = utterances.normalize_refs(source_refs)
+        if required and not refs:
+            raise InputError(
+                f"{what} needs source_refs — the engineer's words it comes from. If the engineer's prompt arrived with a "
+                "line 'casebook source_ref: <id>', pass that id. Otherwise (a chat client), first paste their message "
+                "exactly as written with add_utterance(text) and pass the id it returns. If the engineer did not actually "
+                "say it, record it with authority=\"agent\" instead. Nothing was recorded.")
+        if refs and not capture:
+            missing = [r for r in refs if r not in utterances.known(self.cb.db, self.uid, refs)]
+            if missing:
+                raise InputError(
+                    f"source_refs {missing} are not stored utterances. Use the id add_utterance returned (or the "
+                    "'casebook source_ref' id shown with the prompt). Nothing was recorded.")
+        return refs
+
+    def add_utterance(self, text: str, client: str | None = None, capture: bool = False) -> str:
+        """확장 157호 — 훅이 없는 채팅 클라이언트용. 모델이 사람 메시지를 옮겨 붙인다(origin=model_pasted)."""
+        if capture:
+            raise InputError("add_utterance is for clients without a prompt hook. This client already records the "
+                             "engineer's prompts itself — use the 'casebook source_ref: <id>' shown with the prompt. "
+                             "Nothing was recorded.")
+        pid = utterances.add_pasted(self.cb.db, self.uid, text, normalize_client(client))
+        return (f"Utterance {pid} stored as pasted by you (origin: model_pasted). Pass source_refs=[\"{pid}\"] on the "
+                "record that comes from it.")
+
+    @classmethod
+    def _observed_from(cls, value: str | None) -> str:
+        v = (value or "").strip().lower() or None
+        if v is not None and v not in cls.OBSERVED_FROM:
+            raise InputError('observed_from must be "machine" (tool output, tests, diffs, files) or "user" '
+                             "(the engineer's words). Nothing was recorded.")
+        if v is None:
+            raise InputError('note_turn needs observed_from — where the observation came from: "machine" (tool output, '
+                             'tests, diffs, files) or "user" (the engineer\'s words; then pass source_refs). '
+                             "Nothing was recorded.")
+        return v
+
+    def record_utterances(self, items: list) -> dict[str, Any]:
+        """확장 157호 — 원문 업로더 전용(에이전트용 아님). 맥의 spool 에 쌓인 사람 발화를 받는다(D18009)."""
+        return utterances.record(self.cb.db, self.uid, items)
+
     # 확장 60호 — 노트의 갈래(D14720, #508). 실서버 노트 45개 표본이 이 넷으로 나뉘었다(바꿈 44 · 발견 24 · 생각 18 · 확인 13 %).
     # 붙이는 것은 에이전트다 — next 의 owner 처럼 없으면 거절한다. 사후 AI 분류는 하지 않는다. 옛 노트는 갈래 없이 "노트".
     NOTE_KINDS = {"change": "바꿈", "verified": "확인", "finding": "발견", "thought": "생각"}
@@ -456,9 +520,39 @@ class Tools:
                 "둘이 섞이면 노트를 둘로 쪼갠다. Decisions are decide(), not a note kind.")
         return k
 
+    def _check_next(self, next: str | None, owner: str | None, tool: str, why: str) -> None:
+        """기록을 쌓기 전에 next 를 재어 본다 — 기록을 먼저 쌓고 next 에서 거절당하면 그 기록만 next 없이 남는다."""
+        if not (next or "").strip():
+            raise InputError(
+                f"{tool} needs next — after this, what happens next and whose turn is it? "
+                "Pass next=<one line, then a blank line, then the detail> and owner=<\"user\" | "
+                "\"watch\" | an agent name such as \"claude\" / \"codex\">. " + why +
+                " That line is what the next session reads to know what to do.")
+        headline.check(next, "next")
+        if not state.normalize_owner(owner):
+            raise InputError('next needs an owner — who takes the next action: "user" (the engineer '
+                             'must act), "watch" (nothing to do, only watching), or an agent name '
+                             'such as "codex" / "claude"')
+        headline.check_addressed(next, owner, "next")          # 확장 123호 — 사람의 차례면 사람에게 쓴다
+
+    def _declare_next(self, case_id: int, next: str, owner: str) -> str:
+        d = self.cb.declare(self.uid, case_id, "next", next, "agent", owner)
+        return (f" next #{d['declaration_id']} unchanged." if d.get("unchanged")
+                else f" next #{d['declaration_id']} declared (owner: {d['owner']}).")
+
+    # 확장 160호 (D18197) — 다음 할 일을 바꾸는 기록은 next 를 같이 말한다: 노트(110호)에 더해 결정 · 가설 기각 ·
+    # 다른 말로 다시 선언한 focus. 전에는 노트에만 걸어, 결정으로 끝난 턴 뒤에 next 가 이미 정한 일을 가리켰다
+    # (스레드 595, D18184 뒤의 N18180). 제약 · open · 같은 말의 focus(확인)는 다음 할 일을 바꾸지 않아 걸지 않는다.
+    NEXT_WHY = {
+        "decide": "A decision changes what happens next — carry it out, drop the work, or ask the next question.",
+        "rule_out": "Ruling a hypothesis out changes what happens next — the next candidate, or nothing left to try.",
+        "focus": "A new focus changes what happens next. Re-declaring the same words (a confirmation) does not need it.",
+    }
+
     def note_turn(self, case_id: int, observed: str, conclusion: str, kind: str | None = None,
                   next: str | None = None, owner: str | None = None, client: str | None = None,
-                  evidence_ids: list[int] | None = None) -> str:
+                  evidence_ids: list[int] | None = None, source_refs: list[str] | None = None,
+                  observed_from: str | None = None, capture: bool = False) -> str:
         """확장 110호 (D15573) — 턴마다 next 를 다시 말한다.
 
         전에는 next 에 아무 강제가 없어 낡은 채로 남았다: 스레드 520 에서 마지막 노트보다 7시간·
@@ -467,33 +561,26 @@ class Tools:
         도구 호출을 늘리지 않고도 매 턴 다시 생각하게 만들기 때문이다. 글이 그대로면 state.declare
         가 새 줄을 쓰지 않으므로, "매 턴 갱신" 은 실제로 "매 턴 재확인" 이 된다."""
         note_kind = self.normalize_note_kind(kind)
-        if not (next or "").strip():
-            raise InputError(
-                "note_turn needs next — after this turn, what happens next and whose turn is it? "
-                "Pass next=<one line, then a blank line, then the detail> and owner=<\"user\" | "
-                "\"watch\" | an agent name such as \"claude\" / \"codex\">. Say it every turn, even when "
-                "nothing changed: if it is the same as before, nothing new is written (D15573). "
-                "That line is what the next session reads to know what to do.")
-        # 턴을 먼저 쌓고 next 를 쓰다 거절당하면 그 턴만 next 없이 남는다 — 먼저 재어 본다.
-        headline.check(next, "next")
-        if not state.normalize_owner(owner):
-            raise InputError('next needs an owner — who takes the next action: "user" (the engineer '
-                             'must act), "watch" (nothing to do, only watching), or an agent name '
-                             'such as "codex" / "claude"')
-        headline.check_addressed(next, owner, "next")          # 확장 123호 — 사람의 차례면 사람에게 쓴다
+        if not (conclusion or "").strip():
+            # 확장 159호 — 결론 없는 턴은 add_evidence 의 길이라 observed 가 증거로 저장된다. 노트는 결론이 있어야 노트다.
+            raise InputError("note_turn needs a conclusion — what you concluded from what you observed. To store "
+                             "machine output on its own, use add_evidence.")
+        self._check_next(next, owner, "note_turn", "Say it every turn, even when nothing changed: if it is the "
+                         "same as before, nothing new is written (D15573).")
         refs = state.owned_evidence(self.cb.db, self.uid, evidence_ids)   # 확장 123호 — 남의 증거는 못 단다
+        origin = self._observed_from(observed_from)
+        sources = self._sources(source_refs, origin == "user", "a note observed from the engineer's words", capture)
         self._check_focus_cap(case_id)
         r = self.cb.external_turn(self.uid, case_id, observed, action_key=_key(), note=conclusion,
-                                  source=self._source(client), note_kind=note_kind, refs=refs)
+                                  source=self._source(client), note_kind=note_kind, refs=refs,
+                                  source_refs=sources, observed_from=origin)
         # next 는 턴 뒤에 선언한다 — 앞에 두면 원장 순서에서 next 가 노트보다 먼저가 되어
         # 화면이 "이 next 는 마지막 노트보다 낡았다" 로 읽는다.
-        d = self.cb.declare(self.uid, case_id, "next", next, "agent", owner)
-        tail = (f" next #{d['declaration_id']} unchanged." if d.get("unchanged")
-                else f" next #{d['declaration_id']} declared (owner: {d['owner']}).")
+        tail = self._declare_next(case_id, next, owner)
         self.cb.run_workers()
         cites = f" Cites evidence {', '.join('#' + str(i) for i in refs)}." if refs else ""
-        return (f"Turn {r['sequence']} recorded in case {case_id}: Evidence #{r['evidence_id']} "
-                f"+ your conclusion.{cites}{tail}")
+        return (f"Turn {r['sequence']} recorded in case {case_id}: your observation and conclusion, stored as a note "
+                f"(your account, not evidence).{cites}{tail}")
 
     def search_evidence(self, query: str, limit: int = 10, include_archived: bool = False) -> list[dict[str, Any]]:
         """기록된 증거 먼저, 그 뒤에 설치 전 기록(D13627 — 검색은 포함, 목록은 섞지 않음)."""
@@ -501,7 +588,8 @@ class Tools:
         reads.log(self.cb.db, self.uid, "search", None, query, len(rows))
         hits = [{"evidence_id": r["evidence_id"], "case_id": r["case_id"], "case_title": r["case_title"],
                  "turn": r["turn"], "kind": r["kind"], "created_at": r["created_at"],
-                 "source": r["source"], "excerpt": r["excerpt"]} for r in rows]
+                 "source": r["source"], "excerpt": r["excerpt"],
+                 **({"written_by": r["written_by"]} if r.get("written_by") else {})} for r in rows]
         room = max(int(limit) - len(hits), 0)
         if room:
             hits += [self._as_hit(r) for r in prior.search(self.cb.db, self.uid, query, room)]
@@ -526,15 +614,21 @@ class Tools:
 
     def decide(self, case_id: int, statement: str, reason: str = "", evidence_ids: list[int] | None = None,
                authority: str = "agent", supersedes: int | None = None, scope: str = "thread",
-               client: str | None = None) -> str:
+               client: str | None = None, source_refs: list[str] | None = None, capture: bool = False,
+               next: str | None = None, owner: str | None = None) -> str:
+        self._check_next(next, owner, "decide", self.NEXT_WHY["decide"])
+        refs = self._sources(source_refs, authority == "user", "a decision with authority=user", capture)
         r = self.cb.decide(self.uid, case_id, statement, reason, evidence_ids, authority, supersedes, scope,
-                           client=normalize_client(client))
+                           client=normalize_client(client), source_refs=refs)
         sup = f", supersedes D{r['supersedes']}" if r["supersedes"] else ""
-        return f"Decision D{r['decision_id']} recorded in case {case_id} (scope: {scope}, authority: {authority}{sup})."
+        tail = self._declare_next(case_id, next, owner)
+        return f"Decision D{r['decision_id']} recorded in case {case_id} (scope: {scope}, authority: {authority}{sup}).{tail}"
 
     def constrain(self, case_id: int, statement: str, reason: str = "", authority: str = "agent",
-                  supersedes: int | None = None, scope: str = "thread") -> str:
-        r = self.cb.constrain(self.uid, case_id, statement, reason, authority, supersedes, scope)
+                  supersedes: int | None = None, scope: str = "thread", source_refs: list[str] | None = None,
+                  capture: bool = False) -> str:
+        refs = self._sources(source_refs, authority == "user", "a constraint with authority=user", capture)
+        r = self.cb.constrain(self.uid, case_id, statement, reason, authority, supersedes, scope, source_refs=refs)
         sup = f", supersedes C{r['supersedes']}" if r["supersedes"] else ""
         return f"Constraint C{r['constraint_id']} recorded in case {case_id} (scope: {scope}, authority: {authority}{sup})."
 
@@ -544,9 +638,12 @@ class Tools:
         sup = f", supersedes T{r['supersedes']}" if r["supersedes"] else ""
         return f"Term T{r['term_id']} '{r['term']}' defined in case {case_id} (scope: {scope}, authority: {authority}{sup})."
 
-    def rule_out(self, case_id: int, hypothesis: str, scope: str, evidence_ids: list[int]) -> str:
+    def rule_out(self, case_id: int, hypothesis: str, scope: str, evidence_ids: list[int],
+                 next: str | None = None, owner: str | None = None) -> str:
+        self._check_next(next, owner, "rule_out", self.NEXT_WHY["rule_out"])
         r = self.cb.rule_out(self.uid, case_id, hypothesis, scope, evidence_ids)
-        return f"Ruled out R{r['ruled_out_id']} in case {case_id}, within scope: {scope}"
+        tail = self._declare_next(case_id, next, owner)
+        return f"Ruled out R{r['ruled_out_id']} in case {case_id}, within scope: {scope}.{tail}"
 
     def resume(self, case_id: int, mode: str = "continuity", worktree: str | None = None,
                facts: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -597,66 +694,28 @@ class Tools:
                     "To orient yourself, use resume(case_id).")
         reads.log(self.cb.db, self.uid, "handoff", case_id)
         case = self.cb.get_case(self.uid, case_id)
-        head = f"# Handoff — case {case_id} · {case['case']['title']}\n\n"
         # 인계의 라벨은 이 스레드가 쓰인 언어로 붙인다(D15186) — 묻지 않고 focus 에서 읽는다.
         # 저장하지 않으므로 focus 를 다시 선언하면 라벨도 따라온다. 고칠 자리가 따로 없다.
         st = self.cb.resume(self.uid, case_id, "continuity")
         # focus 의 **제목 줄**로 본다 — 본문에는 인용한 로그·코드가 섞여 판정을 흔든다.
-        # focus 가 없는 스레드(선언 전)는 케이스 제목으로 떨어진다: 한국어 단서를 손에 쥐고도
-        # 영어로 판정하던 자리다.
-        L = HANDOFF_LABELS[headline.lang_of(
-            headline.title_of((st.get("focus") or {}).get("statement")) or case["case"]["title"])]
-        if not self._can_write_record:
-            body = L["intro"]
-        else:
+        # focus 가 없는 스레드(선언 전)는 케이스 제목으로 떨어진다.
+        lang = headline.lang_of(headline.title_of((st.get("focus") or {}).get("statement")) or case["case"]["title"])
+        record_body = None
+        if self._can_write_record:
             r = self.cb.generate_record(self.uid, case_id)
             self.cb.run_workers()
             recs = [x for x in self.cb.list_records(self.uid, case_id) if x["id"] == r["record_id"]]
             rec = recs[0] if recs else None
             if rec and rec["status"] == "created":
-                body = rec["content"]
+                record_body = rec["content"]
             else:
                 reason = ((rec or {}).get("error") or {}).get("reason", "unknown")
-                body = f"_Record generation failed ({reason}). Declared state below is the latest._"
-        # 확장 39호 — 꼬리는 모델이 만든 brief 가 아니라 선언된 상태에서 온다. 기록 도구가 가진
-        # 것으로 답한다: 무엇을 위한 스레드이고, 무엇이 안 풀렸고, 다음은 누구 차례인가.
-        lines = []
-        if st.get("focus"):
-            lines.append(f"- focus: {st['focus']['statement']}")
-        if st.get("open"):
-            lines.append(f"- open: {st['open']['statement']}")
-        if st.get("next"):
-            owner = st["next"].get("owner")
-            lines.append(f"- next: {st['next']['statement']}" + (f"  ({L['owner']}: {owner})" if owner else ""))
-        if not self._can_write_record:
-            for label, group in ((L["decision"], st.get("decisions", [])), (L["constraint"], st.get("constraints", [])),
-                                 (L["repo_decision"], st.get("repo_state", {}).get("decisions", [])),
-                                 (L["repo_constraint"], st.get("repo_state", {}).get("constraints", []))):
-                for item in group:
-                    lines.append(f"- {label} ({item.get('authority', 'agent')}): {item['statement']}")
-                    if item.get("reason"):
-                        lines.append(f"  {L['reason']}: {item['reason']}")
-            for item in st.get("ruled_out", []):
-                lines.append(f"- {L['ruled_out']}: {item['hypothesis']} "
-                             f"({L['scope']}: {item['scope']}, {L['grounds']}: {item['evidence_ids']})")
-            for item in st.get("evidence_index", []):
-                lines.append(f"- {L['evidence']} #{item['evidence_id']}: {item.get('head', '')}")
-        tail = ("\n\n---\n## Declared state\n" + "\n".join(lines) + "\n") if lines else ""
-        return head + body + tail
+                record_body = f"_Record generation failed ({reason}). Declared state below is the latest._"
+        # 확장 158호 (D18078) — 읽는 순서대로: 지금 → 한 일 → 결정(ADR) → 저장소 규칙 제목 → 인용된 증거.
+        return handoff_doc.build(self.cb.db, self.uid, case_id, case["case"]["title"], st, lang, record_body)
 
-# 인계의 라벨 — 스레드가 쓰인 언어로 붙는다(D15186). 기록 본문은 손대지 않는다: 그것은 사람이
-# 쓴 글이고, 둘레의 라벨만 읽는 사람 쪽으로 맞춘다.
-HANDOFF_LABELS = {
-    "ko": {"intro": "_Worktrail — 선언된 상태와 근거로 구성한 인계입니다._",
-           "owner": "차례", "decision": "결정", "constraint": "제약",
-           "repo_decision": "저장소 공통 결정", "repo_constraint": "저장소 공통 제약",
-           "reason": "이유", "ruled_out": "배제", "scope": "범위", "grounds": "근거", "evidence": "증거"},
-    "en": {"intro": "_Worktrail — a handoff built from the declared state and what grounded it._",
-           "owner": "turn", "decision": "decision", "constraint": "constraint",
-           "repo_decision": "repository decision", "repo_constraint": "repository constraint",
-           "reason": "reason", "ruled_out": "ruled out", "scope": "scope", "grounds": "grounds",
-           "evidence": "evidence"},
-}
+# 인계의 라벨 — 스레드가 쓰인 언어로 붙는다(D15186). 확장 158호부터 표는 core/handoff.py 에 산다.
+HANDOFF_LABELS = handoff_doc.LABELS
 
 REMOTE_TOKEN_TTL = 10 * 365 * 86400   # 커넥터에 한 번 넣는 토큰 — 회수는 auth_secret 교체(웹 로그인도 함께 풀린다)
 
@@ -715,6 +774,14 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     def T(ctx) -> Tools:
         return fixed if fixed is not None else Tools(casebook, resolve_user(ctx), remote=True)
 
+    def _capture(ctx, flag: bool) -> bool:
+        """확장 157호 — 원문을 남기는 클라이언트에서 온 호출인가. 원격 문은 프록시가 댄 값을 믿는다(맥의 capture 를
+        보는 것은 프록시뿐이다). 로컬 stdio 문은 같은 맥이므로 스스로 본다 — 인자는 무시한다."""
+        if fixed is None:
+            return bool(flag)
+        from casebook.adapters import capture
+        return capture.client_active(client_from_ctx(ctx))
+
     def _guard(fn):
         def wrapped(*a, **kw):
             try:
@@ -738,7 +805,7 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     def overview(ctx: Context) -> list[dict]:
         return T(ctx).overview()
 
-    @server.tool(name="open_thread", description="Start a thread — one question or change in one repository, followed to the end (deciding and building are one thread; re-declare focus to continue) — and bind it to this worktree. Open a new one only when the question changes. focus = one sentence, what this thread is for (durable declaration, not a summary). In the body, explain first — what the thread does and what would finish it — and put where it came from (the engineer's words, quoted) last, as its grounds: the screen shows the body in order, so a quote first hides the focus. topic (required) = the line of work this thread belongs to — it must be one of the engineer's existing topics; a name that is not one of them is refused once, with the list, so you choose instead of inventing. Only when none of them fits, call again with new_topic=true. \"Uncategorized\" (미분류) is refused — every thread belongs to a topic. Returns case_id; use it for evidence, note_turn, decide. FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest, numbers included, after a blank line as the body (the server refuses otherwise).")
+    @server.tool(name="open_thread", description="Start a thread — one question or change in one repository, followed to the end (deciding and building are one thread; re-declare focus to continue) — and bind it to this worktree. Open a new one only when the question changes. focus = one sentence, what this thread is for (durable declaration, not a summary). In the body, explain first — what the thread does and what would finish it — and put where it came from (the engineer's words, quoted) last, as its grounds: the screen shows the body in order, so a quote first hides the focus. topic (required) = the line of work this thread belongs to — it must be one of the engineer's existing topics; a name that is not one of them is refused once, with the list, so you choose instead of inventing. Only when none of them fits, call again with new_topic=true. \"Uncategorized\" (미분류) is refused — every thread belongs to a topic. Returns case_id; use it for evidence, note_turn, decide. FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest after a blank line as the body. The paragraph right under the title is read on the screen too, so no record numbers there either; they go in a later paragraph or evidence_ids (the server refuses otherwise).")
     def open_thread(focus: str, topic: str, ctx: Context, worktree: str | None = None, title: str | None = None, authority: str = "agent", facts: dict | None = None, new_topic: bool = False) -> dict:
         return _guard(T(ctx).open_thread)(focus, worktree, title, authority, topic, facts, new_topic)
 
@@ -746,15 +813,16 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     def switch_thread(ctx: Context, case_id: int | None = None, worktree: str | None = None, facts: dict | None = None) -> dict:
         return _guard(T(ctx).switch_thread)(case_id, worktree, facts)
 
-    @server.tool(name="close_thread", description="Close a thread (status resolved) and release every worktree bound to it. result = one sentence saying what came of it — it becomes the thread's closing line in Worktrail's Status screen and the retrospective. Also fills the result line of a thread the engineer already closed from the screen (needs_result in list_threads) — appended as a new ledger event, never an edit. Closed threads stay searchable; reopen from the screen or via set_status, then switch_thread to it. FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest, numbers included, after a blank line as the body (the server refuses otherwise).")
+    @server.tool(name="close_thread", description="Close a thread (status resolved) and release every worktree bound to it. result = one sentence saying what came of it — it becomes the thread's closing line in Worktrail's Status screen and the retrospective. Also fills the result line of a thread the engineer already closed from the screen (needs_result in list_threads) — appended as a new ledger event, never an edit. Closed threads stay searchable; reopen from the screen or via set_status, then switch_thread to it. FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest after a blank line as the body. The paragraph right under the title is read on the screen too, so no record numbers there either; they go in a later paragraph or evidence_ids (the server refuses otherwise).")
     def close_thread(case_id: int, ctx: Context, result: str = "") -> dict:
         return _guard(T(ctx).close_thread)(case_id, result)
 
-    @server.tool(name="declare", description="Declare the thread's current focus (what it is for), open (what is still unresolved: questions, blockers, uncertainty) or next (the 1–3 concrete actions to take next). kind = focus|open|next. focus says what the thread is FOR and what would finish it — not how far along you are. In the body, explain first — what the thread does and what would finish it — and put where it came from (the engineer's words, quoted) last, as its grounds: the screen shows the body in order, so a quote first hides the focus. Re-declaring it with exactly the same words is a confirmation (it resets the turn cap and is not shown as a change); re-declare with different words only when the direction itself changed. Append-only: the previous declaration of that kind is superseded, not edited. next REQUIRES owner — whose turn it is: \"user\" (the engineer must act), \"watch\" (nothing to do — observing only), or an agent name such as \"codex\" / \"claude\". It IS the thread's phase in Worktrail, and it is not carried over: a new next declaration without it is refused. A next owned by the user is written TO the engineer ('Decide X'), never about them ('The user decides X'). Declare open and next before pausing, switching, or when the engineer's direction changes; resume shows them as the starting point. FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest, numbers included, after a blank line as the body (the server refuses otherwise).")
-    def declare(case_id: int, kind: str, statement: str, ctx: Context, authority: str = "agent", owner: str | None = None) -> str:
-        return _guard(T(ctx).declare)(case_id, kind, statement, authority, owner)
+    @server.tool(name="declare", description="Declare the thread's current focus (what it is for), open (what is still unresolved: questions, blockers, uncertainty) or next (the 1–3 concrete actions to take next). kind = focus|open|next. focus says what the thread is FOR and what would finish it — not how far along you are. In the body, explain first — what the thread does and what would finish it — and put where it came from (the engineer's words, quoted) last, as its grounds: the screen shows the body in order, so a quote first hides the focus. Re-declaring it with exactly the same words is a confirmation (it resets the turn cap and is not shown as a change); re-declare with different words only when the direction itself changed — then pass next and owner too (what happens next in the new direction, and whose turn); a confirmation takes neither. Append-only: the previous declaration of that kind is superseded, not edited. next REQUIRES owner — whose turn it is: \"user\" (the engineer must act), \"watch\" (nothing to do — observing only), or an agent name such as \"codex\" / \"claude\". It IS the thread's phase in Worktrail, and it is not carried over: a new next declaration without it is refused. A next owned by the user is written TO the engineer ('Decide X'), never about them ('The user decides X'). Declare open and next before pausing, switching, or when the engineer's direction changes; resume shows them as the starting point. source_refs = the prompt id(s) a declaration comes from (the id from the prompt's \"casebook source_ref: <id>\" line, or on a chat client the id add_utterance returns. Required for a focus with authority='user'.) FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest after a blank line as the body. The paragraph right under the title is read on the screen too, so no record numbers there either; they go in a later paragraph or evidence_ids (the server refuses otherwise).")
+    def declare(case_id: int, kind: str, statement: str, ctx: Context, authority: str = "agent", owner: str | None = None,
+                source_refs: list[str] | None = None, capture: bool = False, next: str | None = None) -> str:
+        return _guard(T(ctx).declare)(case_id, kind, statement, authority, owner, source_refs, _capture(ctx, capture), next)
 
-    @server.tool(name="assign_topic", description="Put threads under a topic for the engineer's Review (retrospective) screen — a topic is a line of work spanning threads and repositories (e.g. 'MCP for code agents', 'incident lab'). name finds or creates the topic; case_ids are added (idempotent). repos = repository identities whose pre-thread git commits belong to this topic. conclusion = one sentence to pin on the topic when the engineer wraps it up (a topic's phase is derived; only the conclusion is written by hand). Use it only when the engineer names the topic or a new thread clearly continues one. FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest, numbers included, after a blank line as the body (the server refuses otherwise).")
+    @server.tool(name="assign_topic", description="Put threads under a topic for the engineer's Review (retrospective) screen — a topic is a line of work spanning threads and repositories (e.g. 'MCP for code agents', 'incident lab'). name finds or creates the topic; case_ids are added (idempotent). repos = repository identities whose pre-thread git commits belong to this topic. conclusion = one sentence to pin on the topic when the engineer wraps it up (a topic's phase is derived; only the conclusion is written by hand). Use it only when the engineer names the topic or a new thread clearly continues one. FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest after a blank line as the body. The paragraph right under the title is read on the screen too, so no record numbers there either; they go in a later paragraph or evidence_ids (the server refuses otherwise).")
     def assign_topic(name: str, case_ids: list[int], ctx: Context, summary: str = "", repos: list[str] | None = None, conclusion: str = "") -> str:
         return _guard(T(ctx).assign_topic)(name, case_ids, summary, repos, conclusion)
 
@@ -783,18 +851,20 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     def add_evidence_file(case_id: int, path: str, ctx: Context) -> str:
         return _guard(T(ctx).add_evidence_file)(case_id, path)
 
-    @server.tool(name="note_turn", description="Record one diagnostic step: `observed` = what was seen (verbatim where possible), `conclusion` = what you concluded, ruled out, or propose next. kind (required) = change(바꿈: code/screen/config changed) · verified(확인: test/prod/repro confirmed) · finding(발견: measured or found out, a fact) · thought(생각: proposal/hypothesis/judgment — can be overturned); if two apply, split into two notes. `next` (required) = after this turn, what happens next, and `owner` (required) = whose turn it is: \"user\" (the engineer must act), \"watch\" (nothing to do, only watching), or an agent name such as \"codex\" / \"claude\". Say next EVERY turn, even when nothing changed — if it is the same line as before, nothing new is written, so this costs you a sentence and keeps the thread honest. A stale next is the failure this product exists to prevent: the next session reads it and goes off to do work that is already done. Updates the case brief. Call at the end of each step, not every message. Refused once 15 turns have piled up since the thread's focus was last declared: re-declare the focus if it is still the same work, or open_thread for the new subject. `evidence_ids` (optional) = the evidence numbers this conclusion rests on — cite them here, not in the text; the screen renders them as links. A next owned by the user is written TO the engineer ('Decide X'), never about them ('The user decides X'). FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest, numbers included, after a blank line as the body (the server refuses otherwise).")
+    @server.tool(name="note_turn", description="Record one diagnostic step: `observed` = what was seen, in your words or quoted, `conclusion` = what you concluded, ruled out, or propose next. Both are stored as the note — your account, not evidence. Machine output that grounds it goes in add_evidence verbatim first, then cite it in evidence_ids. kind (required) = change(바꿈: code/screen/config changed) · verified(확인: test/prod/repro confirmed) · finding(발견: measured or found out, a fact) · thought(생각: proposal/hypothesis/judgment — can be overturned); if two apply, split into two notes. `next` (required) = after this turn, what happens next, and `owner` (required) = whose turn it is: \"user\" (the engineer must act), \"watch\" (nothing to do, only watching), or an agent name such as \"codex\" / \"claude\". Say next EVERY turn, even when nothing changed — if it is the same line as before, nothing new is written, so this costs you a sentence and keeps the thread honest. A stale next is the failure this product exists to prevent: the next session reads it and goes off to do work that is already done. Updates the case brief. Call at the end of each step, not every message. Refused once 15 turns have piled up since the thread's focus was last declared: re-declare the focus if it is still the same work, or open_thread for the new subject. `evidence_ids` (optional) = the evidence numbers this conclusion rests on — cite them here, not in the text; the screen renders them as links. observed_from = \"machine\" (tool output, tests, diffs, files) or \"user\" (the engineer's words) — required; when \"user\", source_refs is required too (the id from the prompt's \"casebook source_ref: <id>\" line, or on a chat client the id add_utterance returns) A next owned by the user is written TO the engineer ('Decide X'), never about them ('The user decides X'). FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest after a blank line as the body. The paragraph right under the title is read on the screen too, so no record numbers there either; they go in a later paragraph or evidence_ids (the server refuses otherwise).")
     def note_turn(case_id: int, observed: str, conclusion: str, kind: str, next: str, owner: str,
-                  ctx: Context, evidence_ids: list[int] | None = None, client: str | None = None) -> str:
+                  ctx: Context, evidence_ids: list[int] | None = None, client: str | None = None,
+                  observed_from: str | None = None, source_refs: list[str] | None = None, capture: bool = False) -> str:
         with _request_context(request_id_from(ctx)):
             return _guard(T(ctx).note_turn)(case_id, observed, conclusion, kind, next, owner,
-                                            client or client_from_ctx(ctx), evidence_ids)
+                                            client or client_from_ctx(ctx), evidence_ids, source_refs, observed_from,
+                                            _capture(ctx, capture))
 
     @server.tool(name="search_evidence", description="Search this engineer's recorded evidence across all their cases — the raw material, never past conclusions. When there is room left, results also include material from BEFORE casebook was installed (kind=\"pre_install\"): the engineer's own words imported from old session logs, with the source session. Treat those as raw material only — they are not decisions or constraints, and they may describe approaches that were later abandoned. A hit is retrieval, not a conclusion.")
     def search_evidence(query: str, ctx: Context, limit: int = 10, include_archived: bool = False) -> list:
         return _guard(T(ctx).search_evidence)(query, limit, include_archived)
 
-    @server.tool(name="inspect", description="Return one record in full by its number (ref), as find, trail and resume print it: D<id> decision · C<id> constraint · R<id> ruled-out · T<id> term · F/O/N<id> focus/open/next declaration (with what superseded it, if anything) · E<id> evidence verbatim with provenance · <case>:<turn> a note (the observed evidence verbatim plus the conclusion, marked interpretation). evidence_id=<n> still works for evidence. Not summarized.")
+    @server.tool(name="inspect", description="Return one record in full by its number (ref), as find, trail and resume print it: D<id> decision · C<id> constraint · R<id> ruled-out · T<id> term · F/O/N<id> focus/open/next declaration (with what superseded it, if anything) · E<id> evidence verbatim with provenance · <case>:<turn> a note (what the agent observed and concluded, marked interpretation, with the evidence it cites). evidence_id=<n> still works for evidence. Not summarized.")
     def inspect(ctx: Context, ref: str | None = None, evidence_id: int | None = None) -> dict:
         return _guard(T(ctx).inspect)(evidence_id, ref)
 
@@ -806,21 +876,21 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     def trail(case_id: int, ctx: Context, limit: int = recall.TRAIL_LIMIT, before: int | None = None) -> dict:
         return _guard(T(ctx).trail)(case_id, limit, before)
 
-    @server.tool(name="decide", description="Record a decision the work will follow from now on — a choice, not a truth (e.g. 'use a separate auth_credentials table'). authority='user' if the engineer stated it, 'agent' if you made it while implementing. To change it later, decide again with supersedes=<decision id>. scope='thread' (default: archived with this thread) or 'repo' (holds for every thread of this repository — promotion is by declaring the scope, never automatic). Not for hypotheses about causes — those stay in note_turn. FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest, numbers included, after a blank line as the body (the server refuses otherwise). reason follows the same first-line rule — its first line is what the thread card shows as the reason.")
-    def decide(case_id: int, statement: str, ctx: Context, reason: str = "", evidence_ids: list[int] | None = None, authority: str = "agent", supersedes: int | None = None, scope: str = "thread", client: str | None = None) -> str:
-        return _guard(T(ctx).decide)(case_id, statement, reason, evidence_ids, authority, supersedes, scope, client or client_from_ctx(ctx))
+    @server.tool(name="decide", description="Record a decision the work will follow from now on — a choice, not a truth (e.g. 'use a separate auth_credentials table'). authority='user' if the engineer stated it, 'agent' if you made it while implementing. To change it later, decide again with supersedes=<decision id>. scope='thread' (default: archived with this thread) or 'repo' (holds for every thread of this repository — promotion is by declaring the scope, never automatic). Not for hypotheses about causes — those stay in note_turn. source_refs = the prompt id(s) the decision comes from (the id from the prompt's \"casebook source_ref: <id>\" line, or on a chat client the id add_utterance returns. Required with authority='user'.) FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest after a blank line as the body. The paragraph right under the title is read on the screen too, so no record numbers there either; they go in a later paragraph or evidence_ids (the server refuses otherwise). reason follows the same first-line rule — its first line is what the thread card shows as the reason. A decision changes what happens next: next (required) and owner (required) = what happens next after this and whose turn it is — \"user\", \"watch\" or an agent name; a next owned by the user is written TO the engineer.")
+    def decide(case_id: int, statement: str, ctx: Context, reason: str = "", evidence_ids: list[int] | None = None, authority: str = "agent", supersedes: int | None = None, scope: str = "thread", client: str | None = None, source_refs: list[str] | None = None, capture: bool = False, next: str | None = None, owner: str | None = None) -> str:
+        return _guard(T(ctx).decide)(case_id, statement, reason, evidence_ids, authority, supersedes, scope, client or client_from_ctx(ctx), source_refs, _capture(ctx, capture), next, owner)
 
     @server.tool(name="define", description="Give a coined name its meaning — a term the work uses that a reader who was not there would not know (e.g. '1층 조리법', '3회차', 'blinding'). term = the name as written (≤40 chars); meaning = one line (≤120 columns), details after a blank line. scope 'thread' (default) or 'repo' (every thread of the repository). Not enforced: use it when the engineer asks what a name meant or asks you to tidy up, or when you coin a name inside a record. Superseded (supersedes=<term id>), never edited. resume and the screens show current terms; the Find screen shows first use.")
     def define(case_id: int, term: str, meaning: str, ctx: Context, authority: str = "agent", scope: str = "thread", supersedes: int | None = None) -> str:
         return _guard(T(ctx).define)(case_id, term, meaning, authority, supersedes, scope)
 
-    @server.tool(name="constrain", description="Record a constraint the work must respect (e.g. 'existing API contract must not break'). authority='user' or 'agent'. scope='thread' (default) or 'repo' (holds for every thread of this repository). Change later with supersedes=<constraint id>. FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest, numbers included, after a blank line as the body (the server refuses otherwise). reason follows the same first-line rule.")
-    def constrain(case_id: int, statement: str, ctx: Context, reason: str = "", authority: str = "agent", supersedes: int | None = None, scope: str = "thread") -> str:
-        return _guard(T(ctx).constrain)(case_id, statement, reason, authority, supersedes, scope)
+    @server.tool(name="constrain", description="Record a constraint the work must respect (e.g. 'existing API contract must not break'). authority='user' or 'agent'. scope='thread' (default) or 'repo' (holds for every thread of this repository). Change later with supersedes=<constraint id>. source_refs = the prompt id(s) it comes from (the id from the prompt's \"casebook source_ref: <id>\" line, or on a chat client the id add_utterance returns. Required with authority='user'.) FIRST LINE = TITLE: at most 120 columns (CJK counts as 2), no ' — ' joiner, and no record numbers (#517, D15635, 확장 122호, turn 80, commit hashes) — a person reads that line on the screen; put the rest after a blank line as the body. The paragraph right under the title is read on the screen too, so no record numbers there either; they go in a later paragraph or evidence_ids (the server refuses otherwise). reason follows the same first-line rule.")
+    def constrain(case_id: int, statement: str, ctx: Context, reason: str = "", authority: str = "agent", supersedes: int | None = None, scope: str = "thread", source_refs: list[str] | None = None, capture: bool = False) -> str:
+        return _guard(T(ctx).constrain)(case_id, statement, reason, authority, supersedes, scope, source_refs, _capture(ctx, capture))
 
-    @server.tool(name="rule_out", description="Record that a hypothesis was ruled out — ONLY with the evidence that killed it and the scope where that holds (repro path, commit, environment). Outside the scope it is a hypothesis again. Ruling-outs stop future investigation, so the bar is higher than for a finding.")
-    def rule_out(case_id: int, hypothesis: str, scope: str, evidence_ids: list[int], ctx: Context) -> str:
-        return _guard(T(ctx).rule_out)(case_id, hypothesis, scope, evidence_ids)
+    @server.tool(name="rule_out", description="Record that a hypothesis was ruled out — ONLY with the evidence that killed it and the scope where that holds (repro path, commit, environment). Outside the scope it is a hypothesis again. Ruling-outs stop future investigation, so the bar is higher than for a finding. Ruling out changes what happens next: next (required) and owner (required) = what happens next after this and whose turn it is — \"user\", \"watch\" or an agent name; a next owned by the user is written TO the engineer.")
+    def rule_out(case_id: int, hypothesis: str, scope: str, evidence_ids: list[int], ctx: Context, next: str | None = None, owner: str | None = None) -> str:
+        return _guard(T(ctx).rule_out)(case_id, hypothesis, scope, evidence_ids, next, owner)
 
     @server.tool(name="resume", description="Pick a thread up in a new session. When the host has no session-start hook (e.g. Codex), call it (or list_threads) first, before any other work. Durable state as it stands now, seven fields: focus · anchor (live git of this worktree: branch, HEAD, dirty) · constraints · decisions (with reason and authority) · open (unresolved) · next (actions) · evidence_refs — plus repo_state (repo-scope constraints/decisions shared by every thread of the repository, titles and numbers only — inspect(ref) for the full text; if one conflicts with the thread's own, both are shown, nothing is resolved for you). mode='fresh' omits decisions and ruled-outs. Never includes how it got here: pull that with trail(case_id) or find(query) when you need it.")
     def resume(case_id: int, ctx: Context, mode: str = "continuity", worktree: str | None = None, facts: dict | None = None) -> dict:
@@ -829,6 +899,14 @@ def build_server(casebook: Worktrail, user_id: int | None = None, *, resolve_use
     @server.tool(name="hook", description="For the Claude Code hook script only (thin client) — not for agents. event = session-start | post-compact | post-commit | checkpoint; facts = git facts of the worktree read on the client (threads.local_facts). Returns the hook's JSON output.")
     def hook(event: str, facts: dict, ctx: Context, why: str = "", reason: str = "") -> dict:
         return _guard(T(ctx).hook)(event, facts, why, reason)
+
+    @server.tool(name="add_utterance", description="Chat clients only (no prompt hook — if the engineer's prompt came with a line 'casebook source_ref: <id>', use that id instead). When the engineer's words ground a record (a decision or constraint with authority='user', a focus with authority='user', a note with observed_from='user'), paste their message here EXACTLY as they wrote it: first person, every character, no summary, no trimming, never your own words. Returns the id to pass in source_refs. Stored as pasted by you (origin: model_pasted), so a reader can tell it apart from a hook-captured prompt.")
+    def add_utterance(text: str, ctx: Context, client: str | None = None, capture: bool = False) -> str:
+        return _guard(T(ctx).add_utterance)(text, client or client_from_ctx(ctx), _capture(ctx, capture))
+
+    @server.tool(name="record_utterances", description="For the Worktrail prompt uploader only (thin client) — not for agents. Stores the engineer's prompts verbatim, keyed by the prompt id the hook gave as source_ref; re-sent ids are ignored.")
+    def record_utterances(items: list, ctx: Context) -> dict:
+        return _guard(T(ctx).record_utterances)(items)
 
     @server.tool(name="import_prior", description="For the casebook backfill script only (thin client) — not for agents. Imports pre-install session logs as repository history: verbatim engineer instructions only, no threads, topics, decisions or constraints are created from them.")
     def import_prior(facts: dict, sessions: list, ctx: Context, reset: bool = False) -> dict:

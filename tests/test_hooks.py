@@ -150,6 +150,26 @@ def test_post_compact_bound_thread_wins_over_closed_resume(tmp_path):
     assert "):  continue bound work" in ctx and f"#{busy}" not in ctx
 
 
+def test_post_compact_는_요약에_없는_저장소_규칙을_보인다(tmp_path):
+    """확장 161호 (D18224) — 압축 뒤 resume 을 부른 것은 셋에 하나였다. 다른 스레드에서 정한 저장소 결정·제약은 대화
+    요약에 들어 있을 수 없으므로, 부르지 않아도 보이게 훅이 제목을 싣는다(스레드 595 에서 D16190 을 놓쳤다)."""
+    from casebook.core.db import SqliteDB
+    from casebook.core.app import Casebook
+    from tests.test_threads import _git_repo
+    path, _, _busy = _seed(tmp_path)
+    app = Casebook(db=SqliteDB(path), llm=FakeLLM(), search=FakeSearch())
+    wt = _git_repo(tmp_path / "repo")
+    earlier = app.open_thread(USER, "earlier thread", wt)["case_id"]
+    app.decide(USER, earlier, "commit links stay as they are for now", authority="user", scope="repo")
+    app.constrain(USER, earlier, "never touch the experiment folder", authority="user", scope="repo")
+    app.close_thread(USER, earlier)
+    app.open_thread(USER, "today's thread", wt)
+    ctx = _run("post-compact", path, worktree=wt)["hookSpecificOutput"]["additionalContext"]
+    assert "Active thread" in ctx and "today's thread" in ctx
+    assert "Repository decisions" in ctx and "commit links stay as they are for now" in ctx
+    assert "Repository constraints" in ctx and "never touch the experiment folder" in ctx
+
+
 def test_post_compact_without_resume_has_no_active_thread(tmp_path):
     from casebook.core.db import SqliteDB
     db_path = str(tmp_path / "empty.db")
@@ -181,6 +201,7 @@ def test_session_start_스레드_경로는_현재_스레드의_작은_resume_와
     other = app.open_thread(USER, "parallel work", wt)["case_id"]
     cur = app.open_thread(USER, "current work", wt)["case_id"]
     app.constrain(USER, other, "never touch the schema", authority="user", scope="repo")
+    app.decide(USER, other, "keep the old API for now\n\nthe body stays in resume", authority="user", scope="repo")
     app.declare(USER, cur, "open", "is the CSP the blocker?"); app.declare(USER, cur, "next", "1. run smoke  2. commit", owner="user")
     env = dict(os.environ, CASEBOOK_DB=path, CASEBOOK_MCP_EMAIL="tester@example.test", CLAUDE_PROJECT_DIR=wt)
     p = subprocess.run([sys.executable, str(SCRIPT), "session-start"], input="{}", capture_output=True, text=True, env=env, cwd=ROOT)
@@ -192,6 +213,9 @@ def test_session_start_스레드_경로는_현재_스레드의_작은_resume_와
     assert "next (owner user, " in ctx and "):  1. run smoke  2. commit" in ctx
     assert "anchor: main @" in ctx and "no checkpoint yet" in ctx
     assert "Repository constraints" in ctx and "never touch the schema" in ctx
+    # 확장 161호 — 다른 스레드에서 정한 저장소 결정도 개수가 아니라 제목으로 보인다. 본문은 resume 에서
+    assert "Repository decisions (hold for every thread here" in ctx and "keep the old API for now" in ctx
+    assert "the body stays in resume" not in ctx
     assert f"#{other} · parallel work · next not declared" in ctx and "finished work" not in ctx   # closed 는 주입하지 않는다
     assert len(ctx) <= CAP
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 
 from . import reads, state, threads, vitals
+from .headline import title_of
 
 
 RULES = (
@@ -17,7 +18,8 @@ RULES = (
     "open a new one only when the question changes (open_thread / switch_thread / close_thread). resume(case_id) before continuing. A turn = the machine told you something that changed what "
     "you would do next: add_evidence (verbatim, sparse; long output → file → add_evidence_file) + note_turn(kind=change|verified|finding|thought). "
     "Every statement's FIRST LINE is its title (≤120 columns, CJK counts as 2, no ' — ' joiner, no record numbers such as #517 · D15635 · turn 80 · commit hash); "
-    "details and numbers go after a blank line or into evidence_ids — the server refuses otherwise. A next owned by the user is written TO the engineer ('Decide X'), never about them. "
+    "the paragraph under it is read on the screen too, so no record numbers there either; "
+    "numbers and details go in a later paragraph or into evidence_ids — the server refuses otherwise. A next owned by the user is written TO the engineer ('Decide X'), never about them. "
     "Nothing is saved for you at compaction — record as you go."
 )
 CONTEXT_CAP = 10_000
@@ -100,6 +102,27 @@ def _next_line(r: dict, now: int) -> str:
     return f"  next ({who}{_next_age(n, now)}):  {_clip(n['statement'])}"
 
 
+REPO_RULES_CAP = 12
+
+
+def _repo_rules(repo_state: dict | None) -> list[str]:
+    """확장 161호 (D18224) — 저장소 공통 결정과 제약은 제목을 직접 보인다. 전에는 제약 제목과 결정 개수만(압축 뒤에는 아무것도)
+    넣고 resume 을 부르라고 했는데, 압축 뒤 resume 을 부른 것은 셋에 하나였다. 다른 스레드에서 정한 저장소 규칙은 대화 요약에
+    들어 있을 수 없어, 부르지 않으면 모르는 것을 모르는 채로 남는다(스레드 595 에서 D16190 을 놓쳤다). 과거 해석이 아니라 지금
+    유효한 규칙이라 D17255(노트는 물을 때만)와 부딪히지 않는다."""
+    out: list[str] = []
+    for key, prefix, label in (("constraints", "C", "Repository constraints"), ("decisions", "D", "Repository decisions")):
+        rows = (repo_state or {}).get(key) or []
+        if not rows:
+            continue
+        out.append(f"{label} (hold for every thread here; inspect({prefix}<id>) for the full text):")
+        ident = "constraint_id" if prefix == "C" else "decision_id"
+        out += [f"  {prefix}{x[ident]} {_clip(title_of(x['statement']), 110)}" for x in rows[:REPO_RULES_CAP]]
+        if len(rows) > REPO_RULES_CAP:
+            out.append(f"  (+{len(rows) - REPO_RULES_CAP} more in resume)")
+    return out
+
+
 def _thread_block(app, uid: int, case_id: int, wt: str) -> list[str]:
     """확장 153호 (D17255) — 가리키기만: 어느 스레드이고 다음이 누구 차례인가. 나머지는 resume 에서.
     전에는 focus·open·anchor·마지막 커밋까지 넣었다 — 에이전트는 resume 을 부르면 같은 것을 다시 받는다."""
@@ -140,14 +163,7 @@ def session_start(app, uid: int, wt: str) -> dict:
             lines.append("No thread is bound to this worktree — open_thread(focus) for new work, or switch_thread(case_id).")
             if opened:
                 repo_state = app.resume(uid, opened[0]["case_id"], "continuity").get("repo_state")
-        rc = (repo_state or {}).get("constraints", []); rd = (repo_state or {}).get("decisions", [])
-        if rc:
-            lines.append("Repository constraints (hold for every thread here; inspect(C<id>) for the full text):")
-            lines += [f"  C{x['constraint_id']} {_clip(x['statement'], 110)}" for x in rc[:8]]
-            if len(rc) > 8:
-                lines.append(f"  (+{len(rc) - 8} more in resume)")
-        if rd:
-            lines.append(f"Repository decisions: {len(rd)} (titles in resume).")
+        lines += _repo_rules(repo_state)
         others = [t for t in opened if not cur or t["case_id"] != cur["case_id"]]
         if others:
             lines.append("Other open threads here (most recent activity first):")
@@ -184,10 +200,11 @@ def post_compact(app, uid: int, wt: str) -> dict:
     case = db.get("case", active) if active else None
     v = vitals.case_vitals(db, uid)
     if case and case["status"] == "open" and active in v:
-        block, _r = _thread_block(app, uid, active, wt)
+        block, r = _thread_block(app, uid, active, wt)
         head = "casebook — context was just compacted. " + block[0].replace("Current thread (bound to this worktree)", "Active thread")
         last = v[active]
         body = block[1:] + [f"  last recorded activity: turn {last['turn_count']} at {_fmt(last['updated_at'])}."]
+        body += _repo_rules(r.get("repo_state"))       # 확장 161호 — 요약에 없는 저장소 규칙은 여기서 보인다
     else:
         head = "casebook — context was just compacted. No thread is bound here and no open case was resumed."
         body = []

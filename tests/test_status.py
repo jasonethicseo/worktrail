@@ -131,8 +131,8 @@ def test_stream_은_종류를_가리지_않고_최근_40개다(app, tmp_path):
     t = Tools(app, USER)
     a = t.open_thread("띠를 검증한다", wt, topic="검증")["case_id"]
     t.add_evidence(a, "$ pytest\n9 passed")
-    t.note_turn(a, "9 passed", "테스트가 통과했다", kind="verified", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
-    t.decide(a, "폴링으로 한다", reason="SSE 는 길이 하나 더 든다")
+    t.note_turn(a, "9 passed", "테스트가 통과했다", kind="verified", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
+    t.decide(a, "폴링으로 한다", reason="SSE 는 길이 하나 더 든다", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
     t.declare(a, "next", "브라우저에서 본다", owner="user")
     s = app.status(USER)
     kinds = [(e["kind"], e.get("note_kind")) for e in s["stream"]]
@@ -141,5 +141,5 @@ def test_stream_은_종류를_가리지_않고_최근_40개다(app, tmp_path):
     assert all(e["case_id"] == a and e["title"] == "띠를 검증한다" for e in s["stream"])
     assert [e["at"] for e in s["stream"]] == sorted((e["at"] for e in s["stream"]), reverse=True)
     for i in range(45):
-        t.note_turn(a, f"관찰 {i}", f"결론 {i}", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user") if i % 15 else t.declare(a, "focus", f"다시 {i}")   # 46호 상한을 넘지 않게
+        t.note_turn(a, f"관찰 {i}", f"결론 {i}", kind="finding", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine") if i % 15 else t.declare(a, "focus", f"다시 {i}", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")   # 46호 상한을 넘지 않게
     assert len(app.status(USER)["stream"]) == 40

@@ -53,44 +53,44 @@ def test_인계_라벨이_스레드_언어로_붙는다(tmp_path):
     T = _tools(tmp_path)
     en = T.open_thread(focus="Split the read path from the write path", topic="demo")["case_id"]
     T.decide(case_id=en, statement="We're going with Payrail", reason="Only two could refund partially",
-             authority="user")
+             authority="user", source_refs=["test-prompt-0001"], capture=True, next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
     T.add_evidence(case_id=en, text="$ curl sandbox\n200 OK")
     T.declare(case_id=en, kind="next", statement="Check the cancel limit", owner="user")
     out = T.handoff(case_id=en, engineer_asked=True)
-    assert "- decision (user):" in out and "reason:" in out
-    assert "- evidence #" in out and "(turn: user)" in out
-    assert "결정" not in out and "이유" not in out and "증거" not in out and "차례" not in out
+    assert "## Decisions" in out and "- context: Only two could refund partially" in out and "- set by: user" in out
+    assert "## Now" in out and "(turn: user)" in out
+    assert "결정" not in out and "맥락" not in out and "원문" not in out and "차례" not in out
 
     ko = T.open_thread(focus="결제 대행사 후보 셋 중 하나를 고른다", topic="demo")["case_id"]
     T.decide(case_id=ko, statement="결제 대행사는 페이레일로 간다", reason="부분취소를 여는 곳이 둘뿐이었다",
-             authority="user")
+             authority="user", source_refs=["test-prompt-0001"], capture=True, next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
     T.add_evidence(case_id=ko, text="$ curl sandbox\n200 OK")
     T.declare(case_id=ko, kind="next", statement="취소 한도를 확인한다", owner="user")
     out = T.handoff(case_id=ko, engineer_asked=True)
-    assert "- 결정 (user):" in out and "이유:" in out
-    assert "- 증거 #" in out and "(차례: user)" in out
-    assert "decision (user)" not in out and "evidence #" not in out
+    assert "## 결정" in out and "- 맥락: 부분취소를 여는 곳이 둘뿐이었다" in out and "- 정한 사람: user" in out
+    assert "## 지금" in out and "(차례: user)" in out
+    assert "Decisions" not in out and "context:" not in out
 
 
 def test_기록_본문은_손대지_않는다(tmp_path):
     """라벨만 읽는 사람 쪽으로 맞춘다. 사람이 쓴 문장은 쓴 그대로 나간다."""
     T = _tools(tmp_path)
     cid = T.open_thread(focus="Split the read path from the write path", topic="demo")["case_id"]
-    T.decide(case_id=cid, statement="결정문만 한국어로 적었다", reason="이유도 한국어다", authority="user")
+    T.decide(case_id=cid, statement="결정문만 한국어로 적었다", reason="이유도 한국어다", authority="user", source_refs=["test-prompt-0001"], capture=True, next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
     out = T.handoff(case_id=cid, engineer_asked=True)
-    assert "- decision (user): 결정문만 한국어로 적었다" in out    # 라벨은 영어, 본문은 원문 그대로
-    assert "  reason: 이유도 한국어다" in out
+    assert " · 결정문만 한국어로 적었다" in out and "## Decisions" in out    # 라벨은 영어, 본문은 원문 그대로
+    assert "- context: 이유도 한국어다" in out
 
 
 def test_focus_를_다시_선언하면_라벨이_따라온다(tmp_path):
     """저장하지 않기 때문에 생기는 성질이다 — 정정 경로를 따로 만들지 않아도 고칠 수 있다."""
     T = _tools(tmp_path)
     cid = T.open_thread(focus="결제 대행사 후보 셋 중 하나를 고른다", topic="demo")["case_id"]
-    T.decide(case_id=cid, statement="x", reason="y", authority="user")
-    assert "- 결정 (user):" in T.handoff(case_id=cid, engineer_asked=True)
+    T.decide(case_id=cid, statement="x", reason="y", authority="user", source_refs=["test-prompt-0001"], capture=True, next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    assert "## 결정" in T.handoff(case_id=cid, engineer_asked=True)
 
-    T.declare(case_id=cid, kind="focus", statement="Pick one of three payment providers")
-    assert "- decision (user):" in T.handoff(case_id=cid, engineer_asked=True)
+    T.declare(case_id=cid, kind="focus", statement="Pick one of three payment providers", next="Compare the three\n\nfees and payout times.", owner="claude")
+    assert "## Decisions" in T.handoff(case_id=cid, engineer_asked=True)
 
 
 def test_라벨_표가_두_언어에서_같은_열쇠를_갖는다():
@@ -104,9 +104,9 @@ def test_focus_가_없으면_케이스_제목으로_본다(tmp_path):
     바로 윗줄에서 한국어 제목을 이미 읽고 있으면서 판정에는 쓰지 않았다."""
     T = _tools(tmp_path)
     cid = T.open_case(title="결제 대행사 전환 건")["case_id"]
-    T.decide(case_id=cid, statement="페이레일로 간다", reason="부분취소 때문", authority="user")
+    T.decide(case_id=cid, statement="페이레일로 간다", reason="부분취소 때문", authority="user", source_refs=["test-prompt-0001"], capture=True, next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
     out = T.handoff(case_id=cid, engineer_asked=True)
-    assert "- 결정 (user): 페이레일로 간다" in out and "이유:" in out
+    assert " · 페이레일로 간다" in out and "- 맥락: 부분취소 때문" in out and "## 결정" in out
 
 
 def test_focus_본문의_인용문이_판정을_흔들지_않는다(tmp_path):
@@ -116,8 +116,8 @@ def test_focus_본문의_인용문이_판정을_흔들지_않는다(tmp_path):
                               "SELECT * FROM stock WHERE qty < 0 returned three rows in production",
                         topic="demo")["case_id"]
     T.decide(case_id=cid, statement="조건부 UPDATE 로 바꾼다", reason="같은 부하에서 음수가 사라졌다",
-             authority="user")
-    assert "- 결정 (user):" in T.handoff(case_id=cid, engineer_asked=True)
+             authority="user", source_refs=["test-prompt-0001"], capture=True, next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    assert "## 결정" in T.handoff(case_id=cid, engineer_asked=True)
 
 
 def test_보이지_않는_글자가_판정을_뒤집지_않는다():

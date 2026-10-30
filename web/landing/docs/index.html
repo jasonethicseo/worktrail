@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worktrail 문서</title>
+<meta name="description" content="Worktrail 을 설치하고, 에이전트와 일하며 기록을 남기고, 다음 세션에서 이어받는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Worktrail 문서 — 시중 SaaS 문서의 틀(왼쪽 절 메뉴 · 가운데 한 쪽 · 오른쪽 이 페이지 목차 · ⌘K 검색 · 이전/다음).
+     한 파일이다: 쪽마다 <article data-page> 하나, 주소는 #/쪽/절. 메뉴·목차·검색·이전/다음은 글에서 스크립트가 만든다.
+     사람이 읽는 문장은 초안이다(사용자가 고쳐 넣는다). 명령·도구·화면 이름은 제품에 있는 그대로다(tests/test_docs.py).
+     색은 소개·화면과 같은 한 벌. 시스템 설정을 따르고, 위 띠의 단추로 바꿀 수 있다. 움직임은 빛과 투명도만. */
+  :root{
+    --bg:#0b0d11;--bg-2:#10141a;--bg-3:#151a21;--card:#10141a;--code:#0f1318;
+    --text:#e8edf2;--text-h:#f7f9fb;--text-1:#b9c2cc;--text-2:#8b96a3;--text-3:#7a8494;
+    --ln:#1b2129;--ln-2:#242c36;--ln-3:#343e4a;
+    --accent:#89b4fa;--accent-2:#b4d0ff;--acc-tint:rgba(137,180,250,.10);--acc-line:rgba(137,180,250,.45);
+    --green:#a6e3a1;--green-tint:rgba(166,227,161,.08);--amber:#fab387;--amber-tint:rgba(250,179,135,.09);--red:#f38ba8;--violet:#cba6f7;
+    --sel:rgba(232,237,242,.05);--sel-2:rgba(232,237,242,.09);
+    --top-bg:rgba(11,13,17,.85);--shadow:0 12px 40px rgba(0,0,0,.5);
+    --font:'IBM Plex Sans',system-ui,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;
+    --r:10px;--r-s:7px;--top:60px;--side:268px;--toc:220px;
+    color-scheme:dark;
+  }
+  :root[data-theme="light"]{
+    --bg:#ffffff;--bg-2:#f7f8fa;--bg-3:#eef1f4;--card:#ffffff;--code:#f6f8fa;
+    --text:#1b2129;--text-h:#0b0d11;--text-1:#3d4652;--text-2:#5a6572;--text-3:#6b7582;
+    --ln:#e6e9ed;--ln-2:#d9dde2;--ln-3:#c3c9d0;
+    --accent:#2f6fe0;--accent-2:#1d56bd;--acc-tint:rgba(47,111,224,.08);--acc-line:rgba(47,111,224,.4);
+    --green:#2f8a3a;--green-tint:rgba(47,138,58,.07);--amber:#b35c1e;--amber-tint:rgba(214,120,40,.08);--red:#c43b5c;--violet:#7c4dcc;
+    --sel:rgba(11,13,17,.04);--sel-2:rgba(11,13,17,.07);
+    --top-bg:rgba(255,255,255,.86);--shadow:0 12px 40px rgba(20,30,50,.16);
+    color-scheme:light;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-padding-top:calc(var(--top) + 20px);}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:15px;line-height:1.75;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+  body{word-break:keep-all;overflow-x:hidden;}   /* 한글 낱말 가운데서 줄이 꺾이지 않게 */
+  pre,code{word-break:normal;}
+  a{color:var(--accent);text-decoration:none;} a:hover{color:var(--accent-2);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:5px;}
+  ::selection{background:rgba(137,180,250,.28);}
+  button{font-family:inherit;color:inherit;}
+  [hidden]{display:none !important;}
+  .skip{position:absolute;left:-9999px;top:8px;z-index:90;background:var(--bg-3);color:var(--text);padding:8px 12px;border-radius:var(--r-s);}
+  .skip:focus{left:12px;}
+  svg{flex:none;}
+
+  /* ── 위 띠 ── */
+  .top{position:fixed;inset:0 0 auto 0;height:var(--top);z-index:40;border-bottom:1px solid var(--ln);background:var(--top-bg);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;gap:14px;padding:0 20px;}
+  .logo{display:flex;align-items:center;gap:10px;color:inherit;flex:none;}
+  .logo:hover{color:inherit;}
+  .logo .box{width:24px;height:24px;border:1.5px solid var(--green);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--green);}
+  .logo .name{font-size:12px;letter-spacing:.16em;font-weight:600;color:var(--text-h);}
+  .logo .badge{font-size:11.5px;color:var(--text-2);border:1px solid var(--ln-2);border-radius:99px;padding:1px 9px;}
+  .search{margin-left:28px;display:flex;align-items:center;gap:8px;width:280px;height:36px;padding:0 10px 0 12px;border:1px solid var(--ln-2);border-radius:9px;
+    background:var(--bg-2);color:var(--text-3);font-size:13.5px;cursor:pointer;transition:border-color .14s;}
+  .search:hover{border-color:var(--ln-3);}
+  .search kbd{margin-left:auto;font-family:var(--mono);font-size:11px;border:1px solid var(--ln-2);border-radius:5px;padding:0 6px;color:var(--text-3);background:var(--bg);}
+  .top nav{margin-left:auto;display:flex;align-items:center;gap:4px;}
+  .top nav a,.top nav button.ic{font-size:13px;color:var(--text-2);padding:6px 10px;border-radius:var(--r-s);white-space:nowrap;background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:6px;}
+  .top nav a:hover,.top nav button.ic:hover{color:var(--text);background:var(--sel);}
+  .top nav a.cta{color:var(--accent);border:1px solid var(--acc-line);background:var(--acc-tint);margin-left:6px;}
+  .menu{display:none;background:none;border:1px solid var(--ln-2);border-radius:var(--r-s);width:36px;height:36px;align-items:center;justify-content:center;cursor:pointer;color:var(--text-2);}
+
+  /* ── 틀 ── */
+  .shell{padding-top:var(--top);}
+  .side{position:fixed;top:var(--top);bottom:0;left:0;width:var(--side);overflow-y:auto;padding:22px 16px 40px 20px;border-right:1px solid var(--ln);background:var(--bg);z-index:30;}
+  .side .grp{margin-top:22px;} .side .grp:first-child{margin-top:0;}
+  .side .gl{font-size:12px;font-weight:600;color:var(--text-h);padding:0 10px;margin-bottom:6px;letter-spacing:.01em;}
+  .side a{display:block;font-size:13.5px;line-height:1.5;color:var(--text-2);padding:6px 10px;border-radius:var(--r-s);transition:background-color .14s,color .14s;}
+  .side a:hover{color:var(--text);background:var(--sel);}
+  .side a[aria-current="page"]{color:var(--accent);background:var(--acc-tint);font-weight:500;}
+  .side .ext{margin-top:26px;padding-top:16px;border-top:1px solid var(--ln);}
+  .side .ext a{display:flex;align-items:center;gap:8px;}
+  .wrap{margin-left:var(--side);display:grid;grid-template-columns:minmax(0,1fr) var(--toc);gap:48px;max-width:calc(var(--side) + 1060px);padding:40px 48px 80px;}
+  main{min-width:0;max-width:740px;}
+  .toc{position:sticky;top:calc(var(--top) + 40px);align-self:start;max-height:calc(100vh - var(--top) - 60px);overflow:auto;font-size:13px;}
+  .toc .tl{font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;margin-bottom:10px;}
+  .toc a{display:block;color:var(--text-2);padding:4px 0 4px 12px;border-left:1px solid var(--ln);line-height:1.45;}
+  .toc a.h3{padding-left:24px;font-size:12.5px;}
+  .toc a:hover{color:var(--text);}
+  .toc a.on{color:var(--accent);border-left-color:var(--accent);}
+  .scrim{display:none;}
+
+  /* ── 쪽 ── */
+  article{display:none;} article.on{display:block;}
+  .eyebrow{font-size:13px;font-weight:600;color:var(--accent);}
+  h1,h2,h3,h4{color:var(--text-h);margin:0;letter-spacing:-.015em;text-wrap:balance;}
+  h1{font-size:32px;line-height:1.25;font-weight:650;margin-top:6px;}
+  .desc{margin:10px 0 0;font-size:17px;line-height:1.65;color:var(--text-1);}
+  .body{margin-top:30px;}
+  .body h2{font-size:22px;line-height:1.35;font-weight:600;margin-top:48px;padding-top:4px;}
+  .body h3{font-size:17px;line-height:1.4;font-weight:600;margin-top:32px;}
+  .body > :first-child{margin-top:0;}
+  .body p{margin:14px 0 0;color:var(--text-1);}
+  .body ul,.body ol{margin:14px 0 0;padding-left:22px;color:var(--text-1);}
+  .body li{margin-top:6px;} .body li::marker{color:var(--text-3);}
+  .body b,.body strong{color:var(--text);font-weight:600;}
+  .anchor{color:inherit;} .anchor:hover{color:inherit;}
+  .anchor::after{content:"#";margin-left:8px;color:var(--text-3);opacity:0;transition:opacity .14s;font-weight:400;}
+  h2:hover .anchor::after,h3:hover .anchor::after{opacity:1;}
+  code{font-family:var(--mono);font-size:.86em;color:var(--text);background:var(--sel-2);border:1px solid var(--ln);border-radius:5px;padding:1px 5px;overflow-wrap:anywhere;}
+
+  /* 코드 상자 */
+  .code{margin-top:16px;border:1px solid var(--ln-2);border-radius:var(--r);background:var(--code);overflow:hidden;}
+  .code .ch{display:flex;align-items:center;gap:8px;height:38px;padding:0 6px 0 14px;border-bottom:1px solid var(--ln);font-size:12px;color:var(--text-2);}
+  .code .ch .fn{font-family:var(--mono);}
+  .code .ch button{margin-left:auto;display:flex;align-items:center;gap:5px;border:none;background:none;color:var(--text-3);font-size:12px;padding:5px 8px;border-radius:6px;cursor:pointer;}
+  .code .ch button:hover{color:var(--text);background:var(--sel);}
+  .code .ch button.done{color:var(--green);}
+  .code pre{margin:0;padding:13px 16px;font-family:var(--mono);font-size:13px;line-height:1.75;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere;}
+  .code pre .c{color:var(--text-3);}
+
+  /* 탭 */
+  .tabs{margin-top:18px;border:1px solid var(--ln-2);border-radius:var(--r);overflow:hidden;}
+  .tabs [role="tablist"]{display:flex;gap:2px;padding:0 8px;border-bottom:1px solid var(--ln);background:var(--bg-2);overflow-x:auto;scrollbar-width:none;}
+  .tabs [role="tablist"]::-webkit-scrollbar{display:none;}
+  .tabs [role="tab"]{border:none;background:none;font-size:13.5px;color:var(--text-2);padding:11px 12px 10px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;}
+  .tabs [role="tab"]:hover{color:var(--text);}
+  .tabs [role="tab"][aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent);font-weight:500;}
+  .tabs [role="tabpanel"]{padding:4px 18px 18px;}
+  .tabs [role="tabpanel"] .code{margin-top:14px;}
+
+  /* 단계 */
+  .steps{margin-top:22px;padding:0;list-style:none;counter-reset:st;}
+  .steps > li{position:relative;padding:0 0 26px 44px;margin:0;counter-increment:st;}
+  .steps > li::before{content:counter(st);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;background:var(--bg-3);border:1px solid var(--ln-2);
+    color:var(--text);font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;}
+  .steps > li::after{content:"";position:absolute;left:14px;top:34px;bottom:4px;width:1px;background:var(--ln-2);}
+  .steps > li:last-child{padding-bottom:0;} .steps > li:last-child::after{display:none;}
+  .steps .st{font-size:16px;font-weight:600;color:var(--text-h);line-height:28px;}
+  .steps p:first-of-type{margin-top:6px;}
+
+  /* 안내 상자 */
+  .callout{margin-top:18px;display:flex;gap:12px;padding:13px 16px;border-radius:var(--r);border:1px solid var(--acc-line);background:var(--acc-tint);font-size:14px;color:var(--text-1);line-height:1.7;}
+  .callout svg{margin-top:3px;color:var(--accent);}
+  .callout.tip{border-color:rgba(166,227,161,.4);background:var(--green-tint);} .callout.tip svg{color:var(--green);}
+  .callout.warn{border-color:rgba(250,179,135,.45);background:var(--amber-tint);} .callout.warn svg{color:var(--amber);}
+  .callout b{color:var(--text);}
+  .callout > div > p:first-child{margin-top:0;}
+
+  /* 카드 */
+  .cards{margin-top:18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+  .cards a,.cards div.cd{display:block;padding:16px 18px;border:1px solid var(--ln-2);border-radius:var(--r);background:var(--card);color:inherit;transition:border-color .14s,background-color .14s;}
+  .cards a:hover{border-color:var(--acc-line);background:var(--acc-tint);color:inherit;}
+  .cards .ci{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--acc-tint);color:var(--accent);margin-bottom:10px;}
+  .cards b{display:block;font-size:14.5px;color:var(--text-h);font-weight:600;}
+  .cards span{display:block;margin-top:4px;font-size:13.5px;color:var(--text-2);line-height:1.6;}
+
+  /* 표 */
+  .tbl{margin-top:16px;overflow-x:auto;border:1px solid var(--ln-2);border-radius:var(--r);}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--ln);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  th{font-weight:600;color:var(--text);font-size:12.5px;background:var(--bg-2);}
+  td{color:var(--text-1);}
+  td code{white-space:nowrap;}
+  td q{color:var(--text);quotes:"“" "”";}
+
+  /* 정의 목록 (개념·도구) */
+  .defs{margin-top:16px;border-top:1px solid var(--ln);}
+  .defs .row{display:grid;grid-template-columns:170px minmax(0,1fr);gap:18px;padding:13px 0;border-bottom:1px solid var(--ln);}
+  .defs dt{font-weight:600;color:var(--text);font-size:14px;display:flex;align-items:baseline;gap:8px;}
+  .defs dt code{font-weight:500;color:var(--accent);background:none;border:none;padding:0;font-size:13px;}
+  .defs dt i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--text-3);transform:translateY(-1px);}
+  .defs dt small{display:block;font-family:var(--mono);font-weight:400;font-size:11px;color:var(--text-3);}
+  .defs dd{margin:0;font-size:14px;color:var(--text-1);}
+  .defs.dim dt code{color:var(--text-3);}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;border:1px solid var(--ln-2);border-radius:99px;padding:0 8px;margin:4px 4px 0 0;color:var(--text-2);}
+
+  /* 사용 예 — 사람이 친 말 → 에이전트가 하는 일 */
+  .ex{margin-top:18px;border:1px solid var(--ln-2);border-radius:var(--r);overflow:hidden;background:var(--card);}
+  .ex .says{padding:14px 16px;display:flex;flex-direction:column;gap:8px;}
+  .say{align-self:flex-end;max-width:90%;background:var(--bg-3);border-radius:12px 12px 4px 12px;padding:8px 13px;font-size:14px;color:var(--text);line-height:1.6;}
+  .say .who{display:block;font-size:11px;color:var(--text-3);margin-bottom:1px;}
+  .say.agent{align-self:flex-start;border-radius:12px 12px 12px 4px;background:none;border:1px dashed var(--ln-3);color:var(--text-1);}
+  .ex .does{border-top:1px solid var(--ln);padding:12px 16px 14px;background:var(--bg-2);font-size:14px;color:var(--text-1);}
+  .ex .does .flow{display:block;font-family:var(--mono);font-size:12px;color:var(--text-2);margin-bottom:4px;}
+  .ex .does .flow b{color:var(--accent);font-weight:500;}
+
+  /* 쪽 끝 */
+  .pager{margin-top:56px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .pager a{display:block;padding:14px 16px;border:1px solid var(--ln-2);border-radius:var(--r);color:inherit;transition:border-color .14s;}
+  .pager a:hover{border-color:var(--acc-line);color:inherit;}
+  .pager small{display:block;font-size:12px;color:var(--text-3);}
+  .pager b{font-size:14.5px;color:var(--accent);font-weight:500;}
+  .pager .nx{text-align:right;grid-column:2;}
+  .pfoot{margin-top:28px;padding-top:18px;border-top:1px solid var(--ln);display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--text-3);}
+  .pfoot a{color:var(--text-2);} .pfoot a:hover{color:var(--text);}
+  .pfoot .sp{flex:1;}
+
+  /* ── 검색 ── */
+  .sbox{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px;}
+  .sbox .panel{width:min(620px,100%);background:var(--bg);border:1px solid var(--ln-2);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;}
+  .sbox .in{display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--ln);color:var(--text-3);}
+  .sbox input{flex:1;height:54px;border:none;background:none;outline:none;color:var(--text);font:inherit;font-size:16px;}
+  .sbox .in kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--ln-2);border-radius:5px;padding:0 6px;}
+  .sbox ul{list-style:none;margin:0;padding:8px;max-height:52vh;overflow:auto;}
+  .sbox li a{display:block;padding:9px 12px;border-radius:8px;color:inherit;}
+  .sbox li a small{display:block;font-size:12px;color:var(--text-3);}
+  .sbox li a b{font-size:14.5px;font-weight:500;color:var(--text);}
+  .sbox li a span{display:block;font-size:13px;color:var(--text-2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .sbox li a mark{background:none;color:var(--accent);}
+  .sbox li a.on,.sbox li a:hover{background:var(--acc-tint);}
+  .sbox .empty{padding:22px 16px;color:var(--text-3);font-size:14px;text-align:center;}
+
+  /* ── 폭 ── 1440 · 1000 · 390 에서 본다 */
+  @media (max-width:1180px){
+    .wrap{grid-template-columns:minmax(0,1fr);padding:36px 40px 72px;}
+    .toc{display:none;}
+  }
+  @media (max-width:900px){
+    .menu{display:flex;}
+    .search{margin-left:auto;width:auto;}
+    .search .lbl,.search kbd{display:none;}
+    .top nav{margin-left:0;} .top nav .hide-s{display:none;}
+    .side{transform:translateX(-100%);transition:transform .2s;width:min(300px,86vw);box-shadow:var(--shadow);}
+    body.nav-open .side{transform:none;}
+    body.nav-open .scrim{display:block;position:fixed;inset:var(--top) 0 0 0;z-index:25;background:rgba(0,0,0,.4);}
+    .wrap{margin-left:0;padding:28px 20px 64px;}
+  }
+  @media (max-width:640px){
+    .top{padding:0 12px;gap:8px;}
+    .logo .name{display:none;}
+    .wrap{padding:24px 16px 56px;}
+    h1{font-size:27px;}
+    .desc{font-size:16px;}
+    .cards{grid-template-columns:minmax(0,1fr);}
+    .defs .row{grid-template-columns:minmax(0,1fr);gap:2px;}
+    .say{max-width:100%;}
+    .pager{grid-template-columns:minmax(0,1fr);} .pager .nx{grid-column:1;}
+  }
+  @media (prefers-reduced-motion:reduce){ *{transition:none !important;} }
+</style>
+<script>
+  // 색 — 고른 것이 있으면 그것, 없으면 시스템 설정. 그리기 전에 정해야 번쩍이지 않는다.
+  (() => { let t = null; try { t = localStorage.getItem("wt-docs-theme"); } catch {}
+    if (!t) t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.dataset.theme = t; })();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+
+<!-- 아이콘 한 벌 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-tip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="i-git" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 2.9.8.1-.6.4-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7c-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></symbol>
+</svg>
+
+<header class="top">
+  <button class="menu" id="menuBtn" type="button" aria-label="메뉴 열기" aria-expanded="false" aria-controls="side"><svg width="18" height="18"><use href="#i-menu"/></svg></button>
+  <a class="logo" href="#/overview" aria-label="Worktrail 문서 첫 쪽"><span class="box" aria-hidden="true">Wt</span><span class="name">WORKTRAIL</span><span class="badge">문서</span></a>
+  <button class="search" id="searchBtn" type="button" aria-label="문서 검색"><svg width="15" height="15"><use href="#i-search"/></svg><span class="lbl">검색</span><kbd id="kbd">⌘K</kbd></button>
+  <nav aria-label="바깥 링크">
+    <a class="hide-s" href="../">소개</a>
+    <a class="hide-s" href="https://github.com/jasonethicseo/worktrail" target="_blank" rel="noopener"><svg width="15" height="15"><use href="#i-git"/></svg>GitHub</a>
+    <button class="ic" id="themeBtn" type="button" aria-label="밝은 화면과 어두운 화면 바꾸기"><svg width="16" height="16"><use id="themeIco" href="#i-sun"/></svg></button>
+    <a class="cta" href="../../" data-go="demo">데모 보기</a>
+  </nav>
+</header>
+
+<div class="shell">
+  <nav class="side" id="side" aria-label="문서 목차"></nav>
+  <div class="scrim" id="scrim"></div>
+
+  <div class="wrap">
+    <main id="main">
+
+<!-- ════════════════ 시작하기 ════════════════ -->
+<article data-page="overview" data-group="시작하기" data-title="Worktrail 이란">
+  <p class="desc">AI 코딩 에이전트가 일하며 남기는 작업 기록입니다. 다음 세션이 코드에서 추측하지 않고, 멈춘 자리에서 이어 갑니다.</p>
+  <div class="body">
+    <p>Claude Code나 Codex와 일하다 세션을 닫으면 대화는 사라집니다. 코드와 커밋은 남지만, <b>무엇을 정했고 왜 그랬는지, 무엇이 안 풀렸고 다음은 누구 차례인지</b>는 코드에 없습니다. Worktrail은 그것을 <b>스레드</b>에 남기고, 새 세션은 그 스레드에서 시작합니다.</p>
+    <p>MCP 서버 하나와 작은 로컬 창으로 되어 있습니다. 에이전트가 MCP 도구로 기록하고, 사람은 창에서 읽습니다.</p>
+    <h2 id="next">어디서부터 볼까요</h2>
+    <div class="cards">
+      <a href="#/quickstart"><span class="ci"><svg width="16" height="16"><use href="#i-bolt"/></svg></span><b>빠른 시작</b><span>설치부터 다음 세션에서 이어받기까지 5분.</span></a>
+      <a href="#/records"><span class="ci"><svg width="16" height="16"><use href="#i-box"/></svg></span><b>무엇이 남는가</b><span>초점, 결정, 증거, 노트, 다음과 차례.</span></a>
+      <a href="#/daily"><span class="ci"><svg width="16" height="16"><use href="#i-chat"/></svg></span><b>평소 쓰는 법</b><span>만든 사람이 실제로 치는 말로 보는 하루.</span></a>
+      <a href="#/tools"><span class="ci"><svg width="16" height="16"><use href="#i-list"/></svg></span><b>MCP 도구</b><span>에이전트가 쓰는 도구 전부.</span></a>
+    </div>
+    <h2 id="works-with">붙는 곳</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>클라이언트</th><th>붙는 방법</th><th>세션 훅</th></tr></thead>
+      <tbody>
+        <tr><td>Claude Code</td><td>플러그인, 또는 설치 한 줄</td><td>있음. 열린 스레드가 저절로 뜹니다</td></tr>
+        <tr><td>Codex CLI</td><td>소스 설치, 또는 설치 한 줄</td><td>없음. 한 번 말하거나 <code>AGENTS.md</code></td></tr>
+        <tr><td>claude.ai · ChatGPT</td><td>커넥터 (호스팅 서버만)</td><td>없음. git 정보가 붙지 않습니다</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout"><svg width="18" height="18"><use href="#i-info"/></svg><div>맥·리눅스·WSL에서는 두 가지 저장 방식을 다 쓸 수 있습니다. 윈도우에서는 호스팅 서버로 씁니다. 신청 화면이 주는 지시문을 코딩 에이전트에게 붙여 넣으면 에이전트가 설치합니다. <a href="#/install/windows">윈도우</a>를 봅니다.</div></div>
+  </div>
+</article>
+
+<article data-page="quickstart" data-group="시작하기" data-title="빠른 시작">
+  <p class="desc">설치하고, 한 세션 일하고, 다음 세션에서 이어받는 데까지.</p>
+  <div class="body">
+    <ol class="steps">
+      <li><div class="st">설치합니다</div>
+        <p>기록을 이 컴퓨터에만 두는 가장 짧은 길입니다. 서버에 두려면 <a href="#/install">설치</a>를 봅니다.</p>
+        <div class="tabs" data-tabs>
+          <div role="tablist" aria-label="에이전트">
+            <button role="tab" aria-selected="true">Claude Code</button><button role="tab" aria-selected="false">Codex CLI</button>
+          </div>
+          <div role="tabpanel">
+            <div class="code"><div class="ch"><span class="fn">Claude Code 안에서</span></div><pre>/plugin marketplace add jasonethicseo/worktrail
+/plugin install worktrail@worktrail</pre></div>
+          </div>
+          <div role="tabpanel" hidden>
+            <div class="code"><div class="ch"><span class="fn">터미널</span></div><pre>git clone https://github.com/jasonethicseo/worktrail.git &amp;&amp; cd worktrail
+python3 -m venv .venv &amp;&amp; .venv/bin/pip install -e ".[mcp]"
+mkdir -p ~/.casebook &amp;&amp; echo local &gt; ~/.casebook/mode
+codex mcp add casebook -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy</pre></div>
+          </div>
+        </div>
+      </li>
+      <li><div class="st">저장소에서 세션을 엽니다</div>
+        <p>Claude Code는 이 폴더의 열린 스레드를 세션 시작 때 받습니다. 처음이면 비어 있습니다. Codex는 한 번 말해 줍니다.</p>
+        <div class="ex"><div class="says"><div class="say"><span class="who">사람</span>casebook 열린 스레드 보여줘</div></div></div>
+      </li>
+      <li><div class="st">평소처럼 일합니다</div>
+        <p>따로 시킬 것은 없습니다. 에이전트가 일을 스레드로 열고, 테스트 결과나 에러 같은 출력을 증거로, 단계마다 본 것과 결론을 노트로 남깁니다. 대화 중에 정한 것은 “사용자가 정함”으로 남습니다.</p>
+      </li>
+      <li><div class="st">창에서 봅니다</div>
+        <div class="code"><div class="ch"><span class="fn">터미널</span></div><pre>casebook-ui</pre></div>
+        <p>브라우저에 현황이 열립니다. 소스 설치라면 <a href="#/commands">명령</a>을 봅니다.</p>
+      </li>
+      <li><div class="st">다음 세션에서 이어받습니다</div>
+        <p>새 세션을 열고 이어서 하자고만 하면 됩니다. 에이전트는 지난 대화 대신 스레드의 초점, 결정, 열린 문제, 다음에서 시작합니다.</p>
+        <div class="ex"><div class="says"><div class="say"><span class="who">사람</span>이어서 뭐 해야 하지?</div></div></div>
+      </li>
+    </ol>
+  </div>
+</article>
+
+<article data-page="install" data-group="시작하기" data-title="설치">
+  <p class="desc">기록을 어디에 둘지 고르고, 쓰는 에이전트에 붙입니다.</p>
+  <div class="body">
+    <h2 id="where">기록을 둘 곳</h2>
+    <div class="tbl"><table>
+      <thead><tr><th></th><th>이 컴퓨터에만</th><th>호스팅 서버에</th></tr></thead>
+      <tbody>
+        <tr><td>신청</td><td>필요 없음</td><td><a href="/join?from=docs">신청 페이지</a>에서 구글 로그인</td></tr>
+        <tr><td>기록 위치</td><td><code>~/.casebook/casebook.db</code> 파일 하나</td><td>운영 서버</td></tr>
+        <tr><td>여러 기계</td><td>기록이 따로 놉니다</td><td>같은 기록을 봅니다</td></tr>
+        <tr><td>claude.ai 커넥터</td><td>안 됩니다</td><td>됩니다</td></tr>
+        <tr><td>누가 보나</td><td>나만</td><td>나와 운영자</td></tr>
+        <tr><td>윈도우</td><td>WSL에서만</td><td>됩니다 (<a href="#/install/windows">지시문</a>)</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout tip"><svg width="18" height="18"><use href="#i-tip"/></svg><div>회사 코드나 비밀이 섞인 작업이라면 이 컴퓨터에만 둡니다. 설치가 끝나면 아무것도 밖으로 나가지 않습니다.</div></div>
+
+    <h2 id="agents">에이전트에 붙이기</h2>
+    <div class="tabs" data-tabs>
+      <div role="tablist" aria-label="설치 방법">
+        <button role="tab" aria-selected="true">Claude Code 플러그인</button><button role="tab" aria-selected="false">Codex CLI</button><button role="tab" aria-selected="false">서버 설치 한 줄</button><button role="tab" aria-selected="false">claude.ai · ChatGPT</button>
+      </div>
+      <div role="tabpanel">
+        <p>MCP 등록과 세션 훅까지 끝납니다. 기록은 이 컴퓨터에 남습니다. Python 3.11 이상 또는 uv가 필요합니다.</p>
+        <div class="code"><div class="ch"><span class="fn">Claude Code 안에서</span></div><pre>/plugin marketplace add jasonethicseo/worktrail
+/plugin install worktrail@worktrail</pre></div>
+        <p>새 버전을 자동으로 받으려면 플러그인의 auto-update를 켭니다.</p>
+      </div>
+      <div role="tabpanel" hidden>
+        <p>Codex에는 플러그인이 없으므로 소스에서 깔고 직접 등록합니다.</p>
+        <div class="code"><div class="ch"><span class="fn">터미널</span></div><pre>git clone https://github.com/jasonethicseo/worktrail.git &amp;&amp; cd worktrail
+python3 -m venv .venv &amp;&amp; .venv/bin/pip install -e ".[mcp]"
+mkdir -p ~/.casebook &amp;&amp; echo local &gt; ~/.casebook/mode
+codex mcp add casebook -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy</pre></div>
+        <p>Claude Code에도 소스에서 붙이려면 마지막 줄 대신 <code>claude mcp add casebook -s user -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy</code>를 쓰고, 세션 훅은 <code>sh tools/hooks/install_claude_hooks.sh</code>로 겁니다.</p>
+      </div>
+      <div role="tabpanel" hidden>
+        <p>신청 화면에서 서버를 고르면 설치 한 줄을 받습니다. 클라이언트 설치, 찾은 에이전트(Claude Code·Codex) 등록, 훅까지 한 번에 합니다. 업데이트도 같은 줄입니다.</p>
+        <div class="code"><div class="ch"><span class="fn">터미널</span></div><pre>curl -fsSL &lt;받은 URL&gt;/install.sh | sh -s -- --server</pre></div>
+        <div class="callout warn"><svg width="18" height="18"><use href="#i-warn"/></svg><div>URL이 곧 열쇠입니다. 화면 공유, 스크린샷, 채팅에 올리지 않습니다.</div></div>
+      </div>
+      <div role="tabpanel" hidden>
+        <p>설치 없이 같은 서버를 커넥터로 붙입니다. 호스팅 서버에서만 되고, 브랜치나 커밋 같은 git 정보는 붙지 않습니다.</p>
+        <ul>
+          <li>claude.ai: 설정 → 커넥터 → 커스텀 커넥터 추가 → URL 붙여넣기</li>
+          <li>ChatGPT: 설정 → 앱·커넥터 → 고급 → 개발자 모드 → MCP 서버 추가</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout"><svg width="18" height="18"><use href="#i-info"/></svg><div>MCP 서버는 <code>casebook</code>이라는 이름으로 등록됩니다. 처음 이름이고, 이미 설치된 것을 깨지 않으려고 그대로 두었습니다. 에이전트에게는 “casebook”이라고 부르면 됩니다.</div></div>
+
+    <h2 id="windows">윈도우</h2>
+    <p>윈도우에는 <code>sh</code>가 없어서 설치 한 줄이 돌지 않습니다. 대신 신청 화면에서 <b>Windows</b>를 고르면 지시문 주소(<code>…/windows.md</code>)를 줍니다. 그 쪽을 열어 통째로 코딩 에이전트(Claude Code, Codex)에게 붙여 넣으면, 에이전트가 파이썬 실행기, MCP 등록, 훅까지 윈도우에 맞게 설치합니다.</p>
+    <div class="callout warn"><svg width="18" height="18"><use href="#i-warn"/></svg><div>지시문 주소에도 열쇠가 들어 있습니다. 설치 한 줄과 같이 다룹니다. 이 컴퓨터에만 두는 방식(플러그인, 소스 설치)은 윈도우에서는 WSL 안에서만 됩니다.</div></div>
+
+    <h2 id="codex-agents">Codex에서 매번 말하지 않기</h2>
+    <p>Codex에는 세션 훅이 없어서, 세션마다 한 번 “casebook 열린 스레드 보여줘”라고 합니다. 그 한마디도 빼려면 <code>~/.codex/AGENTS.md</code>에 한 줄을 둡니다. 만든 사람이 실제로 쓰는 줄입니다.</p>
+    <div class="code"><div class="ch"><span class="fn">~/.codex/AGENTS.md</span></div><pre>사용자의 작업에 대한 정보가 필요할 시 연결된 Worktrail MCP를 활용하여 스레드를 열거나 확인하여 조사 후 필요하다면 기록할 것. Worktrail 을 적극 활용할 것.</pre></div>
+
+    <h2 id="commits">커밋 붙이기</h2>
+    <p>Claude Code는 커밋을 스레드에 저절로 붙입니다. 터미널이나 다른 에이전트의 커밋도 붙이려면 그 저장소 안에서 한 번 git 훅을 겁니다.</p>
+    <div class="code"><div class="ch"><span class="fn">저장소 안에서</span></div><pre><span class="c"># 서버 설치</span>
+sh ~/.casebook/client/tools/hooks/install_git_hook.sh
+<span class="c"># 소스 설치 (worktrail 폴더의 것)</span>
+sh tools/hooks/install_git_hook.sh</pre></div>
+  </div>
+</article>
+
+<!-- ════════════════ 개념 ════════════════ -->
+<article data-page="threads" data-group="개념" data-title="스레드와 주제">
+  <p class="desc">한 작업은 스레드 하나입니다. 여러 날에 걸친 일감은 주제로 묶습니다.</p>
+  <div class="body">
+    <h2 id="thread">스레드</h2>
+    <p>한 저장소에서의 <b>질문 하나 또는 변경 하나</b>를 끝까지 따라간 것입니다. 20분짜리 수정도 스레드입니다. 정하는 일과 만드는 일은 한 스레드이고, 질문이 바뀔 때만 새로 엽니다.</p>
+    <p>에이전트가 알아서 열고 닫습니다. 사람이 볼 것은 “지금 이 얘기가 아까 그 얘기와 같은 일인가” 하나뿐이고, 아니면 “이건 새 스레드로”라고 합니다.</p>
+    <div class="callout warn"><svg width="18" height="18"><use href="#i-warn"/></svg><div>한 스레드에 하루치 주제가 쌓이면, 나중에 읽을 때 “이 결정이 무엇에 대한 것이었나”를 다시 추측해야 합니다. 기록을 남긴 이유가 사라집니다.</div></div>
+    <h2 id="topic">주제</h2>
+    <p>여러 날, 여러 저장소에 걸친 한 줄기 일감입니다(예: “결제 장애”, “원격 연결”). 스레드는 반드시 어느 주제 아래 열립니다. 에이전트는 기존 주제에서 고르고, 맞는 것이 없을 때만 새 이름을 묻습니다. 주제의 스레드가 다 닫히면 그 주제는 완료로 접힙니다.</p>
+    <h2 id="binding">폴더와의 연결</h2>
+    <p>스레드는 저장소에 속하고, 지금 어느 스레드를 하는지는 <b>폴더(worktree)마다 하나</b>입니다. 그래서 두 에이전트가 다른 폴더에서 일하면 서로 덮어쓰지 않습니다.</p>
+  </div>
+</article>
+
+<article data-page="records" data-group="개념" data-title="무엇이 남는가">
+  <p class="desc">스레드 안에는 뒤집는 주체가 다른 것들이 따로 남습니다.</p>
+  <div class="body">
+    <dl class="defs">
+      <div class="row"><dt><i style="background:var(--text)"></i><span>초점<small>focus</small></span></dt><dd>이 스레드가 무엇을 위한 것이고 무엇이 되면 끝나는가. 얼마나 왔는지가 아닙니다.</dd></div>
+      <div class="row"><dt><i style="background:var(--amber)"></i><span>결정<small>decision</small></span></dt><dd>앞으로 따를 선택. 이유와, 사람이 정했는지 에이전트가 정했는지가 붙습니다. 사람이 정한 것에는 그 말의 원문이 근거로 붙습니다.</dd></div>
+      <div class="row"><dt><i style="background:var(--red)"></i><span>제약<small>constraint</small></span></dt><dd>지켜야 할 조건. 결정처럼 누가 정했는지가 붙습니다.</dd></div>
+      <div class="row"><dt><i style="background:var(--green)"></i><span>증거<small>evidence</small></span></dt><dd>기계나 사람이 실제로 말한 것, 바이트 그대로. 테스트 출력, 에러, diff. 요약하지 않습니다.</dd></div>
+      <div class="row"><dt><i style="background:var(--violet)"></i><span>노트<small>note</small></span></dt><dd>에이전트가 단계마다 본 것과 결론. 해석이지 증거가 아닙니다. 네 종류가 있습니다.<br><span class="pill">바꿈</span><span class="pill">확인</span><span class="pill">발견</span><span class="pill">생각</span></dd></div>
+      <div class="row"><dt><i style="background:var(--amber)"></i><span>열린 문제<small>open</small></span></dt><dd>아직 안 풀린 질문, 막힌 것, 불확실한 것.</dd></div>
+      <div class="row"><dt><i style="background:var(--accent)"></i><span>다음<small>next · owner</small></span></dt><dd>다음에 할 구체적인 일과 그 차례. <a href="#/owner">다음과 차례</a>를 봅니다.</dd></div>
+      <div class="row"><dt><i></i><span>배제<small>ruled out</small></span></dt><dd>지워진 가설. 지운 증거와, 그게 성립하는 범위가 같이 남습니다. 범위 밖에서는 다시 가설입니다.</dd></div>
+      <div class="row"><dt><i></i><span>용어<small>term</small></span></dt><dd>작업 중에 지어 쓴 이름의 뜻. 그 자리에 없던 사람이 읽을 수 있게.</dd></div>
+    </dl>
+    <h2 id="note-or-decision">노트인가, 결정인가</h2>
+    <div class="callout tip"><svg width="18" height="18"><use href="#i-tip"/></svg><div><b>세상이 뒤집을 수 있으면 노트, 나만 바꿀 수 있으면 결정</b>입니다. 가설은 결정이 아닙니다. 이 선만 지키면 기록이 낡지 않습니다.</div></div>
+    <h2 id="supersede">고치지 않고 대체합니다</h2>
+    <p>결정, 제약, 초점, 다음은 고쳐 쓰지 않습니다. 새 것이 옛 것을 대체하고, 옛 것은 “무엇이 대체했는지”와 함께 남습니다. 그래서 회고에서 방향이 바뀐 자리를 그대로 볼 수 있습니다.</p>
+    <h2 id="human-only">사람만 줄 수 있는 것</h2>
+    <ul>
+      <li><b>판정.</b> “이거 됐다 / 아니다”. 기계는 시도한 것까지만 압니다.</li>
+      <li><b>결정.</b> 대화 중에 정하면 “사용자가 정함”으로 남고, 나중에 뒤집을 수 있는 것도 사람뿐입니다.</li>
+      <li><b>주제 이름.</b> 새 일감의 이름은 사람 머릿속에만 있습니다.</li>
+    </ul>
+  </div>
+</article>
+
+<article data-page="owner" data-group="개념" data-title="다음과 차례">
+  <p class="desc">멈출 때 가장 중요한 두 줄: 다음에 무엇을 하고, 그게 누구 차례인가.</p>
+  <div class="body">
+    <p>에이전트는 단계를 마칠 때마다 <b>다음</b>을 남기고, 다음에는 반드시 <b>차례</b>가 붙습니다. 차례가 없으면 서버가 다음을 받지 않습니다.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>차례</th><th>뜻</th><th>현황에서</th></tr></thead>
+      <tbody>
+        <tr><td><code>user</code></td><td>사람이 해야 합니다. 판정, 결정, 확인.</td><td>내 차례</td></tr>
+        <tr><td><code>claude</code> · <code>codex</code> …</td><td>그 에이전트가 할 일입니다.</td><td>에이전트에게</td></tr>
+        <tr><td><code>watch</code></td><td>할 일 없이 지켜보기만.</td><td>관찰 중</td></tr>
+      </tbody>
+    </table></div>
+    <p>사람 차례인 다음은 사람에게 하는 말로 씁니다. “사용자가 정한다”가 아니라 “정해 주세요”.</p>
+    <h2 id="why">왜 빼먹을 수 없게 했나</h2>
+    <p>차례가 없으면 내일 화면을 열었을 때 “내가 뭘 해야 하나, 아니면 기다리면 되나”를 매번 다시 판단해야 합니다. 낡은 다음도 같은 문제를 만듭니다. 다음 세션이 그걸 읽고 이미 끝난 일을 하러 갑니다. 그래서 에이전트는 바뀐 게 없어도 매 단계 다음을 다시 말합니다.</p>
+    <div class="callout"><svg width="18" height="18"><use href="#i-info"/></svg><div>에이전트가 차례를 틀리게 잡을 수는 있습니다. 현황에서 이상하면 “그건 내 차례야” 한마디면 됩니다.</div></div>
+  </div>
+</article>
+
+<article data-page="rules" data-group="개념" data-title="서버가 지키는 규칙">
+  <p class="desc">기록의 규칙은 에이전트의 기억이 아니라 서버가 지킵니다. 어기면 기록이 거절되고, 이유가 에이전트에게 돌아갑니다.</p>
+  <div class="body">
+    <div class="tbl"><table>
+      <thead><tr><th>규칙</th><th>왜</th></tr></thead>
+      <tbody>
+        <tr><td>모든 글의 첫 줄은 제목입니다. 120칸 이내(한글은 2칸), 기록 번호나 커밋 해시 없이.</td><td>사람이 화면에서 그 줄만 읽고 무슨 일인지 알아야 합니다.</td></tr>
+        <tr><td>제목 바로 아래 문단에도 기록 번호를 두지 않습니다.</td><td>그 문단도 화면에서 읽힙니다. 번호는 뒤 문단이나 증거 링크로.</td></tr>
+        <tr><td>스레드는 주제 없이 열 수 없습니다. “미분류”도 안 됩니다.</td><td>회고에서 일감별로 읽을 수 있어야 합니다.</td></tr>
+        <tr><td>다음에는 차례가 있어야 합니다.</td><td><a href="#/owner">다음과 차례</a>.</td></tr>
+        <tr><td>사람이 정했다고 남기려면 그 말의 원문이 붙어야 합니다.</td><td>에이전트의 요약이 사람의 결정으로 둔갑하지 않게.</td></tr>
+        <tr><td>초점을 다시 선언하지 않고 노트가 15개 쌓이면 거절됩니다.</td><td>한 스레드에 다른 일이 쌓이는 것을 막습니다.</td></tr>
+        <tr><td>가설을 지울 때는 지운 증거와 범위가 있어야 합니다.</td><td>배제는 이후 조사를 멈추게 하므로 문턱이 더 높습니다.</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</article>
+
+<!-- ════════════════ 가이드 ════════════════ -->
+<!-- 말풍선 안은 만든 사람이 실제 세션에서 친 말 그대로다. 스레드 번호만 예시 번호로 바꿨다(D18636, D18642). -->
+<article data-page="daily" data-group="가이드" data-title="평소 쓰는 법">
+  <p class="desc">Worktrail을 만든 사람이 평소에 치는 말입니다. 명령어가 따로 없어서, 평소 말투로 하면 됩니다.</p>
+  <div class="body">
+    <div class="callout"><svg width="18" height="18"><use href="#i-info"/></svg><div>말풍선은 실제 세션에서 친 말 그대로입니다. 스레드 번호만 예시 번호로 바꿨습니다.</div></div>
+
+    <h2 id="open">세션을 열 때</h2>
+    <div class="ex"><div class="says">
+      <div class="say"><span class="who">사람</span>열린스레드 조회 후 우선 정리하고 작업하자</div>
+      <div class="say"><span class="who">사람</span>12번 스레드 resume 해서 이어서 하자.</div>
+      <div class="say"><span class="who">사람</span>이어서 뭐 해야 하지?</div>
+    </div><div class="does"><span class="flow"><b>list_threads</b> → <b>resume</b></span>지난 대화를 기억해서가 아니라, 스레드에 남은 다음에서 시작합니다.</div></div>
+
+    <h2 id="tidy">여러 스레드를 정리할 때</h2>
+    <div class="ex"><div class="says">
+      <div class="say"><span class="who">사람</span>14 닫아도 될듯. 9는 8 결정 후 진행하자. 5도 일단 닫자.</div>
+      <div class="say"><span class="who">사람</span>오잉? 7은 닫히지 않았어?</div>
+    </div><div class="does"><span class="flow"><b>close_thread</b> · <b>declare</b></span>닫을 때 결과 한 줄이 남고, 기다리는 스레드는 다음과 차례를 바꿔 둡니다.</div></div>
+
+    <h2 id="design">큰 일은 설계부터</h2>
+    <div class="ex"><div class="says">
+      <div class="say"><span class="who">사람</span>일단 만들지말고, 어떻게 만들건지 설계해서 나랑 조율하자.</div>
+      <div class="say"><span class="who">사람</span>셋다 권장으로.</div>
+      <div class="say"><span class="who">사람</span>좋아. 이대로 구현 스레드 열어서 진행하자.</div>
+      <div class="say"><span class="who">사람</span>스레드 열고 1번부터 가자</div>
+    </div><div class="does"><span class="flow"><b>open_thread</b> → <b>decide</b>(사용자가 정함) → <b>note_turn</b></span>“권장으로” 같은 짧은 답도 사람이 정한 결정으로 남고, 그 말의 원문이 근거로 붙습니다.</div></div>
+
+    <h2 id="ask-why">근거를 물을 때</h2>
+    <div class="ex"><div class="says">
+      <div class="say"><span class="who">사람</span>스레드 3번 보고 문제 분석 후 해결책좀 제시해줘. 쉽게 어떤 상황인지도 설명해줘.</div>
+      <div class="say"><span class="who">사람</span>근데 지금 10 스레드는 왜 미분류야? 어떤 근거로 이렇게 분류했는지만 알려줘.</div>
+      <div class="say"><span class="who">사람</span>이해했어. 이 얘기 casebook에 기록해줘</div>
+    </div><div class="does"><span class="flow"><b>find</b> → <b>trail</b> → <b>inspect</b></span>“왜 그랬지?”는 기록을 찾아 답합니다. 노트는 해석이라, 근거로 댈 때는 그 노트가 가리키는 증거 원문까지 엽니다.</div></div>
+
+    <h2 id="close">끝낼 때</h2>
+    <div class="ex"><div class="says">
+      <div class="say"><span class="who">사람</span>좋다. 잘 보인다. 이걸로 데모는 닫아도 될듯.</div>
+      <div class="say"><span class="who">사람</span>읽혔어. 3 닫고 디자인 스레드 열자</div>
+    </div><div class="does"><span class="flow"><b>close_thread</b> → <b>open_thread</b></span>충분한지는 사람의 판정이고, 그 판정이 스레드의 마지막 줄이 됩니다. 멈추기만 할 때는 닫지 않고 다음과 차례를 남깁니다.</div></div>
+
+    <p>에이전트를 바꾸거나 새 세션에 넘기는 말은 <a href="#/agents">에이전트 섞어 쓰기</a>와 <a href="#/handover">새 세션에 넘기기</a>에 있습니다.</p>
+  </div>
+</article>
+
+<article data-page="agents" data-group="가이드" data-title="에이전트 섞어 쓰기">
+  <p class="desc">Claude Code와 Codex가 같은 스레드를 읽고 씁니다. 한쪽이 남긴 다음을 다른 쪽이 이어받습니다.</p>
+  <div class="body">
+    <h2 id="example">이렇게 씁니다</h2>
+    <div class="ex"><div class="says">
+      <div class="say"><span class="who">사람</span>이 작업은 코덱스한테 시키고 너한테 진행상황 물어보는 식으로.</div>
+      <div class="say"><span class="who">사람</span>6번 스레드 진행중인데 codex가 뭐라고 적어놨어?</div>
+      <div class="say"><span class="who">사람</span>코덱스 끝났대</div>
+    </div><div class="does"><span class="flow"><b>resume</b> · <b>trail</b></span>다른 에이전트가 남긴 결정, 노트, 증거, 커밋을 그대로 읽습니다. 누가 남겼는지도 기록에 있습니다.</div></div>
+    <h2 id="folders">폴더를 나누는 때</h2>
+    <p>스레드 연결은 폴더마다 하나입니다.</p>
+    <ul>
+      <li>폴더가 다르면 서로 무관합니다.</li>
+      <li>같은 폴더를 번갈아 쓰는 것은 괜찮습니다.</li>
+      <li><b>같은 폴더에서 동시에</b> 돌리면 기록이 한쪽 스레드로 붙습니다. 이때는 <code>git worktree</code>로 폴더를 나눕니다.</li>
+    </ul>
+    <h2 id="chat">채팅 창에서 의견 구하기</h2>
+    <p>호스팅 서버라면 claude.ai나 ChatGPT에서도 커넥터로 같은 스레드를 읽을 수 있습니다. 코드 에이전트가 정리한 스레드를 두고 다른 모델에게 의견을 물을 때 씁니다.</p>
+    <div class="ex"><div class="says">
+      <div class="say"><span class="who">사람</span>이거 스레드 열어서 gpt웹이나 클로드 웹에도 의견 구할 수 있게 만들어줘. 물어보고 올게.</div>
+    </div></div>
+  </div>
+</article>
+
+<article data-page="handover" data-group="가이드" data-title="새 세션에 넘기기">
+  <p class="desc">인계문을 따로 만들지 않습니다. 스레드가 인계문입니다.</p>
+  <div class="body">
+    <p>대화가 너무 길어졌거나 새 세션에서 깨끗하게 시작하고 싶을 때, 에이전트에게 스레드를 기준으로 한 짧은 의뢰문을 쓰게 하고 그것을 새 세션의 첫 말로 붙여 넣습니다.</p>
+    <div class="ex"><div class="says">
+      <div class="say"><span class="who">사람</span>이거 새 세션 열어서 하고 싶어 우리는 세션 인계문을 만들 필요 없이 스레드가 있으니 그거 기준으로 작업 설계 의뢰문을 써줘</div>
+      <div class="say agent"><span class="who">에이전트가 쓴 의뢰문 · 새 세션의 첫 말</span>12번 스레드 resume 해서 이어서 하자. open 에 정할 것 다섯이 적혀 있다. 하나씩 물어봐 주고, 내가 답하면 결정으로 못 박은 뒤에 구현해라.</div>
+    </div></div>
+    <h2 id="what">의뢰문에 담을 것</h2>
+    <p>스레드 번호와 “무엇을 할지”만 담으면 됩니다. 결정, 제약, 열린 문제, 다음은 새 세션이 <code>resume</code>으로 직접 받습니다. 의뢰문에 옮겨 적으면 오히려 두 벌이 되어 어긋납니다.</p>
+    <h2 id="compact">대화가 요약될 때</h2>
+    <p>요약에만 남은 관찰은 사라진 것이나 같습니다. Claude Code는 요약 직후 “먼저 기록하라”고 에이전트에게 알립니다. 훅이 없는 에이전트라면 긴 세션 중간에 “여기까지 기록해”라고 합니다.</p>
+    <h2 id="summary">정리가 필요할 때</h2>
+    <p>어디까지 왔는지 한눈에 보고 싶으면 에이전트에게 정리를 청합니다. 에이전트는 사람이 물었을 때만 정리 도구(<code>handoff</code>)를 씁니다. 자기 기억을 되살리려고 쓰지 않습니다.</p>
+  </div>
+</article>
+
+<article data-page="phrases" data-group="가이드" data-title="어긋날 때 한마디">
+  <p class="desc">평소에는 필요 없습니다. 눈에 거슬릴 때만 씁니다.</p>
+  <div class="body">
+    <div class="tbl"><table>
+      <thead><tr><th>이럴 때</th><th>이렇게</th></tr></thead>
+      <tbody>
+        <tr><td>한 스레드에 다른 얘기가 쌓일 때</td><td><q>이건 새 스레드로</q></td></tr>
+        <tr><td>중요한 출력이 그냥 지나갈 때</td><td><q>그거 기록해</q></td></tr>
+        <tr><td>차례를 잘못 잡았을 때</td><td><q>그건 내 차례야</q> · <q>코덱스한테 넘긴 거야</q></td></tr>
+        <tr><td>키·비밀번호가 화면에 있을 때</td><td><q>그건 기록하지 마</q></td></tr>
+        <tr><td>대화가 길어질 때 (훅 없는 에이전트)</td><td><q>여기까지 기록해</q></td></tr>
+        <tr><td>주제가 겹쳐 보일 때</td><td><q>이 두 주제 합쳐줘</q></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</article>
+
+<!-- ════════════════ 화면 ════════════════ 이름은 web/worktrail/index.html 의 위 띠와 같다 -->
+<article data-page="screens" data-group="화면" data-title="현황과 회고">
+  <p class="desc">현황은 지금을, 회고는 거기까지 온 길을 보여 줍니다. 화면은 읽기 전용입니다.</p>
+  <div class="body">
+    <h2 id="status">현황</h2>
+    <p>“지금 뭘 해야 하나.” 열린 스레드를 차례별로 봅니다. 왼쪽에서 걸러 봅니다.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>거르기</th><th>보이는 것</th></tr></thead>
+      <tbody>
+        <tr><td>내 차례</td><td>사람이 판정하거나 정해야 하는 스레드. 하루를 시작하는 가장 빠른 길입니다.</td></tr>
+        <tr><td>에이전트에게</td><td>에이전트가 이어 할 스레드.</td></tr>
+        <tr><td>관찰 중</td><td>할 일 없이 지켜보는 스레드.</td></tr>
+        <tr><td>미정</td><td>차례가 안 정해진 스레드.</td></tr>
+        <tr><td>오늘 바뀐 것</td><td>오늘 기록이 생긴 스레드.</td></tr>
+      </tbody>
+    </table></div>
+    <p>스레드를 열면 세 줄로 읽힙니다. 어디까지 왔는지, 다음은 무엇인지, 왜 그런지. 증거와 노트를 누르면 원문과 결론을 각각 펼쳐 봅니다.</p>
+    <h2 id="review">회고</h2>
+    <p>“이 주제가 어떻게 여기까지 왔나.” 한 주제의 결정과 사건을 시간순으로 봅니다. 결정이 왜 그렇게 났는지 되짚을 때 씁니다. 양이 많아서, 지금 할 일을 찾을 때는 현황이 낫습니다.</p>
+    <h2 id="find">찾기</h2>
+    <p>모든 스레드의 결정, 제약, 노트, 증거를 말로 찾습니다. 에이전트의 <code>find</code>와 같은 것을 사람이 봅니다.</p>
+    <h2 id="prior">과거 기록</h2>
+    <p>설치 전에 한 작업에서 사람이 친 말만 가져와 둔 곳입니다(<a href="#/commands"><code>casebook-backfill</code></a>). 에이전트의 말이나 도구 결과는 가져오지 않고, 현황·회고와 섞이지 않습니다.</p>
+    <div class="callout tip"><svg width="18" height="18"><use href="#i-tip"/></svg><div><a href="../../" data-go="demo">데모</a>에서 가상 팀의 4주치 기록으로 네 화면을 직접 볼 수 있습니다.</div></div>
+  </div>
+</article>
+
+<!-- ════════════════ 레퍼런스 ════════════════ -->
+<!-- casebook/adapters/mcp_server.py 에 등록된 도구 전부. 목록이 어긋나면 tests/test_docs.py 가 깨진다. -->
+<article data-page="tools" data-group="레퍼런스" data-title="MCP 도구">
+  <p class="desc">에이전트가 쓰는 도구입니다. 사람이 부를 일은 없고, 에이전트가 무엇을 하는지 읽을 때 참고합니다.</p>
+  <div class="body">
+    <h2 id="t-start">시작과 이어받기</h2>
+    <dl class="defs">
+      <div class="row"><dt><code data-tool>list_threads</code></dt><dd>이 저장소의 열린 스레드와 각각의 다음·차례. 세션의 첫 호출.</dd></div>
+      <div class="row"><dt><code data-tool>overview</code></dt><dd>모든 저장소에 걸친 열린 일. 폴더를 고르기 전에 봅니다.</dd></div>
+      <div class="row"><dt><code data-tool>resume</code></dt><dd>한 스레드의 지금 상태: 초점, git 위치, 제약, 결정, 열린 문제, 다음, 증거 번호.</dd></div>
+      <div class="row"><dt><code data-tool>switch_thread</code></dt><dd>이 폴더를 다른 열린 스레드에 잇거나, 잠시 풉니다.</dd></div>
+    </dl>
+    <h2 id="t-thread">스레드</h2>
+    <dl class="defs">
+      <div class="row"><dt><code data-tool>open_thread</code></dt><dd>초점과 주제로 새 스레드를 엽니다.</dd></div>
+      <div class="row"><dt><code data-tool>declare</code></dt><dd>초점, 열린 문제, 다음(과 차례)을 새로 선언합니다.</dd></div>
+      <div class="row"><dt><code data-tool>close_thread</code></dt><dd>결과 한 줄과 함께 닫습니다.</dd></div>
+    </dl>
+    <h2 id="t-record">남기기</h2>
+    <dl class="defs">
+      <div class="row"><dt><code data-tool>note_turn</code></dt><dd>한 단계에서 본 것과 결론, 다음과 차례.</dd></div>
+      <div class="row"><dt><code data-tool>add_evidence</code></dt><dd>출력 원문을 그대로 증거로.</dd></div>
+      <div class="row"><dt><code data-tool>add_evidence_file</code></dt><dd>파일 내용을 증거로. 긴 로그에 씁니다. 채팅 클라이언트에서는 안 됩니다.</dd></div>
+      <div class="row"><dt><code data-tool>decide</code></dt><dd>앞으로 따를 결정. 누가 정했는지와 이유가 붙습니다.</dd></div>
+      <div class="row"><dt><code data-tool>constrain</code></dt><dd>지켜야 할 제약.</dd></div>
+      <div class="row"><dt><code data-tool>rule_out</code></dt><dd>가설을 지웁니다. 지운 증거와 범위가 있어야 합니다.</dd></div>
+      <div class="row"><dt><code data-tool>define</code></dt><dd>작업 중에 지어 쓴 이름의 뜻.</dd></div>
+    </dl>
+    <h2 id="t-topic">주제</h2>
+    <dl class="defs">
+      <div class="row"><dt><code data-tool>assign_topic</code></dt><dd>스레드를 주제 아래 둡니다. 주제를 마무리할 때 결론 한 줄을 답니다.</dd></div>
+      <div class="row"><dt><code data-tool>list_topics</code></dt><dd>주제와 그 아래 스레드 목록.</dd></div>
+      <div class="row"><dt><code data-tool>merge_topic</code></dt><dd>두 주제를 합칩니다. 사람이 시켰을 때만.</dd></div>
+    </dl>
+    <h2 id="t-recall">되짚기</h2>
+    <dl class="defs">
+      <div class="row"><dt><code data-tool>find</code></dt><dd>모든 스레드의 기록을 말로 찾습니다.</dd></div>
+      <div class="row"><dt><code data-tool>trail</code></dt><dd>한 스레드를 시간을 거슬러 한 줄씩.</dd></div>
+      <div class="row"><dt><code data-tool>inspect</code></dt><dd>번호 하나를 전문으로.</dd></div>
+      <div class="row"><dt><code data-tool>search_evidence</code></dt><dd>증거 원문만 찾습니다.</dd></div>
+      <div class="row"><dt><code data-tool>search_prior</code></dt><dd>설치 전 세션에서 사람이 친 말을 찾습니다.</dd></div>
+    </dl>
+    <h2 id="t-human">사람을 위한 것</h2>
+    <dl class="defs">
+      <div class="row"><dt><code data-tool>handoff</code></dt><dd>“어디까지 왔어?”라고 물었을 때만 쓰는 정리.</dd></div>
+      <div class="row"><dt><code data-tool>rate_handoff</code></dt><dd>새 세션이 잘 이어받았는지에 대한 사람의 평가.</dd></div>
+      <div class="row"><dt><code data-tool>add_utterance</code></dt><dd>채팅 클라이언트에서 사람의 말을 원문 그대로 남깁니다(훅이 없는 곳).</dd></div>
+    </dl>
+    <h2 id="t-internal">스크립트 전용 · 옛 이름</h2>
+    <dl class="defs dim">
+      <div class="row"><dt><code data-tool>hook</code></dt><dd>Claude Code 훅이 부릅니다.</dd></div>
+      <div class="row"><dt><code data-tool>record_utterances</code></dt><dd>사람의 말을 올리는 스크립트가 부릅니다.</dd></div>
+      <div class="row"><dt><code data-tool>import_prior</code></dt><dd><code>casebook-backfill</code>이 부릅니다.</dd></div>
+      <div class="row"><dt><code data-tool>open_case</code></dt><dd>스레드 이전의 이름. 남아 있기만 합니다.</dd></div>
+      <div class="row"><dt><code data-tool>list_cases</code></dt><dd>스레드 이전의 이름. 남아 있기만 합니다.</dd></div>
+    </dl>
+  </div>
+</article>
+
+<article data-page="commands" data-group="레퍼런스" data-title="명령">
+  <p class="desc">사람이 터미널에서 쓰는 명령입니다.</p>
+  <div class="body">
+    <p>서버 설치라면 <code>~/.casebook/client/bin/</code> 아래에 있습니다. 플러그인은 앞의 셋을 켜져 있는 동안 Claude Code의 PATH에 올립니다.</p>
+    <dl class="defs">
+      <div class="row"><dt><code data-cmd>casebook-ui</code></dt><dd>기록을 보는 창을 브라우저로 엽니다. 내 컴퓨터에만 열리고 끄려면 Ctrl+C. 소스 설치라면 <code>.venv/bin/python -m casebook.adapters.ui_server</code>.</dd></div>
+      <div class="row"><dt><code data-cmd>casebook-login</code></dt><dd>터미널에서 서버에 로그인합니다. 서버 모드로 옮길 때 씁니다.</dd></div>
+      <div class="row"><dt><code data-cmd>casebook-backfill</code></dt><dd>깔기 전에 한 작업을 가져옵니다. 작업공간 목록에서 무엇을 올릴지 고르고, 가져오는 것은 사람이 친 말의 원문뿐입니다.</dd></div>
+      <div class="row"><dt><code data-cmd>casebook-update</code></dt><dd>새 판이 나왔는지 봅니다. (서버 설치)</dd></div>
+      <div class="row"><dt><code data-cmd>casebook-uninstall</code></dt><dd>그만 쓸 때. 무엇을 지울지 먼저 보여 줍니다. (서버 설치)</dd></div>
+      <div class="row"><dt><code>install_git_hook.sh</code></dt><dd>저장소에 post-commit 훅을 걸어 터미널 커밋도 스레드에 붙입니다. <a href="#/install/commits">커밋 붙이기</a>.</dd></div>
+    </dl>
+  </div>
+</article>
+
+<article data-page="config" data-group="레퍼런스" data-title="설정">
+  <p class="desc">대부분 건드릴 일이 없습니다. 설치가 정해 줍니다.</p>
+  <div class="body">
+    <div class="tbl"><table>
+      <thead><tr><th>파일 · 환경변수</th><th>뜻</th><th>기본값</th></tr></thead>
+      <tbody>
+        <tr><td><code>~/.casebook/mode</code><br><code>CASEBOOK_MODE</code></td><td>기록을 둘 곳. <code>local</code> 또는 <code>server</code>.</td><td>설치할 때 고른 것</td></tr>
+        <tr><td><code>CASEBOOK_DB</code></td><td>로컬 기록 파일의 자리.</td><td><code>~/.casebook/casebook.db</code></td></tr>
+        <tr><td><code>CASEBOOK_MCP_EMAIL</code></td><td>로컬 기록의 주인 이름.</td><td><code>mcp@local</code></td></tr>
+        <tr><td><code>~/.casebook/lang</code><br><code>CASEBOOK_LANG</code></td><td>사람에게 말할 언어. <code>ko</code> 또는 <code>en</code>.</td><td>시스템 언어</td></tr>
+        <tr><td><code>CASEBOOK_UI_PORT</code></td><td>창의 포트.</td><td>빈 포트를 찾습니다</td></tr>
+        <tr><td><code>CASEBOOK_UI_NO_BROWSER</code></td><td>창을 띄울 때 브라우저를 열지 않습니다.</td><td>엽니다</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</article>
+
+<article data-page="faq" data-group="레퍼런스" data-title="자주 묻는 것">
+  <p class="desc">쓰다 보면 나오는 질문들.</p>
+  <div class="body">
+    <h2 id="tokens">토큰이 얼마나 더 드나요?</h2>
+    <p>기록하는 만큼 더 듭니다. 도구 설명과 세션 시작 요약이 세션마다 고정으로 들고, 호출마다 조금씩 듭니다. 가장 큰 것은 <code>resume</code>이라 세션에 한 번이면 됩니다. 긴 출력은 <code>add_evidence_file</code>로 파일째 남기고, 탐색이나 잡담에는 스레드를 열지 않으면 줄어듭니다.</p>
+    <h2 id="secrets">비밀이 기록되면 어떡하나요?</h2>
+    <p>증거는 원문 그대로 남습니다. 키나 비밀번호가 든 출력이 지나가면 “그건 기록하지 마”라고 합니다. 회사 코드가 섞이는 작업은 기록을 이 컴퓨터에만 둡니다.</p>
+    <h2 id="who-sees">누가 내 기록을 보나요?</h2>
+    <p>로컬이면 나만 봅니다. 서버면 내 기록은 나에게만 보이지만, 한 서버 한 DB라 운영자는 볼 수 있습니다. 무엇을 보관하고 어떻게 지우는지는 신청 페이지에 적혀 있습니다.</p>
+    <h2 id="delete">지우려면?</h2>
+    <p>로컬은 <code>~/.casebook/casebook.db</code> 파일 하나를 지우면 끝입니다. 서버는 신청 페이지에 적힌 대로 요청합니다.</p>
+    <h2 id="not-attached">세션 시작에 스레드가 안 뜹니다</h2>
+    <p>세션 시작 화면에 <code>casebook hook … skipped</code>가 뜨면 서버가 잠깐 안 닿은 것이고, 작업은 그대로 됩니다. 계속 안 붙으면 설치를 다시 실행합니다.</p>
+    <h2 id="on-windows">윈도우에서 되나요?</h2>
+    <p>호스팅 서버로 씁니다. 신청 화면이 주는 지시문을 코딩 에이전트에게 붙여 넣으면 됩니다(<a href="#/install/windows">윈도우</a>). 기록을 이 컴퓨터에만 두는 방식은 설치기와 실행기가 <code>sh</code>라 WSL에서만 됩니다.</p>
+    <h2 id="feedback">버그나 제안은?</h2>
+    <p><a href="https://github.com/jasonethicseo/worktrail/issues" target="_blank" rel="noopener">GitHub Issues</a>에 남겨 주세요.</p>
+  </div>
+</article>
+
+      <nav class="pager" id="pager" aria-label="이전 쪽과 다음 쪽"></nav>
+      <div class="pfoot">
+        <span>Worktrail · FSL-1.1-ALv2</span><span class="sp"></span>
+        <a href="../">소개</a>
+        <a href="https://github.com/jasonethicseo/worktrail" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/jasonethicseo/worktrail/issues" target="_blank" rel="noopener">피드백</a>
+      </div>
+    </main>
+
+    <aside class="toc" id="toc" aria-label="이 페이지"></aside>
+  </div>
+</div>
+
+<div class="sbox" id="sbox" hidden role="dialog" aria-modal="true" aria-label="문서 검색">
+  <div class="panel">
+    <div class="in"><svg width="18" height="18"><use href="#i-search"/></svg><input id="sq" type="search" placeholder="문서 검색" autocomplete="off" aria-controls="sres"><kbd>Esc</kbd></div>
+    <ul id="sres" role="listbox"></ul>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const pages = [...document.querySelectorAll("article[data-page]")];
+  const byName = new Map(pages.map((a) => [a.dataset.page, a]));
+
+  // ── 쪽 머리 ── 글에는 절 이름과 제목을 한 번만 적고(data-*), 머리는 여기서 붙인다
+  pages.forEach((a) => {
+    const head = document.createElement("div");
+    head.innerHTML = `<div class="eyebrow">${esc(a.dataset.group)}</div><h1>${esc(a.dataset.title)}</h1>`;
+    a.prepend(...head.childNodes);
+    a.querySelectorAll(".body h2[id], .body h3[id]").forEach((h) => {
+      h.innerHTML = `<a class="anchor" href="#/${a.dataset.page}/${h.id}">${h.innerHTML}</a>`;
+    });
+  });
+
+  // ── 왼쪽 메뉴 ──
+  const groups = [];
+  pages.forEach((a) => {
+    let g = groups.find((x) => x.name === a.dataset.group);
+    if (!g) groups.push(g = { name: a.dataset.group, items: [] });
+    g.items.push(a);
+  });
+  $("side").innerHTML = groups.map((g) => `<div class="grp"><div class="gl">${esc(g.name)}</div>` +
+    g.items.map((a) => `<a href="#/${a.dataset.page}" data-p="${a.dataset.page}">${esc(a.dataset.title)}</a>`).join("") + "</div>").join("") +
+    `<div class="ext"><a href="../">← Worktrail 소개</a><a href="../../" data-go="demo">데모</a>` +
+    `<a href="https://github.com/jasonethicseo/worktrail" target="_blank" rel="noopener"><svg width="14" height="14"><use href="#i-git"/></svg>GitHub</a></div>`;
+
+  // ── 쪽 바꾸기 ── #/쪽 또는 #/쪽/절
+  let cur = null, spy = null;
+  function show() {
+    const [, name, sec] = (location.hash.match(/^#\/([\w-]+)(?:\/([\w-]+))?/) || []);
+    const a = byName.get(name) || pages[0];
+    if (a !== cur) {
+      pages.forEach((p) => p.classList.toggle("on", p === a));
+      cur = a;
+      document.title = `${a.dataset.title} · Worktrail 문서`;
+      document.querySelectorAll(".side a[data-p]").forEach((l) => { if (l.dataset.p === a.dataset.page) l.setAttribute("aria-current", "page"); else l.removeAttribute("aria-current"); });
+      buildToc(a); buildPager(a);
+    }
+    document.body.classList.remove("nav-open"); $("menuBtn").setAttribute("aria-expanded", "false");
+    const target = sec && a.querySelector("#" + CSS.escape(sec));
+    if (target) target.scrollIntoView(); else if (!sec) scrollTo(0, 0);
+  }
+  function buildToc(a) {
+    const hs = [...a.querySelectorAll(".body h2[id], .body h3[id]")];
+    $("toc").innerHTML = hs.length < 2 ? "" : `<div class="tl"><svg width="14" height="14"><use href="#i-list"/></svg>이 페이지</div>` +
+      hs.map((h) => `<a href="#/${a.dataset.page}/${h.id}" data-h="${h.id}" class="${h.tagName === "H3" ? "h3" : ""}">${esc(h.textContent)}</a>`).join("");
+    if (spy) spy.disconnect();
+    const seen = new Set(), links = [...$("toc").querySelectorAll("a")];
+    spy = new IntersectionObserver((es) => {
+      es.forEach((e) => e.isIntersecting ? seen.add(e.target.id) : seen.delete(e.target.id));
+      const top = hs.find((h) => seen.has(h.id));
+      if (top) links.forEach((l) => l.classList.toggle("on", l.dataset.h === top.id));
+    }, { rootMargin: "-60px 0px -70% 0px" });
+    hs.forEach((h) => spy.observe(h));
+  }
+  function buildPager(a) {
+    const i = pages.indexOf(a), p = pages[i - 1], n = pages[i + 1];
+    $("pager").innerHTML = (p ? `<a href="#/${p.dataset.page}"><small>이전</small><b>← ${esc(p.dataset.title)}</b></a>` : "") +
+      (n ? `<a class="nx" href="#/${n.dataset.page}"><small>다음</small><b>${esc(n.dataset.title)} →</b></a>` : "");
+  }
+  addEventListener("hashchange", show);
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual";   // 새로 고치면 쪽 머리부터
+  show();
+
+  // ── 탭 ── 화살표로도 옮긴다
+  document.querySelectorAll("[data-tabs]").forEach((box) => {
+    const tabs = [...box.querySelectorAll('[role="tab"]')], panels = [...box.querySelectorAll('[role="tabpanel"]')];
+    const pick = (i, focus) => {
+      tabs.forEach((t, j) => { t.setAttribute("aria-selected", String(i === j)); t.tabIndex = i === j ? 0 : -1; panels[j].hidden = i !== j; });
+      if (focus) tabs[i].focus();
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener("click", () => pick(i));
+      t.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight") { e.preventDefault(); pick((i + 1) % tabs.length, true); }
+        if (e.key === "ArrowLeft") { e.preventDefault(); pick((i - 1 + tabs.length) % tabs.length, true); }
+      });
+    });
+    pick(0);
+  });
+
+  // ── 코드 복사 ── 주석 줄(.c)은 빼고 복사한다
+  document.querySelectorAll(".code").forEach((c) => {
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.innerHTML = `<svg width="13" height="13"><use href="#i-copy"/></svg><span>복사</span>`;
+    btn.setAttribute("aria-label", "코드 복사");
+    c.querySelector(".ch").append(btn);
+    btn.addEventListener("click", async () => {
+      const pre = c.querySelector("pre").cloneNode(true);
+      pre.querySelectorAll(".c").forEach((x) => x.remove());
+      const text = pre.textContent.replace(/^\n+/gm, "").trim();
+      const label = btn.querySelector("span");
+      try { await navigator.clipboard.writeText(text); label.textContent = "복사됨"; btn.classList.add("done"); }
+      catch { label.textContent = "복사 안 됨"; }
+      setTimeout(() => { label.textContent = "복사"; btn.classList.remove("done"); }, 1600);
+    });
+  });
+
+  // ── 색 ──
+  const setIco = () => $("themeIco").setAttribute("href", document.documentElement.dataset.theme === "light" ? "#i-moon" : "#i-sun");
+  setIco();
+  $("themeBtn").addEventListener("click", () => {
+    const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = t; setIco();
+    try { localStorage.setItem("wt-docs-theme", t); } catch {}
+  });
+
+  // ── 좁은 폭 메뉴 ──
+  $("menuBtn").addEventListener("click", () => {
+    const open = document.body.classList.toggle("nav-open");
+    $("menuBtn").setAttribute("aria-expanded", String(open));
+  });
+  $("scrim").addEventListener("click", () => { document.body.classList.remove("nav-open"); $("menuBtn").setAttribute("aria-expanded", "false"); });
+
+  // ── 검색 ── 쪽 제목·절 제목·본문 문단을 한 줄씩 색인해 낱말이 다 든 것을 앞에서부터
+  if (!/Mac|iPhone|iPad/.test(navigator.platform)) $("kbd").textContent = "Ctrl K";
+  const index = [];
+  pages.forEach((a) => {
+    let sec = null;
+    index.push({ page: a, sec: null, head: a.dataset.title, text: a.querySelector(".desc")?.textContent || "" });
+    a.querySelectorAll(".body h2, .body h3, .body p, .body .say, .body .does, .body .callout, .body td, .body dd, .body li:not(:has(p))").forEach((el) => {
+      if (/^H[23]$/.test(el.tagName)) { sec = el; index.push({ page: a, sec, head: el.textContent, text: "" }); return; }
+      const t = el.textContent.replace(/\s+/g, " ").trim();
+      if (t) index.push({ page: a, sec, head: sec ? sec.textContent : a.dataset.title, text: t });
+    });
+  });
+  let hits = [], sel = 0;
+  const mark = (s, words) => { let h = esc(s); words.forEach((w) => { h = h.replace(new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (m) => `<mark>${m}</mark>`); }); return h; };
+  function runSearch() {
+    const q = $("sq").value.trim().toLowerCase(), words = q.split(/\s+/).filter(Boolean);
+    const seen = new Set();
+    hits = !words.length ? pages.map((a) => ({ page: a, sec: null, head: a.dataset.title, text: a.querySelector(".desc")?.textContent || "" }))
+      : index.filter((r) => words.every((w) => (r.head + " " + r.text).toLowerCase().includes(w)))
+          .filter((r) => { const k = r.page.dataset.page + "/" + (r.sec ? r.sec.id : "") + "/" + r.text.slice(0, 40); if (seen.has(k)) return false; seen.add(k); return true; })
+          .slice(0, 12);
+    sel = 0;
+    $("sres").innerHTML = hits.length ? hits.map((r, i) => {
+      const snip = r.text ? (() => { const at = Math.max(0, r.text.toLowerCase().indexOf(words[0] || "") - 20); return (at ? "…" : "") + r.text.slice(at, at + 90); })() : "";
+      return `<li><a href="#/${r.page.dataset.page}${r.sec ? "/" + r.sec.id : ""}" class="${i === 0 ? "on" : ""}" role="option">` +
+        `<small>${esc(r.page.dataset.group)} › ${esc(r.page.dataset.title)}</small><b>${mark(r.head, words)}</b>${snip ? `<span>${mark(snip, words)}</span>` : ""}</a></li>`;
+    }).join("") : `<li class="empty">찾는 말이 든 곳이 없습니다</li>`;
+  }
+  const openSearch = () => { $("sbox").hidden = false; $("sq").value = ""; runSearch(); $("sq").focus(); };
+  const closeSearch = () => { $("sbox").hidden = true; };
+  $("searchBtn").addEventListener("click", openSearch);
+  $("sq").addEventListener("input", runSearch);
+  $("sbox").addEventListener("click", (e) => { if (e.target === $("sbox")) closeSearch(); if (e.target.closest("a")) closeSearch(); });
+  addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $("sbox").hidden ? openSearch() : closeSearch(); return; }
+    if (e.key === "/" && $("sbox").hidden && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); openSearch(); return; }
+    if ($("sbox").hidden) return;
+    const links = [...$("sres").querySelectorAll("a")];
+    if (e.key === "Escape") closeSearch();
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault(); if (!links.length) return;
+      sel = (sel + (e.key === "ArrowDown" ? 1 : -1) + links.length) % links.length;
+      links.forEach((l, i) => l.classList.toggle("on", i === sel)); links[sel].scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter" && links[sel]) { e.preventDefault(); location.hash = links[sel].getAttribute("href"); closeSearch(); }
+  });
+
+  // 데모로 가는 길은 접속 기록에서 셀 수 있게 ?from=docs 를 붙인다(소개와 같은 방식).
+  document.querySelectorAll('a[data-go="demo"]').forEach((a) => { a.href = "../../?from=docs"; });
+})();
+</script>
+</body>
+</html>

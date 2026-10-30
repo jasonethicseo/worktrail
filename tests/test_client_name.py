@@ -26,13 +26,15 @@ def wt():
 def test_세_도구가_클라이언트_이름을_남긴다(wt, tmp_path):
     t = Tools(wt, 1)
     cid = t.open_thread("이름 붙이기", _git_repo(tmp_path / "r"), topic="검증")["case_id"]
-    t.note_turn(cid, "$ pytest\n219 passed", "통과했다", kind="verified", client="claude-code", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    t.note_turn(cid, "$ pytest\n219 passed", "통과했다", kind="verified", client="claude-code", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
     t.add_evidence(cid, "$ git log --oneline -1\nabc1234 x", client="codex-mcp-client")
-    t.decide(cid, "이름은 받은 그대로 저장한다", authority="user", client="codex-mcp-client")
+    t.decide(cid, "이름은 받은 그대로 저장한다", authority="user", client="codex-mcp-client", source_refs=["test-prompt-0001"], capture=True, next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
 
-    evs = wt.db.query("evidence", where={"case_id": cid}, order="id")
-    assert [e["source"]["client"] for e in evs] == ["claude-code", "codex-mcp-client"]
+    evs = wt.db.query("evidence", where={"case_id": cid}, order="id")    # 확장 159호 — 노트의 관찰은 증거 표에 오지 않는다
+    assert [e["source"]["client"] for e in evs] == ["codex-mcp-client"]
     assert all(e["source"]["via"] == "mcp" for e in evs)
+    note = [e for e in wt.db.query("ledger", where={"case_id": cid}) if e["event_type"] == "answer_created"]
+    assert note[0]["payload"]["client"] == "claude-code"
 
     dec = [e for e in wt.db.query("ledger", where={"case_id": cid}) if e["event_type"] == "decision_recorded"]
     assert dec[0]["payload"]["client"] == "codex-mcp-client"
@@ -42,10 +44,13 @@ def test_이름이_없으면_넣지_않는다(wt, tmp_path):
     """미상이라고 꾸미지 않는다 — 칸 자체가 없다."""
     t = Tools(wt, 1)
     cid = t.open_thread("이름 없음", _git_repo(tmp_path / "r2"), topic="검증")["case_id"]
-    t.note_turn(cid, "관찰", "결론", kind="thought", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
-    t.decide(cid, "결정", authority="agent")
+    t.note_turn(cid, "관찰", "결론", kind="thought", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
+    t.decide(cid, "결정", authority="agent", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    t.add_evidence(cid, "$ true")
     ev = wt.db.query("evidence", where={"case_id": cid}, order="id")[0]
     assert ev["source"] == {"via": "mcp"}
+    note = [e for e in wt.db.query("ledger", where={"case_id": cid}) if e["event_type"] == "answer_created"]
+    assert "client" not in note[0]["payload"]
     dec = [e for e in wt.db.query("ledger", where={"case_id": cid}) if e["event_type"] == "decision_recorded"]
     assert "client" not in dec[0]["payload"]
 
@@ -93,16 +98,17 @@ def test_프록시가_이름을_실어_원격_기록에_남는다(tmp_path):
             await p.connect()
             o = json.loads((await p.call("open_thread", {"focus": "통로 확인", "topic": "테스트"})).content[0].text)
             cid = o["case_id"]
-            await p.call("note_turn", {"case_id": cid, "observed": "관찰", "conclusion": "결론", "kind": "finding", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user"},
+            await p.call("note_turn", {"case_id": cid, "observed": "관찰", "conclusion": "결론", "kind": "finding", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user", "observed_from": "machine"},
                          client="claude-code")
-            await p.call("decide", {"case_id": cid, "statement": "결정", "authority": "user"},
+            await p.call("decide", {"case_id": cid, "statement": "결정", "authority": "agent", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user"},
                          client="codex-mcp-client")
-            await p.call("note_turn", {"case_id": cid, "observed": "이름 없이", "conclusion": "결론2", "kind": "change", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user"})
+            await p.call("note_turn", {"case_id": cid, "observed": "이름 없이", "conclusion": "결론2", "kind": "change", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user", "observed_from": "machine"})
             await p.close()
 
-            evs = app.db.query("evidence", where={"case_id": cid}, order="id")
-            assert evs[0]["source"] == {"via": "mcp", "client": "claude-code"}
-            assert evs[1]["source"] == {"via": "mcp"}                     # 이름을 안 실으면 종전 그대로
+            notes = [e["payload"] for e in app.db.query("ledger", where={"case_id": cid}, order="id")
+                     if e["event_type"] == "answer_created"]                # 159호 — 노트의 이름은 노트에 남는다
+            assert notes[0]["client"] == "claude-code"
+            assert "client" not in notes[1]                               # 이름을 안 실으면 종전 그대로
             dec = [e for e in app.db.query("ledger", where={"case_id": cid}) if e["event_type"] == "decision_recorded"]
             assert dec[0]["payload"]["client"] == "codex-mcp-client"
             # open_thread 는 범위 밖 — 이름을 실어도 도구가 받지 않는다

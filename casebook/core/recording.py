@@ -3,7 +3,8 @@ from __future__ import annotations
 
 
 def external_turn_worker(db, turn_id: int, note: str | None = None, note_kind: str | None = None,
-                         refs: list[int] | None = None) -> None:
+                         refs: list[int] | None = None, source_refs: list[str] | None = None,
+                         observed_from: str | None = None, client: str | None = None) -> None:
     """확장 4호 — MCP 문의 턴. 추론은 호스트(Claude Code 등)가 이미 했으므로 답변 호출이 없다.
 
     note 가 있으면 호스트의 결론을 assistant 메시지로 저장한다
@@ -42,7 +43,12 @@ def external_turn_worker(db, turn_id: int, note: str | None = None, note_kind: s
         # 확장 60호 — 노트의 갈래(D14720): 바꿈·확인·발견·생각. 에이전트가 붙인 것만 남기고, 옛 노트는 칸이 없다.
         # 확장 123호 — refs: 결론이 기대는 증거 번호. 회고·타임라인이 링크로 그린다(D15872).
         "payload": {"message_id": amsg["id"], "source": "external", **({"kind": note_kind} if note_kind else {}),
-                    **({"refs": [int(i) for i in refs]} if refs else {})},
+                    **({"refs": [int(i) for i in refs]} if refs else {}),
+                    # 확장 157호 — 관찰이 어디서 왔나(machine | user)와, 사람 말이면 그 원문(utterances.py).
+                    **({"observed_from": observed_from} if observed_from else {}),
+                    **({"source_refs": list(source_refs)} if source_refs else {}),
+                    # 확장 159호 — 노트의 관찰이 증거 표를 떠나 evidence.source 의 client 를 못 읽으므로 여기 둔다.
+                    **({"client": client} if client else {})},
     })
     claimed = db.edit_where(
         "turn", turn_id, {"status": "pending"},

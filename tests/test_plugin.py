@@ -46,7 +46,7 @@ def test_플러그인_훅은_설치기_명세와_같다():
     assert shipped == client_dist.plugin_hooks(), (
         "hooks/hooks.json 이 설치기 명세와 갈렸다 — client_dist.plugin_hooks 의 docstring 명령으로 다시 쓴다")
     commands = [h["command"] for entries in shipped["hooks"].values() for e in entries for h in e["hooks"]]
-    assert len(commands) == 5 and all(c.startswith(client_dist.PLUGIN_HOOK + " ") for c in commands)
+    assert len(commands) == 6 and all(c.startswith(client_dist.PLUGIN_HOOK + " ") for c in commands)
     assert os.access(_root_path(client_dist.PLUGIN_HOOK), os.X_OK)
 
 

@@ -238,9 +238,12 @@ def events_for_cases(db, user_id: int, case_ids: list[int]) -> dict[int, list[di
             "t.status, t.answer_status, t.source_turn_id, t.error, ev.source AS ev_source, "
             "um.content AS asked, am.content AS note, ev.content AS ev_content, "
             "json_extract(lk.payload, '$.kind') AS note_kind, "   # 확장 60호 — 노트의 갈래(D14720). 옛 노트는 NULL.
-            "json_extract(lk.payload, '$.refs') AS note_refs "    # 확장 123호 — 결론이 기대는 증거 번호(D15872)
+            "json_extract(lk.payload, '$.refs') AS note_refs, "   # 확장 123호 — 결론이 기대는 증거 번호(D15872)
+            # 확장 159호 — 노트의 관찰은 증거가 아니라 message(role=observation)다. client 는 answer_created 에 있다.
+            "om.content AS obs_content, json_extract(lk.payload, '$.client') AS note_client "
             "FROM turn t LEFT JOIN message um ON um.id = t.user_message_id "
             "LEFT JOIN message am ON am.id = t.assistant_message_id "
+            "LEFT JOIN message om ON om.turn_id = t.id AND om.role = 'observation' "
             "LEFT JOIN ledger lk ON lk.turn_id = t.id AND lk.event_type = 'answer_created' "
             "LEFT JOIN evidence ev ON ev.id = t.evidence_id "
             f"WHERE t.case_id IN ({q}) ORDER BY t.case_id, t.sequence", ids).fetchall()
@@ -333,10 +336,12 @@ def events_for_cases(db, user_id: int, case_ids: list[int]) -> dict[int, list[di
             continue
         if t["turn_kind"] == "external":
             # 확장 40호 — 어느 클라이언트가 남겼는지. 없으면 키 자체를 넣지 않는다.
-            who = _client_of(t["ev_source"])
+            who = _client_of(t["ev_source"]) or t["note_client"]
             if (t["note"] or "").strip():
+                # evidence_id 는 옛 노트에만 있다 — 그때는 관찰을 증거 표에 넣었다(확장 159호 전). 새 노트는 None.
                 out[cid].append(_ev(t["created_at"], "note", cid, t["note"], turn=t["sequence"], evidence_id=t["evidence_id"],
-                                    observed=_head(t["ev_content"], 600), client=who,   # 확장 71호 — 읽기 모드: 서랍이 관찰을 보여 주므로 600자(#516)
+                                    observed=_head(t["obs_content"] if t["obs_content"] is not None else t["ev_content"], 600),
+                                    client=who,   # 확장 71호 — 읽기 모드: 서랍이 관찰을 보여 주므로 600자(#516)
                                     **({"note_kind": t["note_kind"]} if t["note_kind"] else {}),
                                     **({"evidence_ids": json.loads(t["note_refs"])} if t["note_refs"] else {})))
             else:

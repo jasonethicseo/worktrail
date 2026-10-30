@@ -13,7 +13,7 @@ def two_users():
     app.db.add("user", {"name": "other", "email": "o@x.test", "password": None})
     c1 = app.create_case(1, "mine A")["case_id"]; c2 = app.create_case(1, "mine B")["case_id"]
     c3 = app.create_case(2, "theirs")["case_id"]
-    app.external_turn(1, c1, "ERROR nginx: upstream timed out (110) while reading response header", action_key="a", note="n"); app.run_workers()
+    app.external_turn(1, c1, "ERROR nginx: upstream timed out (110) while reading response header", action_key="a"); app.run_workers()
     app.external_turn(1, c2, "psycopg2.OperationalError: remaining connection slots are reserved", action_key="b"); app.run_workers()
     app.external_turn(2, c3, "upstream timed out (110) — this belongs to another user", action_key="c"); app.run_workers()
     return app, c1, c2, c3
@@ -42,6 +42,25 @@ def test_inspect_는_원문_그대로_소유자만(two_users):
     assert got["case_id"] == c1 and got["turn"] == 1 and got["source"] == {"via": "mcp"}
     with pytest.raises(NotFoundError):
         app.inspect_evidence(2, ev)                                    # 남의 evidence
+
+
+def test_노트의_관찰은_증거가_아니고_옛_노트의_관찰은_에이전트_글로_표시된다(two_users):
+    """확장 159호 (D18165) — 새 노트의 관찰은 증거 검색에 나오지 않는다. 그 전의 노트는 관찰을 증거 표에 넣었으므로
+    (원장은 고치지 않는다) 읽을 때 에이전트가 쓴 글이라고 붙인다."""
+    app, c1, *_ = two_users
+    app.external_turn(1, c1, "gateway latency looked high to me", action_key="n1", note="the gateway is slow"); app.run_workers()
+    assert app.search_evidence(1, "gateway latency") == []
+    old = app.external_turn(1, c1, "legacy note observation text", action_key="old"); app.run_workers()
+    msg = app.db.add("message", {"case_id": c1, "role": "assistant", "content": "legacy conclusion"})
+    app.db.conn.execute("UPDATE turn SET assistant_message_id=? WHERE id=?", (msg["id"], old["turn_id"]))   # 159호 전의 모양
+    hit = app.search_evidence(1, "legacy note observation")[0]
+    assert hit["written_by"].startswith("agent")
+    assert app.inspect_evidence(1, old["evidence_id"])["written_by"].startswith("agent")
+    assert "written_by" not in app.search_evidence(1, "upstream timed out")[0]            # add_evidence 는 기계 출력
+    assert "written_by" not in app.inspect_evidence(1, app.search_evidence(1, "upstream")[0]["evidence_id"])
+    from casebook.core import recall
+    row = next(e for e in recall.trail(app.db, 1, c1)["events"] if e.get("ref") == f"{c1}:{app.db.get('turn', old['turn_id'])['sequence']}")
+    assert "evidence_ids" not in row                     # 옛 노트 자신의 관찰을 근거처럼 싣지 않는다
 
 
 def test_fts_문법_주입_불가와_빈_질의(two_users):

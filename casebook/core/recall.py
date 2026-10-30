@@ -15,7 +15,7 @@ import json
 import re
 from typing import Any
 
-from . import review, search, threads
+from . import review, search, threads, utterances
 from .errors import InputError, NotFoundError
 
 LINE = 110
@@ -65,10 +65,10 @@ def _row(e: dict[str, Any], with_case: bool = False) -> dict[str, Any]:
         r["interpretation"] = True
         if e.get("note_kind"):
             r["note_kind"] = e["note_kind"]
+        # 노트가 근거로 가리킨 증거만 싣는다. 옛 노트의 evidence_id 는 그 노트 자신의 관찰(에이전트 글)이라 근거가
+        # 아니다(확장 159호, D18165) — 전에는 그것을 evidence_ids 로 채워 trail 이 자기 글을 근거처럼 보였다.
         if e.get("evidence_ids"):
             r["evidence_ids"] = e["evidence_ids"]
-        elif e.get("evidence_id"):
-            r["evidence_ids"] = [e["evidence_id"]]
     if e.get("owner"):
         r["owner"] = e["owner"]
     if e.get("authority") and e["kind"] in ("decision", "constraint", "focus"):
@@ -140,7 +140,8 @@ def find(db, user_id: int, query: str, limit: int = FIND_LIMIT, include_closed: 
         try:
             for x in search.search_evidence(db, user_id, query, min(room, 5)):
                 evidence.append({"ref": f"E{x['evidence_id']}", "case_id": x["case_id"], "at": x["created_at"],
-                                 "kind": "evidence", "excerpt": _excerpt(x["excerpt"], 160)})
+                                 "kind": "evidence", "excerpt": _excerpt(x["excerpt"], 160),
+                                 **({"written_by": "agent"} if x.get("written_by") else {})})
         except InputError:
             pass
     return {"query": query, "records": rows, "total": len(hits), "evidence": evidence,
@@ -188,6 +189,7 @@ def _ledger(db, user_id: int, entry_id: int) -> dict[str, Any]:
     keep = ("statement", "reason", "authority", "scope", "owner", "evidence_ids", "hypothesis", "term", "meaning",
             "from", "to", "result")
     out.update({k: p[k] for k in keep if p.get(k) not in (None, "")})
+    _with_sources(db, user_id, out, p.get("source_refs"))
     if p.get("supersedes"):
         prev = _ledger_head(db, int(p["supersedes"]))
         out["supersedes"] = prev
@@ -212,8 +214,11 @@ def _turn(db, user_id: int, case_id: int, seq: int) -> dict[str, Any]:
     with db._lock:
         t = db.conn.execute(
             "SELECT t.id, t.sequence, t.created_at, t.evidence_id, am.content AS conclusion, ev.content AS observed, "
-            "json_extract(lk.payload, '$.kind') AS note_kind, json_extract(lk.payload, '$.refs') AS refs "
+            "json_extract(lk.payload, '$.kind') AS note_kind, json_extract(lk.payload, '$.refs') AS refs, "
+            "json_extract(lk.payload, '$.source_refs') AS source_refs, "
+            "json_extract(lk.payload, '$.observed_from') AS observed_from, om.content AS obs_content "
             "FROM turn t LEFT JOIN message am ON am.id = t.assistant_message_id "
+            "LEFT JOIN message om ON om.turn_id = t.id AND om.role = 'observation' "
             "LEFT JOIN ledger lk ON lk.turn_id = t.id AND lk.event_type = 'answer_created' "
             "LEFT JOIN evidence ev ON ev.id = t.evidence_id WHERE t.case_id=? AND t.sequence=?",
             (case_id, seq)).fetchone()
@@ -223,15 +228,28 @@ def _turn(db, user_id: int, case_id: int, seq: int) -> dict[str, Any]:
                            "turn": seq, "at": t["created_at"]}
     if t["note_kind"]:
         out["note_kind"] = t["note_kind"]
-    if t["evidence_id"]:
-        out["observed"] = {"evidence_id": t["evidence_id"], "content": t["observed"]}   # 원문 그대로
+    # 확장 159호 — 관찰은 에이전트가 쓴 글이다. 새 노트는 message(role=observation), 옛 노트는 증거 표에 들어가 있었다.
+    if t["obs_content"] is not None:
+        out["observed"] = {"content": t["obs_content"], "written_by": "agent"}
+    elif t["evidence_id"]:
+        out["observed"] = {"evidence_id": t["evidence_id"], "content": t["observed"], "written_by": "agent"}
     if t["conclusion"]:
         out["conclusion"] = t["conclusion"]
         out["interpretation"] = True
         out["note"] = INTERPRETATION + "."
     if t["refs"]:
         out["evidence_ids"] = json.loads(t["refs"])
+    if t["observed_from"]:
+        out["observed_from"] = t["observed_from"]
+    _with_sources(db, user_id, out, json.loads(t["source_refs"]) if t["source_refs"] else None)
     return out
+
+
+def _with_sources(db, user_id: int, out: dict[str, Any], refs: list[str] | None) -> None:
+    """확장 157호 — 기록이 가리키는 사용자 발화를 원문 그대로 옆에 붙인다(D17987). 아직 안 올라왔으면 pending."""
+    if refs:
+        out["source_refs"] = refs
+        out["sources"] = utterances.lookup(db, user_id, refs)
 
 
 def inspect(db, user_id: int, ref: str | int) -> dict[str, Any]:

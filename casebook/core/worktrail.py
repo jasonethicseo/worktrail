@@ -169,9 +169,15 @@ class Worktrail:
 
     def external_turn(self, user_id: int, case_id: int, content: str, action_key: str,
                       note: str | None = None, source: dict | None = None, note_kind: str | None = None,
-                      refs: list[int] | None = None, keep_message: bool = False) -> dict:
-        """확장 4호 — MCP 문의 턴. content 는 byte-exact evidence, note 는 호스트의 결론(선택).
+                      refs: list[int] | None = None, keep_message: bool = False,
+                      source_refs: list[str] | None = None, observed_from: str | None = None) -> dict:
+        """확장 4호 — MCP 문의 턴. note 가 없으면(add_evidence) content 는 byte-exact evidence 다.
         refs (확장 123호) — 이 결론이 기대는 증거 번호들. 글 속 "(증거 #N)" 대신 여기로 온다.
+
+        확장 159호 (2026-09-26, D18165) — note 가 있으면(note_turn) content 는 증거가 아니라 노트의 관찰이다. 에이전트가
+        자기 말로 쓴 글이라 message(role=observation)로 둔다 — 전에는 증거 표에 넣어, 7일 증거 243개 중 168개가 에이전트
+        문장이었다. 증거 표에는 원문 그대로 넣은 기계 출력만 남는다. 옛 노트의 관찰은 증거 표에 그대로 있고, 읽는 쪽이
+        에이전트 글로 표시한다(search.written_by).
 
         생성 이벤트는 canonical_evidence_created · turn_status_changed 다. #540 (D16413) — 예전에는 입력 턴을
         본떠 같은 글을 message(role=user)에도 쓰고 user_message 를 냈는데, 기록 경로가 모델을 부르지 않게 된
@@ -190,7 +196,8 @@ class Worktrail:
         # 같은 열쇠는 "같은 요청의 재전송"일 때만 같은 기록이다. 열쇠가 같아도 내용이 다르면 재전송이 아니라
         # 새 기록이므로 새 열쇠로 받는다 — 조용히 합치면 두 번째 기록이 "stored" 라는 답과 함께 사라진다.
         fingerprint = hashlib.sha256(json.dumps(
-            [content, note or "", note_kind or "", sorted(int(i) for i in refs or [])],
+            [content, note or "", note_kind or "", sorted(int(i) for i in refs or []),
+             *([sorted(source_refs or []), observed_from or ""] if (source_refs or observed_from) else [])],
             ensure_ascii=False).encode()).hexdigest()
 
         def same_request(key: str) -> bool | None:
@@ -228,27 +235,33 @@ class Worktrail:
                     raise InputError("request_id points to a missing record")
                 return result_of(turn)
             msg = self.db.add("message", {"case_id": case_id, "role": "user", "content": content}) if keep_message else None
-            ev = self.db.add("evidence", {
+            observation = bool((note or "").strip())
+            ev = None if observation else self.db.add("evidence", {
                 "case_id": case_id, "kind": "user_paste", "content": content,
                 "source": source or {"via": "mcp"},
             })
+            obs = self.db.add("message", {"case_id": case_id, "role": "observation", "content": content}) if observation else None
             turn = self.db.add("turn", {
                 "case_id": case_id, "sequence": sequence, "turn_kind": "external",
                 "status": "pending", "answer_status": "not_attempted",
                 "action_key": action_key,
-                "user_message_id": msg["id"] if msg else None, "evidence_id": ev["id"],
+                "user_message_id": msg["id"] if msg else None, "evidence_id": ev["id"] if ev else None,
             })
-            self.db.attach_turn("evidence", ev["id"], turn["id"])
+            if ev:
+                self.db.attach_turn("evidence", ev["id"], turn["id"])
+            if obs:
+                self.db.attach_turn("message", obs["id"], turn["id"])
             if msg:
                 self.db.attach_turn("message", msg["id"], turn["id"])
                 self.db.add("ledger", {
                     "case_id": case_id, "turn_id": turn["id"],
                     "event_type": "user_message", "payload": {"message_id": msg["id"]},
                 })
-            self.db.add("ledger", {
-                "case_id": case_id, "turn_id": turn["id"],
-                "event_type": "canonical_evidence_created", "payload": {"evidence_id": ev["id"]},
-            })
+            if ev:
+                self.db.add("ledger", {
+                    "case_id": case_id, "turn_id": turn["id"],
+                    "event_type": "canonical_evidence_created", "payload": {"evidence_id": ev["id"]},
+                })
             self.db.add("ledger", {
                 "case_id": case_id, "turn_id": turn["id"],
                 "event_type": "turn_status_changed", "payload": {"from": None, "to": "pending"},
@@ -257,8 +270,11 @@ class Worktrail:
                 "UPDATE mcp_request SET turn_id=? WHERE user_id=? AND case_id=? AND request_id=?",
                 (turn["id"], user_id, case_id, action_key))
         self.enqueue("external_turn_worker", turn_id=turn["id"], note=note, note_kind=note_kind,
-                     **({"refs": [int(i) for i in refs]} if refs else {}))
-        return {"turn_id": turn["id"], "status": "pending", "evidence_id": ev["id"], "sequence": sequence}
+                     **({"refs": [int(i) for i in refs]} if refs else {}),
+                     **({"source_refs": list(source_refs)} if source_refs else {}),
+                     **({"observed_from": observed_from} if observed_from else {}),
+                     **({"client": source["client"]} if obs and (source or {}).get("client") else {}))
+        return {"turn_id": turn["id"], "status": "pending", "evidence_id": ev["id"] if ev else None, "sequence": sequence}
 
     def search_evidence(self, user_id: int, query: str, limit: int = 10,
                         include_archived: bool = False) -> list[dict]:
@@ -271,7 +287,8 @@ class Worktrail:
 
     def decide(self, user_id: int, case_id: int, statement: str, reason: str | None = None,
                evidence_ids: list[int] | None = None, authority: str = "agent",
-               supersedes: int | None = None, scope: str = "thread", client: str | None = None) -> dict:
+               supersedes: int | None = None, scope: str = "thread", client: str | None = None,
+               source_refs: list[str] | None = None) -> dict:
         statement = check_headline(statement, "decision")            # 확장 52호
         if reason:
             reason = check_headline(reason, "decision reason")        # 확장 58호 — 카드의 "왜" 줄이 이유의 첫 줄이다(D14625)
@@ -280,10 +297,11 @@ class Worktrail:
         if scope == "repo" and siblings is None:
             raise InputError("scope=repo needs a thread — this case belongs to no repository (open_thread / switch_thread first)")
         return state.record_decision(self.db, user_id, case, statement, reason, evidence_ids, authority, supersedes,
-                                     scope, siblings, client=client)
+                                     scope, siblings, client=client, source_refs=source_refs)
 
     def constrain(self, user_id: int, case_id: int, statement: str, reason: str | None = None,
-                  authority: str = "agent", supersedes: int | None = None, scope: str = "thread") -> dict:
+                  authority: str = "agent", supersedes: int | None = None, scope: str = "thread",
+                  source_refs: list[str] | None = None) -> dict:
         statement = check_headline(statement, "constraint")            # 확장 52호
         if reason:
             reason = check_headline(reason, "constraint reason")        # 확장 58호 (D14625)
@@ -291,7 +309,8 @@ class Worktrail:
         siblings = threads.repo_case_ids(self.db, user_id, case_id)
         if scope == "repo" and siblings is None:
             raise InputError("scope=repo needs a thread — this case belongs to no repository (open_thread / switch_thread first)")
-        return state.record_constraint(self.db, user_id, case, statement, reason, authority, supersedes, scope, siblings)
+        return state.record_constraint(self.db, user_id, case, statement, reason, authority, supersedes, scope, siblings,
+                                       source_refs=source_refs)
 
     def define(self, user_id: int, case_id: int, term: str, meaning: str, authority: str = "agent",
                supersedes: int | None = None, scope: str = "thread") -> dict:
@@ -309,9 +328,9 @@ class Worktrail:
     # ── 스레드 층 (확장 15호) — repo · thread · worktree 바인딩 · focus 선언 ─────────
 
     def declare(self, user_id: int, case_id: int, kind: str, statement: str, authority: str = "agent",
-                owner: str | None = None) -> dict:
+                owner: str | None = None, source_refs: list[str] | None = None) -> dict:
         case = self._assert_case_owner(user_id, case_id)
-        return state.declare(self.db, case, kind, statement, authority, owner)
+        return state.declare(self.db, case, kind, statement, authority, owner, source_refs=source_refs)
 
     # ── intake (확장 21호) — 받는 문: 묶음 evidence + 첫 질문으로 스레드를 자동 시작 ─────────
     INTAKE_ITEM_CAP = 100_000    # bytes, 항목당 — 조리법(case 446 D10599)의 상한. 수집기가 지키고 서버가 거부한다

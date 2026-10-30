@@ -45,6 +45,19 @@ def _fts_query(query: str) -> str:
     return " ".join(f'"{t}"' for t in toks)
 
 
+# 확장 159호 (D18165) — 옛 노트의 관찰. 그때 note_turn 은 에이전트가 쓴 observed 를 증거 표에 넣었다. 원장은 고치지
+# 않으므로 그대로 두고, 읽을 때 에이전트 글이라고 표시한다: 노트(답)가 붙은 external 턴의 증거가 그것이다.
+# add_evidence 의 턴에는 답이 없다. 새 노트의 관찰은 증거 표에 오지 않는다(message role=observation).
+WRITTEN_BY_AGENT = ("agent — this is an old note's observation, written by the recording agent and stored here before "
+                    "notes kept their observations apart; read it as interpretation, not machine output")
+
+
+def _written_by(turn: dict | None) -> str | None:
+    if turn and turn.get("turn_kind") == "external" and turn.get("assistant_message_id"):
+        return WRITTEN_BY_AGENT
+    return None
+
+
 def search_evidence(db, user_id: int, query: str, limit: int = 10,
                     include_archived: bool = False) -> list[dict[str, Any]]:
     ensure_index(db)
@@ -53,7 +66,7 @@ def search_evidence(db, user_id: int, query: str, limit: int = 10,
     archived_clause = "" if include_archived else " AND c.status != 'archived'"
     sql = """
     SELECT e.id AS evidence_id, e.case_id, c.title AS case_title, e.kind, e.created_at, e.source,
-           t.sequence AS turn,
+           t.sequence AS turn, t.turn_kind, t.assistant_message_id,
            snippet(evidence_fts, 0, '[', ']', ' … ', 24) AS excerpt
     FROM evidence_fts
     JOIN evidence e ON e.id = evidence_fts.rowid
@@ -69,6 +82,10 @@ def search_evidence(db, user_id: int, query: str, limit: int = 10,
     for r in rows:
         d = dict(r)
         d["source"] = db._decode("evidence", r)["source"] if r["source"] else None
+        by = _written_by(d)
+        del d["turn_kind"], d["assistant_message_id"]
+        if by:
+            d["written_by"] = by
         out.append(d)
     return out
 
@@ -79,9 +96,13 @@ def inspect_evidence(db, user_id: int, evidence_id: int) -> dict[str, Any]:
     if ev is None or case is None or case["user_id"] != user_id:
         raise NotFoundError("evidence not found")
     turn = db.get("turn", ev["turn_id"]) if ev["turn_id"] else None
-    return {
+    out = {
         "evidence_id": ev["id"], "case_id": case["id"], "case_title": case["title"],
         "turn": turn["sequence"] if turn else None, "kind": ev["kind"],
         "created_at": ev["created_at"], "source": ev["source"],
         "content": ev["content"],  # byte-exact — 재요약·정리 없음
     }
+    by = _written_by(turn)
+    if by:
+        out["written_by"] = by
+    return out

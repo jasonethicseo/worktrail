@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worktrail 홍보 영상</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Worktrail 홍보 영상(약 1분)의 원본. index.html(소개·사용 영상)과 같은 엔진이다 — render(t) 가 전부이고,
+     tools/film_render.mjs --page promo.html 이 __seek(t) 로 한 장씩 찍어 굽는다. 다른 점: 컷이 박자(96bpm)에 붙고,
+     글자가 크고, window.__SCORE 로 소리가 붙는다. 움직임은 여전히 빛·투명도·처음 한 번 솟거나 가라앉는 것만. */
+  :root{
+    --g0:#0b0d11;--g1:#10141a;--g2:#151a21;--g3:#1b2129;--g4:#242c36;--g5:#343e4a;--g6:#5a6572;--g7:#8b96a3;--g8:#b9c2cc;--g9:#e8edf2;
+    --t3:#7a8494;
+    --sky:#89b4fa;--sky-2:#b4d0ff;--peach:#fab387;--green:#a6e3a1;--rose:#f38ba8;--lav:#cba6f7;--yellow:#f9e2af;
+    --font:'IBM Plex Sans','Apple SD Gothic Neo','Pretendard',system-ui,sans-serif;
+    --mono:'IBM Plex Mono','Apple SD Gothic Neo',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#000;color:var(--g9);font-family:var(--font);overflow:hidden}
+  #wrap{position:fixed;inset:0;display:grid;place-items:center}
+  #stage{position:relative;width:1920px;height:1080px;background:var(--g0);overflow:hidden;transform-origin:center center;flex:none}
+  .scene{position:absolute;inset:0}
+  .scene.lit::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(1300px 760px at 50% 40%,rgba(137,180,250,.06),transparent 70%)}
+  .scene.black{background:#050608}
+  [data-t]{opacity:0;will-change:opacity,transform}
+
+  /* 글 */
+  .cap{position:absolute;left:0;right:0;text-align:center;letter-spacing:-.015em}
+  .cap h2{font-size:68px;font-weight:700;line-height:1.22}
+  .cap p{margin-top:18px;font-size:29px;line-height:1.5;color:var(--g8)}
+  .cap.left{text-align:left;left:96px;right:auto}
+  .cap.left h2{font-size:54px}
+  .mega{font-size:112px;font-weight:700;letter-spacing:-.035em;line-height:1.1}
+  .chap{position:absolute;right:96px;top:74px;font-family:var(--mono);font-size:22px;letter-spacing:.16em;color:var(--g6)}
+  .chap b{color:var(--sky);font-weight:600;margin-right:14px}
+  .src{font-size:18px;color:var(--t3)}
+  .caret{display:inline-block;width:.55em;height:1.05em;vertical-align:-.15em;margin-left:2px;background:var(--g8);opacity:0}
+  .typing + .caret,.typing .caret{opacity:.85}
+
+  /* 터미널 */
+  .term{position:absolute;background:var(--g1);border:1px solid var(--g4);border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+  .term .bar{height:48px;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--g3);background:var(--g2)}
+  .term .bar i{width:13px;height:13px;border-radius:50%;background:var(--g5)}
+  .term .bar span{margin-left:14px;font-family:var(--mono);font-size:17px;color:var(--g7)}
+  .term .body{padding:26px 32px;font-family:var(--mono);font-size:22px;line-height:1.62;white-space:pre-wrap;color:var(--g8)}
+  .ln{display:block}
+  .dim{color:var(--g6)}
+  .usr{color:var(--g9)}
+  .usr::before{content:"> ";color:var(--g6)}
+  .dot::before{content:"⏺ ";color:var(--g7)}
+  .mcp::before{content:"⏺ ";color:var(--sky)}
+  .mcp b{color:var(--sky-2);font-weight:500}
+  .res{color:var(--g7);padding-left:1.4em}
+  .res::before{content:"⎿ ";color:var(--g5);margin-left:-1.4em}
+  .err{color:var(--rose)}
+  .ok{color:var(--green)}
+  .bad{border-radius:4px;--g:0;background:rgba(243,139,168,calc(var(--g)*.28));box-shadow:0 0 calc(var(--g)*22px) rgba(243,139,168,calc(var(--g)*.5));color:var(--g9)}
+  .hook{display:block;margin:6px 0 10px;padding:14px 18px;border-left:3px solid var(--sky);border-radius:4px;color:var(--g8);font-size:19px;
+    --g:0;background:rgba(137,180,250,calc(.05 + var(--g)*.08));box-shadow:0 0 calc(var(--g)*40px) rgba(137,180,250,calc(var(--g)*.25))}
+  .hook .k{color:var(--sky)}
+
+  /* 스레드 카드 */
+  .card{position:absolute;background:var(--g1);border:1px solid var(--g4);border-radius:18px;padding:30px 34px}
+  .card .hd{font-family:var(--mono);font-size:17px;color:var(--g7);letter-spacing:.02em}
+  .card .focus{margin-top:12px;font-size:32px;font-weight:600;line-height:1.3}
+  .row{margin-top:20px;padding:16px 20px;border-radius:12px;border:1px solid var(--g3);background:var(--g2);
+    --g:0;box-shadow:0 0 calc(var(--g)*40px) rgba(137,180,250,calc(var(--g)*.38));border-color:rgba(137,180,250,calc(.12 + var(--g)*.65))}
+  .row .k{font-size:17px;color:var(--g7);display:flex;align-items:center;gap:9px}
+  .row .k::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--c,var(--g6))}
+  .row .v{margin-top:6px;font-size:24px;line-height:1.4;color:var(--g9)}
+  .row .m{margin-top:6px;font-family:var(--mono);font-size:17px;color:var(--g7);white-space:pre}
+  .k-ev{--c:var(--g7)} .k-find{--c:var(--lav)} .k-open{--c:var(--g9)} .k-next{--c:var(--sky)} .k-dec{--c:var(--peach)}
+
+  /* 원문 벽과 숫자 */
+  .wall{position:absolute;inset:0;padding:60px 70px;display:grid;grid-template-columns:repeat(3,1fr);gap:0 40px;
+    font-family:var(--mono);font-size:15px;line-height:1.75;color:var(--g5);overflow:hidden;white-space:nowrap;
+    -webkit-mask-image:radial-gradient(1100px 620px at 50% 50%,transparent 20%,#000 80%);mask-image:radial-gradient(1100px 620px at 50% 50%,transparent 20%,#000 80%)}
+  .wall div{overflow:hidden}
+  .num{font-size:260px;font-weight:700;letter-spacing:-.05em;line-height:1;font-variant-numeric:tabular-nums}
+  .num small{font-size:96px;font-weight:600;letter-spacing:-.02em;color:var(--g7);margin-left:10px}
+
+  /* 로고 */
+  .logo{display:inline-flex;align-items:center;gap:30px}
+  .logo .mk{width:132px;height:132px;border-radius:32px;border:3px solid var(--green);display:grid;place-items:center;
+    font-family:var(--mono);font-size:54px;font-weight:600;color:var(--green);
+    --g:0;box-shadow:0 0 calc(var(--g)*90px) rgba(166,227,161,calc(var(--g)*.6)),inset 0 0 calc(var(--g)*36px) rgba(166,227,161,calc(var(--g)*.22))}
+  .logo .nm{font-family:var(--mono);font-size:80px;font-weight:600;letter-spacing:.2em;color:var(--g9)}
+
+  /* 규칙 */
+  .rules{position:absolute;list-style:none}
+  .rules li{padding:20px 26px;margin-bottom:16px;border-radius:14px;background:var(--g1);border:1px solid var(--g4);font-size:23px;line-height:1.45;
+    --g:0;border-color:rgba(243,139,168,calc(.1 + var(--g)*.7));box-shadow:0 0 calc(var(--g)*40px) rgba(243,139,168,calc(var(--g)*.3))}
+  .rules li b{display:block;font-family:var(--mono);font-size:15px;font-weight:500;color:var(--t3);letter-spacing:.08em;margin-bottom:6px}
+
+  /* 원문 → 결정 */
+  .utt{position:absolute;left:190px;right:190px;padding:36px 44px;border-radius:18px;background:var(--g1);border:1px solid var(--g4)}
+  .utt .k{font-size:19px;color:var(--g7);display:flex;align-items:center;gap:10px}
+  .utt .k::before{content:"";width:11px;height:11px;border-radius:50%;background:var(--c)}
+  .utt .q{margin-top:14px;font-size:33px;line-height:1.5;color:var(--g9)}
+  .utt .q.dec{font-weight:600}
+  .utt.said{--g:0;border-color:rgba(249,226,175,calc(.15 + var(--g)*.5));box-shadow:0 0 calc(var(--g)*50px) rgba(249,226,175,calc(var(--g)*.18))}
+  .utt .ref{display:inline-block;margin-top:18px;font-family:var(--mono);font-size:18px;padding:6px 14px;border-radius:99px;color:var(--yellow);
+    border:1px solid rgba(249,226,175,.35);--g:0;box-shadow:0 0 calc(var(--g)*40px) rgba(249,226,175,calc(var(--g)*.5))}
+  .link{position:absolute;left:50%;width:2px;background:linear-gradient(var(--yellow),rgba(249,226,175,.15))}
+
+  /* 일곱 칸 */
+  .seven{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 6px 1.4em}
+  .seven span{padding:5px 14px;border-radius:99px;border:1px solid var(--g4);font-size:19px;color:var(--g8);
+    --g:0;border-color:rgba(137,180,250,calc(.15 + var(--g)*.75));box-shadow:0 0 calc(var(--g)*26px) rgba(137,180,250,calc(var(--g)*.4))}
+
+  /* 대조 */
+  .vs{position:absolute;top:300px;width:720px;text-align:center}
+  .vs .who{font-size:26px;font-weight:600;color:var(--g7)}
+  .vs .when{margin-top:34px;font-size:40px;font-weight:600;color:var(--g8)}
+  .vs .mb{font-size:200px;font-weight:700;letter-spacing:-.05em;line-height:1.05}
+  .vs .what{margin-top:18px;font-size:27px;line-height:1.5;color:var(--g7)}
+  .vs.them .mb{color:var(--g6)}
+  .vs.us .who{color:var(--green)}
+  .vs.us .mb{--g:0;color:var(--g9);text-shadow:0 0 calc(var(--g)*60px) rgba(166,227,161,calc(var(--g)*.55))}
+  .vs.us .what{color:var(--g9)}
+  .vline{position:absolute;left:959px;top:320px;height:460px;width:1px;background:var(--g4)}
+
+  /* 끝 */
+  .end h1{font-size:96px;font-weight:700;line-height:1.2;letter-spacing:-.025em}
+  .pill{display:inline-block;font-family:var(--mono);font-size:27px;padding:14px 32px;border-radius:99px;border:1px solid var(--g5);color:var(--g9);background:var(--g1)}
+  .pill.acc{border-color:rgba(137,180,250,.6);color:var(--sky-2);--g:0;box-shadow:0 0 calc(var(--g)*40px) rgba(137,180,250,calc(var(--g)*.35))}
+
+  /* 보는 창의 조작 — 굽는 창에서는 숨긴다 */
+  #ctl{position:fixed;left:0;right:0;bottom:0;display:flex;align-items:center;gap:14px;padding:12px 18px;background:linear-gradient(transparent,rgba(0,0,0,.75));
+    font:13px/1 var(--mono);color:var(--g8);opacity:0;transition:opacity .25s}
+  #wrap:hover + #ctl,#ctl:hover,#ctl.show{opacity:1}
+  #ctl button{background:none;border:1px solid var(--g5);color:var(--g9);border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer}
+  #bar{flex:1;height:6px;border-radius:3px;background:var(--g4);position:relative;cursor:pointer}
+  #bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--sky)}
+  .capture #ctl{display:none}
+  @media (prefers-reduced-motion:reduce){ #ctl{transition:none} }
+</style>
+</head>
+<body>
+<div id="wrap"><div id="stage">
+
+  <!-- 1 · 매일 첫 출근 (0 – 7.5) -->
+  <section class="scene lit" data-t="0,7.5" data-cut>
+    <div class="term" style="left:260px;top:110px;width:1400px;height:590px" data-t="0.1">
+      <div class="bar"><i></i><i></i><i></i><span>~/work/backend — claude</span></div>
+      <div class="body"><span class="ln dim" data-t="0.4">~/work/backend $ claude</span><span class="ln usr" data-t="1.0"><span data-type="1.1" data-cps="13" data-keys>어제 하던 재고 건 이어서 해줘</span></span>
+<span class="ln dot" data-t="2.9"><span data-type="2.95" data-cps="42" data-copy="s1_agent"></span></span>
+<span class="ln dot dim" data-t="4.1">Bash(git log --oneline -30)</span><span class="ln dot dim" data-t="4.4">Read(inventory/service.py)</span><span class="ln dot dim" data-t="4.7">Grep("reserve(", path: "orders/")</span><span class="ln dot dim" data-t="5.0">Read(orders/service.py)</span><span class="ln dot dim" data-t="5.3">Bash(git log -p -- inventory/)</span><span class="ln dot dim" data-t="5.6">Read(inventory/models.py)</span></div>
+    </div>
+    <div class="cap" style="top:770px" data-t="5.0" data-rise><h2 style="font-size:78px" data-copy="s1"></h2><p data-copy="s1_sub"></p></div>
+  </section>
+
+  <!-- 2 · 전부 저장하면 (7.5 – 15) -->
+  <section class="scene black" data-t="7.5,15" data-cut>
+    <div class="wall" id="wall"></div>
+    <div class="cap" style="top:170px" data-t="8.1" data-rise><h2 style="font-size:60px" data-copy="s2"></h2></div>
+    <div class="cap" style="top:330px" data-t="9.3" data-zoom>
+      <p style="font-size:40px;font-weight:600;color:var(--g8);margin:0" data-copy="s2_days"></p>
+      <div class="num"><span data-count="9.4,11.0,108">0</span><small>MB</small></div>
+    </div>
+    <div class="cap" style="top:700px" data-t="11.3"><p style="font-size:26px;color:var(--g7);margin:0" data-copy="s2_detail"></p></div>
+    <div class="cap" style="top:820px" data-t="12.5" data-rise><p style="font-size:40px;font-weight:600;color:var(--g9);margin:0" data-copy="s2_b"></p></div>
+    <div class="cap" style="top:990px" data-t="12.5"><p class="src" data-copy="s2_src"></p></div>
+  </section>
+
+  <!-- 3 · 타이틀 (15 – 20) -->
+  <section class="scene black" data-t="15,16.25" data-cut>
+    <div class="cap" style="top:470px" data-t="15.05" data-rise><div class="mega" style="font-size:88px" data-copy="s3"></div></div>
+  </section>
+  <section class="scene lit" data-t="16.25,20" data-cut data-sfx="impact">
+    <div class="cap" style="top:340px" data-t="16.25" data-zoom><div class="logo"><div class="mk" data-glow="16.25">Wt</div><div class="nm">WORKTRAIL</div></div></div>
+    <div class="cap" style="top:580px" data-t="17.2" data-rise><h2 style="font-size:66px" data-copy="tag"></h2></div>
+  </section>
+
+  <!-- 4 · 01 일하는 순간 남긴다 (20 – 30) -->
+  <section class="scene lit" data-t="20,30" data-cut>
+    <div class="chap" data-t="20"><b>01</b><span data-copy="c1"></span></div>
+    <div class="cap left" style="top:64px" data-t="20.1" data-rise><h2 data-copy="p1"></h2><p data-copy="p1_sub"></p></div>
+    <div class="term" style="left:80px;top:270px;width:960px;height:750px" data-t="20.3">
+      <div class="bar"><i></i><i></i><i></i><span>~/work/backend — claude</span></div>
+      <div class="body" style="font-size:19.5px"><span class="ln dot" data-t="20.625">Bash(psql -c "SELECT product_id, stock FROM products WHERE stock &lt; 0")</span><span class="ln res dim" data-t="21.0">SKU-2288 | -1 · SKU-3401 | -2 · SKU-3407 | -1</span><span class="ln mcp" data-t="21.875"><b>casebook - add_evidence</b> (MCP)</span><span class="ln res" data-t="22.1">원문 그대로 저장 · 증거 41</span><span class="ln mcp" data-t="23.125"><b>casebook - note_turn</b> (MCP)(kind: "finding")</span><span class="ln res" data-t="23.35">20시 타임세일 첫 3초에 같은 상품이 겹쳐 들어왔다</span><span class="ln dot" data-t="24.375">Read(inventory/service.py)</span><span class="ln res dim" data-t="24.6">읽고 → 비교하고 → 빼서 → 쓴다 · 잠금 없음</span><span class="ln mcp" data-t="25.625"><b>casebook - note_turn</b> (MCP)(kind: "finding")</span><span class="ln res" data-t="25.85">읽고 쓰는 사이가 잠겨 있지 않다, 전형적인 경쟁 상태다</span><span class="ln mcp" data-t="26.875"><b>casebook - declare</b> (MCP)(kind: "open")</span><span class="ln res" data-t="27.1">막는 방법 셋 중 무엇을 쓸지 안 정했다</span><span class="ln mcp" data-t="28.125"><b>casebook - declare</b> (MCP)(kind: "next", owner: "claude")</span><span class="ln res" data-t="28.35">세일 트래픽을 재고 방식 셋과 맞춰 보고 하나를 고른다</span></div>
+    </div>
+    <div class="card" style="left:1080px;top:270px;width:760px;height:750px" data-t="20.3">
+      <div class="hd">onstore/backend · 스레드 #6 · 주문·결제 장애</div>
+      <div class="focus">재고가 음수로 내려간 주문 3건의 경로를 찾는다</div>
+      <div class="row" data-t="22.1" data-glow="22.1" data-sfx="chime:76"><div class="k k-ev">근거 · 원문 그대로</div><div class="m">SKU-3401 |    -2
+ORD-9881 | 20:00:01.204 · ORD-9882 | 20:00:01.219</div></div>
+      <div class="row" data-t="23.35" data-glow="23.35" data-sfx="chime:79"><div class="k k-find">발견</div><div class="v">20시 타임세일 첫 3초에 같은 상품이 겹쳐 들어왔다</div></div>
+      <div class="row" data-t="25.85" data-glow="25.85" data-sfx="chime:83"><div class="k k-find">발견</div><div class="v">읽고 쓰는 사이가 잠겨 있지 않다, 전형적인 경쟁 상태다</div></div>
+      <div class="row" data-t="27.1" data-glow="27.1" data-sfx="chime:84"><div class="k k-open">열린 문제</div><div class="v">막는 방법 셋 중 무엇을 쓸지 안 정했다</div></div>
+      <div class="row" data-t="28.35" data-glow="28.35" data-sfx="chime:88"><div class="k k-next">다음 · Claude 차례</div><div class="v">세일 트래픽을 재고 방식 셋과 맞춰 보고 하나를 고른다</div></div>
+    </div>
+  </section>
+
+  <!-- 5 · 02 규칙은 서버가 (30 – 37.5) -->
+  <section class="scene lit" data-t="30,37.5" data-cut>
+    <div class="chap" data-t="30"><b>02</b><span data-copy="c2"></span></div>
+    <div class="cap left" style="top:64px" data-t="30.1" data-rise><h2 data-copy="p2"></h2><p data-copy="p2_sub"></p></div>
+    <div class="term" style="left:80px;top:270px;width:1060px;height:660px" data-t="30.3">
+      <div class="bar"><i></i><i></i><i></i><span>~/work/backend — claude</span></div>
+      <div class="body" style="font-size:20px"><span class="ln mcp" data-t="30.625"><b>casebook - note_turn</b> (MCP)(kind: "finding")</span><span class="ln res" data-t="30.9">conclusion: "재고 경쟁 상태 원인 확인<span class="bad" data-glow="33.125"> — </span>증거 <span class="bad" data-glow="33.3">#41</span>, 커밋 <span class="bad" data-glow="33.45">7ce092d</span> 참고"</span>
+<span class="ln res err" data-t="32.5" data-sfx="err">Error: conclusion: the first line is a title. At most 120 columns (CJK characters count as 2), do not join clauses with ' — ', and no record numbers. Now: joined with ' — ', record numbers in the title: #41, 7ce092d. …</span>
+<span class="ln mcp" data-t="34.375"><b>casebook - note_turn</b> (MCP)(kind: "finding")</span><span class="ln res" data-t="34.6">conclusion: "읽고 쓰는 사이가 잠겨 있지 않다, 전형적인 경쟁 상태다
+
+재고를 읽어 비교한 뒤 빼서 저장하는데 그 사이에 잠금이 없다. …"</span><span class="ln res ok" data-t="35.625" data-sfx="ok">기록됨 · 다음: Claude 차례</span></div>
+    </div>
+    <ul class="rules" style="left:1180px;top:270px;width:660px">
+      <li data-t="32.8" data-glow="32.8"><b>TITLE</b><span data-copy="r1"></span></li>
+      <li data-t="33.1"><b>NEXT</b><span data-copy="r2"></span></li>
+      <li data-t="33.4"><b>TOPIC</b><span data-copy="r3"></span></li>
+      <li data-t="33.7"><b>EVIDENCE</b><span data-copy="r4"></span></li>
+    </ul>
+  </section>
+
+  <!-- 6 · 03 원문은 그대로 (37.5 – 45) -->
+  <section class="scene lit" data-t="37.5,45" data-cut>
+    <div class="chap" data-t="37.5"><b>03</b><span data-copy="c3"></span></div>
+    <div class="cap left" style="top:64px" data-t="37.6" data-rise><h2 data-copy="p3"></h2><p data-copy="p3_sub"></p></div>
+    <div class="utt said" style="top:300px;--c:var(--yellow)" data-t="38.125" data-rise data-glow="38.2" data-sfx="chime:81">
+      <div class="k">사람이 한 말 · 원문 그대로 · 2026-09-25</div>
+      <div class="q">“모두의 입맛에 맞춘 '요약 형식'은 존재하지 않을 뿐더러, 거기에 집중하다보면 연금술이 되는거거든.”</div>
+    </div>
+    <div class="link" style="top:482px;height:74px" data-t="39.375"></div>
+    <div class="utt" style="top:556px;--c:var(--peach)" data-t="40.0" data-rise>
+      <div class="k">결정 · 사람이 정함 · 에이전트가 기록</div>
+      <div class="q dec">요약 형식을 다듬는 쪽으로 가지 않고 원문 전문 보존에 초점을 둔다</div>
+      <span class="ref" data-t="41.25" data-glow="41.25" data-sfx="chime:88">source_ref → 위의 원문</span>
+    </div>
+    <div class="cap" style="top:890px" data-t="42.5"><p style="font-size:25px;color:var(--g7)" data-copy="p3_b"></p></div>
+    <div class="cap" style="top:1000px" data-t="42.5"><p class="src" data-copy="p3_src"></p></div>
+  </section>
+
+  <!-- 7 · 18시간 뒤 (45 – 52.5) -->
+  <section class="scene black" data-t="45,46.875" data-cut>
+    <div class="cap" style="top:390px" data-t="45.05" data-zoom><div class="mega" style="font-size:150px" data-copy="s7_time"></div><p style="font-size:32px;color:var(--g7)" data-copy="s7_timesub"></p></div>
+  </section>
+  <section class="scene lit" data-t="46.875,52.5" data-cut>
+    <div class="cap left" style="top:64px" data-t="46.9" data-rise><h2 data-copy="s7"></h2></div>
+    <div class="term" style="left:80px;top:200px;width:1760px;height:720px" data-t="46.9">
+      <div class="bar"><i></i><i></i><i></i><span>~/work/backend — claude · 다음 날</span></div>
+      <div class="body" style="font-size:20px"><span class="ln dim" data-t="47.0">~/work/backend $ claude</span><span class="hook" data-t="47.3" data-glow="47.3" data-sfx="chime:76"><span class="k">SessionStart hook</span>
+casebook (MCP) · repository onstore/backend · worktree ~/work/backend
+Current thread (bound to this worktree): #6 · 재고가 음수로 내려간 주문 3건의 경로를 찾는다
+  next (owner claude, 18h ago):  세일 트래픽을 재고 방식 셋과 맞춰 보고 하나를 고른다
+  → resume(6) before continuing
+Repository constraints (hold for every thread here):
+  외부 결제 호출을 사용자 요청 안에서 기다리지 않는다</span><span class="ln usr" data-t="48.1"><span data-type="48.15" data-cps="12" data-keys>이어서 해줘</span></span><span class="ln mcp" data-t="48.75"><b>casebook - resume</b> (MCP)(case_id: 6)</span><span class="seven" data-t="49.0"><span data-glow="49.0625">focus</span><span data-glow="49.375">constraints</span><span data-glow="49.6875">decisions</span><span data-glow="50.0">open</span><span data-glow="50.3125">next</span><span data-glow="50.625">evidence</span><span data-glow="50.9375">anchor</span></span><span class="ln dot" data-t="51.25"><span data-type="51.3" data-cps="44" data-copy="s7_agent"></span></span></div>
+    </div>
+    <div class="cap" style="top:960px" data-t="49.4"><p style="font-size:22px;color:var(--g7);margin:0" data-copy="s7_b"></p></div>
+  </section>
+
+  <!-- 8 · 대조 (52.5 – 57.5) -->
+  <section class="scene lit" data-t="52.5,57.5" data-cut>
+    <div class="cap" style="top:110px" data-t="52.55" data-rise><h2 style="font-size:60px" data-copy="s8"></h2></div>
+    <div class="vline" data-t="53.0"></div>
+    <div class="vs them" style="left:180px" data-t="53.125" data-rise>
+      <div class="who" data-copy="s8_them"></div><div class="when" data-copy="s8_them_when"></div>
+      <div class="mb">108<span style="font-size:.4em">MB</span></div><div class="what" data-copy="s8_them_what"></div>
+    </div>
+    <div class="vs us" style="left:1020px" data-t="53.75" data-rise data-glow="54.375" data-sfx="chime:84">
+      <div class="who">Worktrail</div><div class="when" data-copy="s8_us_when"></div>
+      <div class="mb">10<span style="font-size:.4em">MB</span></div><div class="what" data-copy="s8_us_what"></div>
+    </div>
+    <div class="cap" style="top:1000px" data-t="54.4"><p class="src" data-copy="s8_src"></p></div>
+  </section>
+
+  <!-- 9 · 끝 (57.5 –) -->
+  <section class="scene lit end" data-t="57.5" data-cut data-sfx="impact:0.55">
+    <div class="cap" style="top:170px" data-t="57.5" data-zoom><div class="logo" style="transform:scale(.62)"><div class="mk" data-glow="57.5">Wt</div><div class="nm">WORKTRAIL</div></div></div>
+    <div class="cap" style="top:350px" data-t="58.125" data-rise><h1 data-copy="end"></h1></div>
+    <div class="cap" style="top:690px" data-t="59.375"><span class="pill acc" data-glow="59.375">casebook-api.syncflo.cloud/demo</span></div>
+    <div class="cap" style="top:790px" data-t="60.0"><span class="pill">/plugin install worktrail@worktrail</span></div>
+    <div class="cap" style="top:910px" data-t="60.625"><p class="src" style="font-size:22px">Claude Code · Codex CLI · claude.ai</p></div>
+  </section>
+
+</div></div>
+<div id="ctl"><button id="pp">❚❚</button><span id="tc">0:00</span><div id="bar"><i></i></div><button id="rp">처음부터</button></div>
+
+<script>
+// ── 문구 ─────────────────────────────────────────────────────────────────
+// 화면에 뜨는 사람의 문장은 전부 여기 있다. 사용자가 "자유롭게" 만들라고 해서 에이전트가 쓴 문장이 많다 —
+// 바꾸려면 여기만 고치고 node tools/film_render.mjs --page promo.html --name worktrail-promo --poster-out promo-poster.jpg --poster 58.6
+// 로 다시 굽는다. 숫자·출처 문장은 실측 그대로다(index.html 의 [사실] 과 같은 것). 터미널·카드 속 기록은 데모 시드 그대로.
+const COPY = {
+  s1:          "에이전트는 매일 첫 출근입니다",
+  s1_sub:      "어제의 판단은 사라지고, 코드와 커밋만 남아 있습니다.",
+  s1_agent:    "이전 대화는 볼 수 없어서, 코드와 커밋부터 다시 읽겠습니다.",
+  s2:          "그래서, 전부 저장하면?",
+  s2_days:     "이틀 만에",
+  s2_detail:   "도구 호출 7,331번의 입출력 원문 40MB · 벡터 색인 36MB · 로그 19MB",
+  s2_b:        "쌓일수록, 다시 읽을 것도 늘어납니다.",
+  s2_src:      "대화와 도구 출력을 통째로 남기는 메모리 플러그인 · 이 맥에서 이틀 쓴 뒤 실측, 2026-09-17",
+  s3:          "필요한 건 더 많은 기억이 아니라",
+  tag:         "지금 유효한 작업 상태",
+  c1:          "기록",
+  p1:          "일하는 그 순간, 에이전트가 직접 남깁니다",
+  p1_sub:      "나중에 요약하지 않습니다. 기록 경로에는 모델 호출이 없습니다.",
+  c2:          "규칙",
+  p2:          "규칙은 서버가 지킵니다",
+  p2_sub:      "에이전트가 잊어도, 서버는 거절합니다.",
+  r1:          "모든 글의 첫 줄은 제목입니다. 120칸 이내, 기록 번호 없이.",
+  r2:          "다음 행동과 그 차례를 적지 않으면 단계를 남길 수 없습니다.",
+  r3:          "주제 없이는 스레드를 열 수 없습니다.",
+  r4:          "기계 출력은 원문 그대로 두고, 글에는 번호로만 답니다.",
+  c3:          "원문",
+  p3:          "사람의 말은 한 글자도 고치지 않습니다",
+  p3_sub:      "해석은 에이전트가 쓰고, 결정은 그 원문을 가리킵니다.",
+  p3_b:        "뒤집힐 수 있는 가설은 노트에 머물고, 옛 결정은 지워지지 않고 새 결정으로 대체됩니다.",
+  p3_src:      "이 제품을 만들며 남긴 실제 기록",
+  s7_time:     "18시간 뒤",
+  s7_timesub:  "새 세션, 어쩌면 다른 에이전트",
+  s7:          "과거를 다시 읽지 않고, 멈춘 자리에서",
+  s7_agent:    "세일 트래픽부터 뽑겠습니다. 9/9 20시의 초당 요청 수와 상품별 집중도를 봅니다.",
+  s7_b:        "Claude Code · Codex CLI · claude.ai 가 같은 스레드를 읽고 씁니다",
+  s8:          "다 기억하지 않습니다. 이어받을 것만 남깁니다.",
+  s8_them:     "통째로 저장하는 메모리",
+  s8_them_when:"이틀",
+  s8_them_what:"대화와 도구 입출력 전부",
+  s8_us_when:  "4주",
+  s8_us_what:  "초점 · 결정 · 근거 · 다음",
+  s8_src:      "메모리: 이 맥에서 이틀 쓴 플러그인의 전체 용량 · Worktrail: 운영 서버의 한 사용자 4주치 글(약 10MB), 2026-09-17 실측",
+  end:         "세션이 끝나도<br>작업 상태는 남습니다",
+};
+for (const el of document.querySelectorAll("[data-copy]")) el.innerHTML = COPY[el.dataset.copy] ?? "";
+
+// ── 원문 벽 ──
+(() => {
+  const tools = [
+    ['Bash','{"command":"pytest -q tests/test_inventory.py"}','........................................ 41 passed in 3.18s'],
+    ['Read','{"file_path":"inventory/service.py"}','def reserve(product_id, qty):\\n    product = Product.objects.get(id=product_id)'],
+    ['Edit','{"old_string":"product.stock -= qty","new_string":"updated = Product.objects.filter(','The file inventory/service.py has been updated.'],
+    ['Bash','{"command":"git diff --stat"}',' inventory/service.py | 14 ++++++----'],
+    ['Grep','{"pattern":"reserve(","path":"orders/"}','orders/service.py:88:        inventory.reserve(item.product_id'],
+    ['Bash','{"command":"psql -c \\"SHOW transaction_isolation;\\""}',' transaction_isolation\\n read committed'],
+    ['Read','{"file_path":"orders/service.py","offset":60}','    with transaction.atomic():\\n        order = Order.objects.create('],
+    ['Bash','{"command":"git log --oneline -30"}','3e968bb 재고 차감 경로 정리\\n7ce092d 세일 배너'],
+    ['Write','{"file_path":"scripts/replay_0909.py","content":"import asyncio\\nfrom locust','File created successfully at: scripts/replay_0909.py'],
+  ];
+  const cols = [[],[],[]];
+  for (let i = 0; i < 150; i++) {
+    const [n, inp, out] = tools[(i * 7 + (i >> 2)) % tools.length];
+    const line = i % 2 ? `  "output": "${out}` : `{"tool": "${n}", "input": ${inp}`;
+    cols[i % 3].push(`<div data-t="${(7.6 + (i % 50) * 0.05).toFixed(2)}">${line.replace(/</g,"&lt;")}</div>`);
+  }
+  document.getElementById("wall").innerHTML = cols.map(c => `<div>${c.join("")}</div>`).join("");
+})();
+
+// ── 시간 ─────────────────────────────────────────────────────────────────
+const DUR = 64, FADE = .35, RISE = .7, ZOOM = 1.4, GLOW_IN = .15, GLOW_OUT = 1.2;
+const clamp = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const ease = x => 1 - Math.pow(1 - x, 3);
+const items = [...document.querySelectorAll("[data-t]")].map(el => {
+  const [a, b] = el.dataset.t.split(",").map(Number);
+  return { el, a, b: Number.isFinite(b) ? b : Infinity, rise: "rise" in el.dataset, zoom: "zoom" in el.dataset, cut: "cut" in el.dataset };
+});
+const glows = [...document.querySelectorAll("[data-glow]")].map(el => ({ el, g: Number(el.dataset.glow) }));
+const typers = [...document.querySelectorAll("[data-type]")].map(el => {
+  const chars = [...el.textContent], caret = document.createElement("i");
+  caret.className = "caret"; el.after(caret);
+  return { el, chars, caret, t0: Number(el.dataset.type), cps: Number(el.dataset.cps || 16), keys: "keys" in el.dataset, shown: -1 };
+});
+const counters = [...document.querySelectorAll("[data-count]")].map(el => {
+  const [a, b, to] = el.dataset.count.split(",").map(Number);
+  return { el, a, b, to };
+});
+
+function render(t) {
+  for (const o of items) {
+    const f = o.cut ? .001 : FADE;
+    const fin = ease(clamp((t - o.a) / f)), fout = o.b === Infinity ? 1 : ease(clamp((o.b - t) / f));
+    o.el.style.opacity = (o.cut ? (t >= o.a && t < o.b ? 1 : 0) : Math.min(fin, fout)).toFixed(3);
+    if (o.rise || o.zoom) {
+      const y = o.rise ? (1 - ease(clamp((t - o.a) / RISE))) * 20 : 0;
+      const s = o.zoom ? 1 + (1 - ease(clamp((t - o.a) / ZOOM))) * .06 : 1;
+      o.el.style.transform = `translateY(${y.toFixed(2)}px) scale(${s.toFixed(4)})`;
+    }
+  }
+  for (const o of glows) {
+    const d = t - o.g;
+    const v = d < 0 ? 0 : clamp(d / GLOW_IN) * Math.exp(-Math.max(0, d - GLOW_IN) / GLOW_OUT);
+    o.el.style.setProperty("--g", v.toFixed(3));
+  }
+  for (const o of typers) {
+    const n = Math.max(0, Math.min(o.chars.length, Math.floor((t - o.t0) * o.cps)));
+    if (n !== o.shown) { o.el.textContent = o.chars.slice(0, n).join(""); o.shown = n; }
+    o.caret.style.opacity = t >= o.t0 - .3 && n < o.chars.length ? .85 : 0;
+  }
+  for (const o of counters) o.el.textContent = String(Math.round(ease(clamp((t - o.a) / (o.b - o.a))) * o.to));
+}
+
+// ── 소리: 96bpm (한 박 0.625초, 한 마디 2.5초). 컷이 마디에 붙어 있다. tools/film_score.mjs 가 합성한다. ──
+const B = .625;
+window.__SCORE = (() => {
+  const cues = [];
+  for (const o of typers) if (o.keys) o.chars.forEach((c, i) => { if (c.trim()) cues.push({ t: o.t0 + i / o.cps, k: "key" }); });
+  for (const el of document.querySelectorAll(".ln.dot[data-t], .ln.mcp[data-t]")) cues.push({ t: Number(el.dataset.t.split(",")[0]), k: "tick" });
+  for (const el of document.querySelectorAll("[data-sfx]")) {
+    const [k, p] = el.dataset.sfx.split(":"), t = Number(el.dataset.t.split(",")[0]);
+    cues.push(k === "chime" ? { t, k, p: Number(p) } : { t, k, g: p ? Number(p) : 1 });
+  }
+  cues.push({ t: 16.25, k: "riser", len: 1.25 }, { t: 45, k: "tick", g: 2 });
+  // 화음: 앞(문제)은 낮고 어둡게 → 타이틀에서 C 로 열리고 → 끝에서 Cmaj9 로 풀린다
+  const pads = [
+    { t0: 0,      t1: 7.5,    notes: [45, 52, 59],         g: .8 },   // A 에 9 — 낮게
+    { t0: 7.5,    t1: 14.4,   notes: [41, 48, 52, 57],     g: .8 },   // Fmaj7
+    { t0: 16.25,  t1: 20,     notes: [48, 55, 59, 64],     g: 1 },    // Cmaj7
+    { t0: 20,     t1: 25,     notes: [45, 52, 55, 60],     g: .9 },   // Am7
+    { t0: 25,     t1: 30,     notes: [41, 48, 52, 57],     g: .9 },   // Fmaj7
+    { t0: 30,     t1: 35,     notes: [50, 57, 60, 65],     g: .85 },  // Dm7
+    { t0: 35,     t1: 37.5,   notes: [43, 50, 55, 62],     g: .85 },  // G
+    { t0: 37.5,   t1: 41.25,  notes: [48, 55, 59, 64],     g: .9 },   // Cmaj7
+    { t0: 41.25,  t1: 44.6,   notes: [45, 52, 55, 60],     g: .9 },   // Am7
+    { t0: 45,     t1: 46.875, notes: [40, 47],             g: .7 },   // 빈 5도 — 시간이 지났다
+    { t0: 46.875, t1: 50,     notes: [41, 48, 52, 57],     g: .9 },   // Fmaj7
+    { t0: 50,     t1: 52.5,   notes: [43, 50, 55, 64],     g: .9 },   // G6
+    { t0: 52.5,   t1: 55,     notes: [45, 52, 55, 60],     g: .9 },   // Am7
+    { t0: 55,     t1: 57.5,   notes: [43, 50, 55, 62],     g: .9 },   // G
+    { t0: 57.5,   t1: 62.5,   notes: [36, 48, 55, 59, 62, 64], g: 1 },// Cmaj9
+  ];
+  const beats = [
+    { t0: 20, t1: 45, step: 2 * B, k: "kick", g: .8 },
+    { t0: 20, t1: 45, step: B, off: B / 2, k: "hat", g: 1 },
+    { t0: 46.875, t1: 57.5, step: 2 * B, k: "kick", g: .8 },
+    { t0: 46.875, t1: 57.5, step: B, off: B / 2, k: "hat", g: 1 },
+  ];
+  return { pads, beats, cues: cues.sort((a, b) => a.t - b.t) };
+})();
+
+// ── 굽는 창 / 보는 창 (보는 창은 소리 없이 그림만 돈다 — 소리는 구운 mp4 에) ──
+const params = new URLSearchParams(location.search);
+const CAPTURE = params.has("capture");
+window.__DUR = DUR;
+window.__seek = t => { render(t); return true; };
+const stage = document.getElementById("stage");
+function fit() {
+  if (CAPTURE) { stage.style.transform = "none"; return; }
+  const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+  stage.style.transform = `scale(${s})`;
+}
+addEventListener("resize", fit); fit();
+
+if (CAPTURE) {
+  document.documentElement.classList.add("capture");
+  render(Number(params.get("t") || 0));
+} else {
+  let t = Number(params.get("t") || 0), playing = true, last = performance.now();
+  const pp = document.getElementById("pp"), tc = document.getElementById("tc"), bar = document.getElementById("bar"), fill = bar.firstElementChild;
+  const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  const setPlay = p => { playing = p; pp.textContent = p ? "❚❚" : "▶"; last = performance.now(); };
+  pp.onclick = () => { if (t >= DUR) { t = 0; setPlay(true); } else setPlay(!playing); };
+  document.getElementById("rp").onclick = () => { t = 0; setPlay(true); };
+  bar.onclick = e => { const r = bar.getBoundingClientRect(); t = clamp((e.clientX - r.left) / r.width) * DUR; };
+  stage.onclick = () => pp.onclick();
+  addEventListener("keydown", e => { if (e.key === " ") { e.preventDefault(); pp.onclick(); } });
+  (function loop(now) {
+    if (playing) { t += (now - last) / 1000; if (t >= DUR) { t = DUR; setPlay(false); document.getElementById("ctl").classList.add("show"); } }
+    last = now;
+    render(t);
+    fill.style.width = `${(t / DUR) * 100}%`; tc.textContent = `${fmt(t)} / ${fmt(DUR)}`;
+    requestAnimationFrame(loop);
+  })(performance.now());
+}
+</script>
+</body>
+</html>

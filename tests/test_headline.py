@@ -3,6 +3,8 @@
 (3) 선언·결정·제약·결론·결과·주제 결론이 모두 같은 규칙이다 (4) 증거(content)와 관찰은 예외 — 길어도 받는다."""
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from casebook.core import headline
@@ -147,8 +149,35 @@ def test_번호가_아닌_숫자는_그대로_받는다():
                "deadbeef 는 해시가 아니다", "C# 코드를 고친다", "3D 모델이 뜬다", "15턴 상한이 우회를 낳았다",
                "API door still accepts the old token", "숨길 것: 인스턴스 i-0123456789abcdef0 --profile opsprofile"):
         assert headline.check(ok, "conclusion") == ok
-    # 본문에는 얼마든지 — 첫 줄만 사람용이다
-    assert headline.check("문을 닫았다\n\n증거 #2234, 커밋 7ce092d, D15635 를 따랐다.", "conclusion")
+    # 첫 문단 뒤에는 얼마든지 — 제목과 그 아래 첫 문단만 사람용이다 (확장 162호)
+    assert headline.check("문을 닫았다\n\n구형 토큰을 받던 문을 막았다.\n\n증거 #2234, 커밋 7ce092d, D15635 를 따랐다.", "conclusion")
+
+
+# ── 확장 162호 — 제목 아래 첫 문단도 사람이 읽는다 (D18501) ─────────────────────────────
+
+def test_제목과_첫_문단의_번호를_거절한다():
+    """2026-09-30 실측: 사용자가 짚힌 말 180개에 막힘을 표시했다. 번호가 가장 자주 막혔다(44개 중 33).
+    화면의 접힌 카드는 제목과 그 아래 첫 문단을 보이므로 둘 다 본다. "확장" 없이 부른 번호도 잡는다."""
+    with pytest.raises(InputError, match=re.escape("record numbers in the first paragraph: 58호")):
+        headline.check("결정의 이유도 제목 규칙을 따른다\n\n58호대로 했다.", "conclusion")
+    assert headline.REFUSALS[-1]["why"] == ["tags-lead"]
+    with pytest.raises(InputError, match=re.escape("record numbers in the first paragraph: D15635, 7ce092d")):
+        headline.check("문을 닫았다\n\nD15635 를 따라 7ce092d 로 배포했다.", "conclusion")
+    with pytest.raises(InputError, match=re.escape("record numbers in the title: 106호, 107호")):
+        headline.check("106호·107호 를 합쳤다", "conclusion")
+    with pytest.raises(InputError, match=re.escape("record numbers in the title: 스레드 541")):
+        headline.check("스레드 541 에서 이어 간다", "conclusion")
+    with pytest.raises(InputError, match=re.escape("record numbers in the first paragraph: #555")):   # 빈 줄을 겹쳐도 첫 문단은 첫 문단
+        headline.check("문을 닫았다\n\n\n\n#555 에서 이어 간다.", "conclusion")
+
+
+def test_코드_이름과_뒤_문단의_번호는_받는다():
+    """코드 이름은 막지 않는다: 데모의 cancel_amount · PAYMENT_GATEWAY 처럼 요점인 경우가 있다.
+    첫 문단 뒤는 다음 에이전트가 참고하는 자리라 자유다."""
+    for ok in ("부분취소 필드 이름이 amount 가 아니라 cancel_amount 다", "flipStatus가 닫힘을 뒤집는다",
+               "스레드 20~30개를 모아 본다", "피실험자 1호 실사용 관찰",
+               "화면을 한 번만 그린다\n\n겹친 그리기가 목록을 지우던 것을 막았다.\n\nrenderOnce() 와 flipStatus, 58호, #555."):
+        assert headline.check(ok, "conclusion") == ok
 
 
 def test_사용자_차례의_next_는_사람에게_쓴다():
@@ -175,7 +204,7 @@ def test_선언과_노트가_같은_규칙을_쓴다(app, tmp_path):
     tools = Tools(app, USER)
     n = app.db.count("turn", where={"case_id": t})
     with pytest.raises(InputError, match="write it to them"):
-        tools.note_turn(t, "관찰", "결론이다", kind="finding", next="사용자가 정한다", owner="user")
+        tools.note_turn(t, "관찰", "결론이다", kind="finding", next="사용자가 정한다", owner="user", observed_from="machine")
     with pytest.raises(InputError, match="record numbers"):
-        tools.note_turn(t, "관찰", "결론이다 (증거 #1)", kind="finding", next="정한다", owner="user")
+        tools.note_turn(t, "관찰", "결론이다 (증거 #1)", kind="finding", next="정한다", owner="user", observed_from="machine")
     assert app.db.count("turn", where={"case_id": t}) == n                       # 거절은 턴을 남기지 않는다

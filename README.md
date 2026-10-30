@@ -27,7 +27,7 @@ The screen shows a thread as three lines a person can read without opening anyth
 - **Codex CLI** — registered with `codex mcp add`; say "show my open Worktrail threads" once when you start.
 - **claude.ai** — as a connector, signed in with OAuth (hosted server only).
 
-Works on **macOS, Linux and WSL**. Native Windows is not supported yet: the installer and the launcher are `sh` scripts.
+Works on **macOS, Linux and WSL**. On Windows, use the hosted server: paste the instructions the sign-up page gives you (`windows.md`) into your coding agent, and it does the install. Keeping records only on your machine needs WSL, because the installer and the launcher are `sh` scripts.
 
 ## Install
 
@@ -61,12 +61,12 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[mcp]"
 mkdir -p ~/.casebook && echo local > ~/.casebook/mode      # records in a local sqlite file, no server
 
 # Claude Code
-claude mcp add casebook -s user \
-  -e CASEBOOK_DB=$PWD/casebook.db -e CASEBOOK_MCP_EMAIL=you@example.com \
-  -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy
+claude mcp add casebook -s user -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy
 sh tools/hooks/install_claude_hooks.sh          # optional: session-start and post-commit hooks
 
-# Codex CLI: the same, as `codex mcp add casebook --env CASEBOOK_DB=... --env CASEBOOK_MCP_EMAIL=... -- ...`
+# Codex CLI
+codex mcp add casebook -- $PWD/.venv/bin/python -m casebook.adapters.mcp_proxy
+sh tools/hooks/install_codex_hooks.sh           # prompt hook: keeps your words verbatim; Codex asks you to trust it once
 
 .venv/bin/python -m casebook.adapters.ui_server  # the window
 ```

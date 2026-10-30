@@ -45,8 +45,9 @@ while IFS= read -r f; do mkdir -p "$PUB/$(dirname "$f")"; cp "$f" "$PUB/$f"; don
 #    (a) 꼴로 잡는 것: 키·개인키·JWT·EC2 id·12자리 계정번호·개인 이메일. 시험의 가짜 값은 허용한다.
 #    (b) 값으로 잡는 것: 실행하는 사람의 홈 경로·계정명·커밋 이메일, deploy/local.env 와 .env 의 값들.
 #        이 스크립트도 공개되므로 실값을 여기 적지 않는다 — 실행 시점의 환경에서 꺼내 고정 문자열로 찾는다.
-#    (BSD grep 이라 -P 는 없다 — 계정번호는 앞뒤가 숫자가 아닌 12자리로 잡는다)
-PATTERN='AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|BEGIN (RSA|EC|OPENSSH|PRIVATE) |client_01[A-Z0-9]{20,}|eyJ[A-Za-z0-9_-]{40,}\.[A-Za-z0-9_-]{20,}|i-0[0-9a-f]{16}|(^|[^0-9])[0-9]{12}([^0-9]|$)|@(gmail|naver|kakao|daum)\.com'
+#    (BSD grep 이라 -P 는 없다 — 계정번호는 앞뒤가 숫자·소문자 hex 가 아닌 12자리로 잡는다.
+#     git 해시 40자 안의 숫자 12자리가 걸려서다 — 2026-10-30 film/restore/timeline.json)
+PATTERN='AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|BEGIN (RSA|EC|OPENSSH|PRIVATE) |client_01[A-Z0-9]{20,}|eyJ[A-Za-z0-9_-]{40,}\.[A-Za-z0-9_-]{20,}|i-0[0-9a-f]{16}|(^|[^0-9a-f])[0-9]{12}([^0-9a-f]|$)|@(gmail|naver|kakao|daum)\.com'
 ALLOW='i-0123456789abcdef0|123456789012|kim@naver\.com'
 HITS=$( (cd "$PUB" && grep -rIn -E "$PATTERN" . --exclude-dir=.git --exclude-dir=vendor || true) | grep -v -E "$ALLOW" | cut -c1-140 || true)
 {

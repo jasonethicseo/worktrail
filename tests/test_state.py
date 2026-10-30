@@ -11,8 +11,10 @@ from tests.drive import USER, CASE, drive
 def app2():
     app = _build_app(FakeLLM(), FakeSearch())
     app.db.add("user", {"name": "o", "email": "o@x.test", "password": None})
-    r = app.external_turn(USER, CASE, "GOAL: intermittent 401 behind ALB\nlogs…", action_key="g", note="host guesses stale key"); app.run_workers()
+    r = app.external_turn(USER, CASE, "GOAL: intermittent 401 behind ALB\nlogs…", action_key="g"); app.run_workers()
     e2 = app.external_turn(USER, CASE, "10.0.1.7 uptime 9 days; others replaced 23:10", action_key="e2"); app.run_workers()
+    # 확장 159호 — 노트의 관찰은 증거가 아니다: 증거 수·색인·첫 입력에 들어가지 않는다
+    app.external_turn(USER, CASE, "host saw 401s on two servers", action_key="n", note="host guesses stale key"); app.run_workers()
     return app, r["evidence_id"], e2["evidence_id"]
 
 

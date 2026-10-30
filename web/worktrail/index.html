@@ -245,6 +245,17 @@
   .demo-note .cta .lead{font-size:var(--fs-meta);color:var(--c-text-2);}
   /* 소개 페이지로 가는 길 — 데모를 처음 연 사람이 "이게 뭔지" 부터 읽을 자리. 한국어 데모에만 있다(랜딩이 한국어다). */
   .demo-note .intro{flex:none;font-size:var(--fs-small);white-space:nowrap;}
+  /* 이어받기 영상 — 데모를 떠나지 않고 그 자리에서 본다(D: 영상은 소개에, 데모에는 띠의 재생 버튼). 한국어 데모에만.
+     영상의 오른쪽 화면이 곧 이 화면이라, 닫으면 방금 본 화면이 눈앞에 있다. 자동재생·첫 방문 팝업은 없다. */
+  .demo-note .play{flex:none;font:inherit;font-size:var(--fs-small);white-space:nowrap;cursor:pointer;border:1px solid var(--ln-3);border-radius:var(--r-pill);
+    padding:4px 12px;color:var(--c-text);background:none;transition:border-color var(--t-fast),color var(--t-fast);}
+  .demo-note .play:hover{border-color:var(--c-accent);color:var(--c-accent);}
+  .filmbox{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:24px;background:rgba(5,6,8,.82);animation:cbIn var(--t) var(--ease) both;}
+  .filmbox[hidden]{display:none;}
+  .filmbox .fb{position:relative;width:min(1280px,100%);}
+  .filmbox video{display:block;width:100%;aspect-ratio:16/9;background:#000;border-radius:var(--r);border:1px solid var(--ln-2);box-shadow:var(--sh-pop);}
+  .filmbox .x{position:absolute;right:0;top:-40px;font:inherit;font-size:var(--fs-small);color:var(--c-text-1);background:none;border:1px solid var(--ln-2);border-radius:var(--r-pill);padding:4px 12px;cursor:pointer;}
+  .filmbox .x:hover{color:var(--c-text);border-color:var(--ln-3);}
   .tab{border:1px solid var(--ln-2);border-radius:var(--r-pill);padding:6px 14px;font-size:var(--fs-small);color:var(--c-text-2);cursor:pointer;background:none;transition:border-color var(--t-fast),color var(--t-fast);}
   .tab:hover{border-color:var(--ln-3);color:var(--c-text);} .tab.on{border-color:var(--c-accent);color:var(--c-accent);background:var(--acc-tint);}
   .tab .n{font-family:var(--mono);font-size:var(--fs-tiny);color:var(--c-text-2);margin-left:7px;}
@@ -643,6 +654,7 @@
   <div class="in">
     <span class="what"><b>Worktrail</b> — AI 코딩 에이전트가 일하며 남긴 작업 기록입니다. 무엇을 정했고(결정), 무엇을 보고 정했는지(증거)가 따로 남아, 다음 세션이 코드에서 추측하지 않습니다.</span>
     <a class="intro" id="demoIntro" href="intro/" hidden></a>
+    <button class="play" id="demoFilm" type="button" hidden></button>
     <span class="fake">이 데모의 기록은 지어낸 것입니다 · 가상 팀의 커머스 백엔드 4주치</span>
     <span class="cta">
       <span class="lead" id="demoCtaLead"></span>
@@ -650,6 +662,10 @@
       <a id="demoSrc" href="https://github.com/jasonethicseo/worktrail" target="_blank" rel="noopener"></a>
     </span>
   </div>
+</div>
+<div class="filmbox" id="filmBox" role="dialog" aria-modal="true" aria-label="Worktrail 이어받기 영상" hidden>
+  <div class="fb"><button class="x" id="filmClose" type="button">닫기 ✕</button>
+    <video id="filmVideo" controls playsinline preload="none" poster="intro/film/restore-poster.jpg"><source src="intro/film/worktrail-restore.mp4" type="video/mp4"></video></div>
 </div>
 <div class="wrap" id="view"></div>
 
@@ -755,7 +771,7 @@
     "오늘 바뀐 것": "changed today", "전체": "all", "공통": "shared", "스냅샷": "snapshot",
     "아직 기록이 없습니다.": "No records yet.",
     "저장된 원문과 노트. 펼쳐서 읽습니다.": "Stored source text and notes. Expand to read.",
-    "스레드로 돌아가기": "back to the thread", "증거 · 노트": "evidence · notes", "노트 · 답변": "notes · replies",
+    "스레드로 돌아가기": "back to the thread", "증거 · 노트": "evidence · notes", "노트 · 답변": "notes · replies", "노트 · 관찰": "notes · observed",
     "답변 실패": "reply failed", "중단": "stopped", "다시 답변": "reply again", "범위": "scope",
     "이 데모에는 없는 기록이다": "This demo does not include that record",
     "읽기 전용 데모라 바꿀 수 없다": "This is a read-only demo — nothing can be changed",
@@ -1253,7 +1269,7 @@
     const lastNote = (s.notes || [])[0] || null;
     const sofar = closed
       ? (s.result ? entry(s.result, { key: "sofar" }) : `<div class="empty">결과 없음 — 에이전트에게 ‘정리해줘’</div>`)
-      : lastNote ? entry(lastNote.text, { key: "sofar", body: true, at: lastNote.at, tag: { cls: "nk", text: tr(NOTE_KO[lastNote.note_kind] || "노트") }, reason: lastNote.observed ? tr("관찰: ") + lastNote.observed : null, ids: `${tr("마지막 노트")} · turn ${lastNote.turn} · evidence #${lastNote.evidence_id}`, ev: { case: lastNote.case_id, ids: lastNote.evidence_ids } })
+      : lastNote ? entry(lastNote.text, { key: "sofar", body: true, at: lastNote.at, tag: { cls: "nk", text: tr(NOTE_KO[lastNote.note_kind] || "노트") }, reason: lastNote.observed ? tr("관찰: ") + lastNote.observed : null, ids: `${tr("마지막 노트")} · turn ${lastNote.turn}`, ev: { case: lastNote.case_id, ids: lastNote.evidence_ids } })
       : s.open ? entry(s.open.statement, { key: "sofar", at: s.open.declared_at, authority: s.open.authority, ids: `노트가 없어 미결에서 · open #${s.open.id}` })
       : lastDec ? entry(lastDec.statement, { key: "sofar", at: lastDec.recorded_at, authority: lastDec.authority, ids: `마지막 결정 D${lastDec.decision_id}` })
       : `<div class="empty">아직 기록 없음</div>`;
@@ -1296,7 +1312,7 @@
     const noteControls = notes.length ? `<div class="note-controls"><div class="note-views"><span class="kchip on" data-nview="timeline">${tr("시간순")}</span><span class="kchip" data-nview="grouped">${tr("종류별")}</span></div>${noteFilters}</div>` : "";
     const noteRow = (e, extraClass = "", readable = true) => {
       const k = NOTE_KO[e.note_kind] ? e.note_kind : null;
-      return `<div class="ntrow ${extraClass}" data-nk="${k || "old"}">${entry(e.text, { key: `N${e.turn}`, body: readable, obs: readable && e.observed ? e.observed : null, at: e.at, tag: { cls: `nk ${k ? "kc-n-" + k : ""}`, text: tr(k ? NOTE_KO[k] : "노트") }, leadTag: true, reason: e.observed ? tr("관찰: ") + e.observed : null, ids: `turn ${e.turn} · evidence #${e.evidence_id}${e.client ? " · " + e.client : ""}`, ev: { case: e.case_id, ids: e.evidence_ids } })}</div>`;
+      return `<div class="ntrow ${extraClass}" data-nk="${k || "old"}">${entry(e.text, { key: `N${e.turn}`, body: readable, obs: readable && e.observed ? e.observed : null, at: e.at, tag: { cls: `nk ${k ? "kc-n-" + k : ""}`, text: tr(k ? NOTE_KO[k] : "노트") }, leadTag: true, reason: e.observed ? tr("관찰: ") + e.observed : null, ids: `turn ${e.turn}${e.client ? " · " + e.client : ""}`, ev: { case: e.case_id, ids: e.evidence_ids } })}</div>`;
     };
     const timelineHtml = `<div class="note-panel notes-list" data-nview="timeline">${noteRows.map((e) => noteRow(e, e.older ? "extra" : "", !e.older)).join("")}${olderNotes ? `<div class="more open">${LANG === "en" ? `Show ${olderNotes} earlier notes` : `이전 노트 ${olderNotes}개 보기`}</div><div class="more fold">${fewer(NOTE_FIRST)}</div>` : ""}</div>`;
     const NOTE_ORDER = ["change", "verified", "finding", "thought", null], NOTE_GROUP_FIRST = 3;
@@ -1417,8 +1433,12 @@
     $("crumb").hidden = false; $("crumbText").textContent = data.case.title;
     $("crumbChip").textContent = tr("증거 · 노트");
     const turns = new Map(data.turns.map((t) => [t.id, t.sequence]));
+    // 확장 159호 — 노트의 관찰은 에이전트가 쓴 글이다. 새 노트는 message(observation), 옛 노트는 증거 표에 들어가 있었다
+    // (노트가 붙은 external 턴의 증거). 둘 다 "노트 · 관찰" 로 보이고, 증거 번호는 기계 출력에만 붙는다.
+    const noted = new Set(data.turns.filter((t) => t.turn_kind === "external" && t.assistant_message_id).map((t) => t.id));
     const entries = [
-      ...data.evidence.map((e) => ({ ...e, label: tr("증거") + " #" + e.id, ev: true })),
+      ...data.evidence.map((e) => noted.has(e.turn_id) ? { ...e, label: tr("노트 · 관찰"), ev: true } : { ...e, label: tr("증거") + " #" + e.id, ev: true }),
+      ...data.conversation.filter((m) => m.role === "observation").map((m) => ({ ...m, label: tr("노트 · 관찰") })),
       ...data.conversation.filter((m) => m.role === "assistant").map((m) => ({ ...m, label: tr("노트 · 답변") })),
     ].sort((a, b) => a.created_at - b.created_at || a.id - b.id);
     view.innerHTML = `<div class="in"><a href="#/threads/${id}">← ${tr("스레드로 돌아가기")}</a>
@@ -1464,7 +1484,7 @@
     if (e.kind === "decision" || e.kind === "constraint") o = { authority: e.authority, scope: e.scope === "repo" ? "repo" : null, reason: e.reason,
       ids: `${e.kind[0].toUpperCase()}${e.id}${e.supersedes ? " · " + e.kind[0].toUpperCase() + e.supersedes + " 을 대체함" : ""}${e.superseded_by ? " · " + e.kind[0].toUpperCase() + e.superseded_by + " 이 대체함" : ""}`,   // 제약은 C, 결정은 D
       replaced: e.superseded_by || null, ev: { case: e.case_id, ids: e.evidence_ids } };
-    else if (e.kind === "note") o = { reason: e.observed ? tr("관찰: ") + e.observed : "", ids: `turn ${e.turn} · evidence #${e.evidence_id}`, ev: { case: e.case_id, ids: e.evidence_ids } };
+    else if (e.kind === "note") o = { reason: e.observed ? tr("관찰: ") + e.observed : "", ids: `turn ${e.turn}`, ev: { case: e.case_id, ids: e.evidence_ids } };
     else if (e.kind === "commit") o = { ids: `${String(e.head).slice(0, 12)}${e.stat ? " · " + String(e.stat).trim().split("\n").pop().trim() : ""}${e.via === "git" ? " · git log (스레드에 붙지 않은 커밋)" : ""}` };
     else if (e.kind === "asked") {
       // 답변 실패 턴 + recovery 턴은 같은 질문을 가리킨다 — 숨기지 않고 상태를 붙인다(2026-09-06 #450, "기록을 두번한건가")
@@ -1844,13 +1864,14 @@
     const body = hits.length
       ? `<div class="cnt">${hitsN(hits.length, hits.length >= 200 ? "+" : "")} · ${tr(findFirst ? "처음 쓴 순 — 맨 위가 처음 나온 곳" : "최근 순")}${orderBtn}</div>` + hits.map(({ e, why }, i) => {
           const idTag = e.kind === "decision" ? "D" + e.id : e.kind === "constraint" ? "C" + e.id
-                      : e.kind === "ruled_out" ? "R" + e.id : e.evidence_id ? tr("증거") + " #" + e.evidence_id : "";
+                      : e.kind === "ruled_out" ? "R" + e.id : e.kind === "note" ? "turn " + e.turn : e.evidence_id ? tr("증거") + " #" + e.evidence_id : "";   // 159호 — 노트의 관찰은 증거가 아니다
           const isDef = e.kind === "term" && (e.term || "").toLowerCase() === qn;
           const meta = [isDef ? `<span class="def">${tr("뜻")}</span>` : "", findFirst && i === firstIdx ? `<span class="first">${tr("처음 나온 곳")}</span>` : "", `<span class="id">#${e.case_id}</span>`, esc(headline(e.case_title || "").head.slice(0, 40)),
                         idTag, supTag(e),
                         e.client ? clientName(e.client) : "", why === "reason" ? tr("이유에서 찾음") : why === "observed" ? tr("관찰에서 찾음") : ""].filter(Boolean).join(" · ");
           const to = e.kind === "decision" ? `#/threads/${e.case_id}?item=D${e.id}` : e.kind === "constraint" ? `#/threads/${e.case_id}?item=C${e.id}`
                    : e.kind === "ruled_out" ? `#/threads/${e.case_id}?item=R${e.id}` : (e.kind === "focus" || e.kind === "open" || e.kind === "next") ? `#/threads/${e.case_id}?item=${e.kind}`
+                   : e.kind === "note" ? `#/threads/${e.case_id}?item=N${e.turn}`
                    : e.evidence_id ? `#/threads/${e.case_id}/evidence?ev=${e.evidence_id}` : `#/threads/${e.case_id}`;   // 확장 55호 — 그 기록으로
           return `<div class="hit ${e.superseded_by ? "replaced" : ""}" data-id="${e.case_id}" data-to="${to}">
             <span class="kw kc kdot kc-${evCls(e)}">${kindLabel(e)}</span>
@@ -2120,6 +2141,9 @@
     // 소개(랜딩)는 한국어 데모 폴더에만 놓인다(tools/demo_snapshot.py 가 intro/ 로). 영어 화면으로 바꾸면 숨긴다.
     const intro = $("demoIntro");
     if (intro) { intro.hidden = !(SNAP && CFG.LANG === "ko" && LANG === "ko"); intro.textContent = "Worktrail 소개 보기 →"; }
+    // 영상도 소개와 같은 자리에만 — 파일이 intro/film/ 에 있고, 영상이 한국어다. 문구는 사용자가 쓸 자리(초안).
+    const film = $("demoFilm");
+    if (film) { film.hidden = !(SNAP && CFG.LANG === "ko" && LANG === "ko"); film.textContent = "▶ 1분 영상"; }
     if (fake) fake.textContent = LANG === "en"
       ? "Every record here is made up · a fictional team's commerce backend, four weeks"
       : (CFG.LANG === "ko"
@@ -2137,6 +2161,16 @@
     $("who").textContent = tr("읽기 전용 데모") + (snapAt ? " · " + tr("갱신") + " " + fmtAbs(snapAt) : "");
   }
   $("langToggle").addEventListener("click", () => setLang(LANG === "ko" ? "en" : "ko"));
+  // 영상 창 — 누른 사람만 본다(누름이 곧 사용자 동작이라 소리째 재생된다). 닫으면 멈추고 보던 화면으로 돌아간다.
+  (() => {
+    const box = $("filmBox"), vid = $("filmVideo"), open = $("demoFilm");
+    if (!box || !vid || !open) return;
+    const close = () => { vid.pause(); box.hidden = true; open.focus(); };
+    open.addEventListener("click", () => { box.hidden = false; $("filmClose").focus(); vid.play().catch(() => {}); });
+    $("filmClose").addEventListener("click", close);
+    box.addEventListener("click", (e) => { if (e.target === box) close(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !box.hidden) close(); });
+  })();
   window.addEventListener("hashchange", render);
   window.addEventListener("storage", (e) => { if (e.key === null || e.key === "cb_token") render(); });
   if (SNAP) fetch(SNAP + "/meta.json").then((r) => r.ok ? r.json() : null).then((m) => { snapAt = (m && m.generated_at) || null; paintStamp(); }).catch(() => { snapAt = null; paintStamp(); });

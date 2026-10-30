@@ -23,7 +23,8 @@ def test_모델_없이_한_스레드를_처음부터_끝까지_쓴다(wt, tmp_pa
     repo = _git_repo(tmp_path / "repo")
     uid = 1
     cid = wt.open_thread(uid, "풀 고갈을 확인한다", repo)["case_id"]
-    r1 = wt.external_turn(uid, cid, "$ psql -c 'select count(*)'\n380", action_key="a1", note="열린 트랜잭션이 풀을 잡고 있다")
+    r1 = wt.external_turn(uid, cid, "$ psql -c 'select count(*)'\n380", action_key="a1")
+    wt.external_turn(uid, cid, "idle 380", action_key="a2", note="열린 트랜잭션이 풀을 잡고 있다", refs=[r1["evidence_id"]])
     wt.run_workers()
     ev = r1["evidence_id"]
     wt.decide(uid, cid, "커넥션 풀을 40 으로 올린다", reason="idle 380", authority="user")
@@ -66,12 +67,13 @@ def test_MCP_문이_Worktrail_만으로도_돈다(wt, tmp_path):
     repo = _git_repo(tmp_path / "repo2")
     t = Tools(wt, user_id=1)
     cid = t.open_thread("설치 한 줄을 고친다", repo, topic="온보딩")["case_id"]
-    assert "Turn 1 recorded" in t.note_turn(cid, "$ sh install.sh\n됐다", "Codex 만 있어도 문구가 맞다", kind="verified", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    assert "Turn 1 recorded" in t.note_turn(cid, "$ sh install.sh\n됐다", "Codex 만 있어도 문구가 맞다", kind="verified", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
     t.declare(cid, "next", "피실험자에게 전달한다", owner="user")
 
     doc = t.handoff(cid, engineer_asked=True)
-    assert "선언된 상태와 근거로 구성한 인계" in doc and "## Declared state" in doc
-    assert "- next: 피실험자에게 전달한다  (차례: user)" in doc
+    assert "선언된 상태와 근거로 구성한 인계" in doc and "## 지금" in doc
+    assert "**next** (차례: user) · 피실험자에게 전달한다" in doc
+    assert "- " in doc.split("## 한 일", 1)[1] and "확인 turn 1 · Codex 만 있어도 문구가 맞다" in doc
     assert t.resume(cid)["focus"]["statement"] == "설치 한 줄을 고친다"
 
 
@@ -91,12 +93,12 @@ assert not any(m in sys.modules for m in (
     "casebook.core.prompt_ext", "casebook.core.tickets", "casebook.adapters.openai_llm"))
 t = Tools(cb, uid)
 cid = t.open_thread("기록 제품 검증", "chat", topic="독립 실행")["case_id"]
-t.note_turn(cid, "  원문\\t<log>\\n", "기록이 저장됐다", kind="verified", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
-t.decide(cid, "공유 원장을 유지한다", reason="과거 근거를 보존한다", authority="user")
-t.constrain(cid, "운영 자료를 바꾸지 않는다", authority="user")
+t.note_turn(cid, "  원문\\t<log>\\n", "기록이 저장됐다", kind="verified", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
+t.decide(cid, "공유 원장을 유지한다", reason="과거 근거를 보존한다", authority="user", source_refs=["test-prompt-0001"], capture=True, next="근거를 읽는다", owner="user")
+t.constrain(cid, "운영 자료를 바꾸지 않는다", authority="user", source_refs=["test-prompt-0001"], capture=True)
 t.declare(cid, "next", "근거를 읽는다", owner="user")
 doc = t.handoff(cid, engineer_asked=True)
-for text in ("공유 원장을 유지한다", "과거 근거를 보존한다", "운영 자료를 바꾸지 않는다", "증거 #", "근거를 읽는다"):
+for text in ("공유 원장을 유지한다", "과거 근거를 보존한다", "운영 자료를 바꾸지 않는다", "## 결정", "## 제약", "근거를 읽는다"):
     assert text in doc, doc
 assert not cb.db.query("record")
 assert cb.pending_jobs() == 0
@@ -116,7 +118,8 @@ def test_증거_읽기는_Worktrail_소유자만_원문을_읽는다(wt):
     t = Tools(wt, 1)
     cid = t.open_thread("원문 확인", "chat", topic="검증")["case_id"]
     raw = "  <script>alert('원문')</script>\t\n두 번째 줄  "
-    t.note_turn(cid, raw, "원문을 그대로 남겼다", kind="verified", next="다음 할 일\n\n시험이 세운 자리다.", owner="user")
+    t.add_evidence(cid, raw)
+    t.note_turn(cid, "스크립트 태그가 든 출력", "원문을 그대로 남겼다", kind="verified", next="다음 할 일\n\n시험이 세운 자리다.", owner="user", observed_from="machine")
     owner = wt.login("w@x.test", "pw")["authToken"]
     other = wt.signup("다른 사람", "other@x.test", "pw")["authToken"]
     with TestClient(create_app(wt, None)) as client:
@@ -140,7 +143,8 @@ def test_실제_MCP_프로토콜로_기록_검색_인계_종료(wt):
         async def first(session):
             opened = json.loads(_text(await session.call_tool("open_thread", {"focus": "독립 기록 흐름", "topic": "실사용 검증"})))
             cid = opened["case_id"]
-            await session.call_tool("note_turn", {"case_id": cid, "observed": "standalone-proof: 저장 성공", "conclusion": "모델 없이 남겼다", "kind": "verified", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user"})
+            await session.call_tool("add_evidence", {"case_id": cid, "text": "standalone-proof: 저장 성공"})
+            await session.call_tool("note_turn", {"case_id": cid, "observed": "저장 성공을 봤다", "conclusion": "모델 없이 남겼다", "kind": "verified", "next": "다음 할 일\n\n시험이 세운 자리다.", "owner": "user", "observed_from": "machine"})
             await session.call_tool("declare", {"case_id": cid, "kind": "next", "statement": "원문을 읽는다", "owner": "user"})
             assert "standalone-proof" in _text(await session.call_tool("search_evidence", {"query": "standalone-proof"}))
             assert "원문을 읽는다" in _text(await session.call_tool("handoff", {"case_id": cid, "engineer_asked": True}))
