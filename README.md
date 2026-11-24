@@ -2,6 +2,8 @@
 
 [한국어](README.ko.md)
 
+[![jasonethicseo/worktrail MCP server](https://glama.ai/mcp/servers/jasonethicseo/worktrail/badges/score.svg)](https://glama.ai/mcp/servers/jasonethicseo/worktrail)
+
 **A record of what an AI coding agent did, kept so the next session does not have to guess from the code.**
 
 Worktrail is an MCP server and a small local window. While Claude Code or Codex works in your repository, it records the work as *threads*: what the thread is for, what was decided and what it was decided from, what is still open, and what comes next. The next session, another agent, or you picks up from that record instead of re-reading the diff.
